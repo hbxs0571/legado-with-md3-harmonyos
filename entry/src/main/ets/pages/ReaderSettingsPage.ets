@@ -404,6 +404,10 @@ export struct ReaderSettingsPage {
   @State bottomDragIndex: number = -1;
   /** 拖动已经消费掉的纵向位移，用来把「每半行换一次位」的判定复位。 */
   @State bottomDragOffset: number = 0;
+  /** 批10（:1403）：文字菜单拖拽——组号（0 主/1 折叠/2 隐藏）+ 组内下标，-1 表示没在拖。 */
+  @State textMenuDragGroup: number = -1;
+  @State textMenuDragIndex: number = -1;
+  @State textMenuDragOffset: number = 0;
   @State menuStepperExpanded: string = '';
   @State themeGridColumns: number = 4;
   /** 主题列表管理态：进入后卡片可多选，改走批量动作。 */
@@ -2001,32 +2005,47 @@ export struct ReaderSettingsPage {
     );
   }
 
-  private reorderTextMenuEntry(id: string, direction: number, group: number): void {
+  /**
+   * 批10（:1403）：组内换位——照上游 TextSelectMenuConfigSheet.kt:89-100 的
+   * moveWithinGroup「移除后插入」语义，不是交换（跨多位时交换结果不同）。
+   * 跨组不生效（上游 :102-125 先判 showState 相同），返回 false 让拖动回调不作弊。
+   */
+  private moveTextMenuWithinGroup(id: string, targetId: string): boolean {
+    const fromIndex = this.textMenuEntries.findIndex((item: ReaderTextMenuEntry) => item.id === id);
+    const toIndex = this.textMenuEntries.findIndex((item: ReaderTextMenuEntry) => item.id === targetId);
+    if (fromIndex < 0 || toIndex < 0) { return false; }
+    const fromItem = this.textMenuEntries[fromIndex];
+    const toItem = this.textMenuEntries[toIndex];
+    if (fromItem === undefined || toItem === undefined) { return false; }
+    if (fromItem.group !== toItem.group) { return false; }
+    const next = this.textMenuEntries.slice();
+    const moved = next.splice(fromIndex, 1)[0];
+    if (moved === undefined) { return false; }
+    next.splice(toIndex, 0, moved);
+    this.textMenuEntries = next;
+    this.announceReorder(moved.title, toIndex + 1);
+    return true;
+  }
+
+  /**
+   * 批10（:1403）：把手拖动时按位移换一格。group 限定只在本组内移动，
+   * delta>0 向下、<0 向上；越界或跨组时返回 false 让调用方停掉 while。
+   */
+  private dragTextMenuWithinGroup(group: number, index: number, delta: number): boolean {
     const groupItems = this.getTextMenuEntries(group);
-    const currentGroupIndex = groupItems.findIndex((item: ReaderTextMenuEntry) => item.id === id);
-    const targetGroupIndex = currentGroupIndex + direction;
-    if (currentGroupIndex < 0 || targetGroupIndex < 0 || targetGroupIndex >= groupItems.length) { return; }
-    const currentIndex = this.textMenuEntries.findIndex((item: ReaderTextMenuEntry) => item.id === id);
-    const targetItem = groupItems[targetGroupIndex];
-    if (currentIndex < 0 || targetItem === undefined) { return; }
-    const targetIndex = this.textMenuEntries.findIndex((item: ReaderTextMenuEntry) => item.id === targetItem.id);
-    if (targetIndex < 0) { return; }
-    const nextEntries = this.textMenuEntries.slice();
-    const currentItem = nextEntries[currentIndex];
-    const displacedItem = nextEntries[targetIndex];
-    if (currentItem === undefined || displacedItem === undefined) { return; }
-    nextEntries[currentIndex] = displacedItem;
-    nextEntries[targetIndex] = currentItem;
-    this.textMenuEntries = nextEntries;
-    // :252 对齐上游 reorderAccessibility（a11y_reorder_named「调整X顺序」）：
-    // 排序后主动播报该项的新位置，读屏用户在键盘/触摸排序后能听到结果。
-    this.announceReorder(currentItem.title, targetGroupIndex + 1);
+    const targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= groupItems.length) { return false; }
+    const current = groupItems[index];
+    const target = groupItems[targetIndex];
+    if (current === undefined || target === undefined) { return false; }
+    return this.moveTextMenuWithinGroup(current.id, target.id);
   }
 
   /**
    * :252 菜单项排序后的无障碍播报。
    * 上游用 reorderAccessibility 给排序控件挂「上移/下移」自定义动作 +「调整X顺序」描述；
-   * 本地用上下箭头按钮排序，故在排序完成后用 announceForAccessibility 主动播报新位置。
+   * 本地批10（:1403）起改成行尾拖拽把手排序（与上游 LongPress 拖拽一致），
+   * 排序落地后用 announceForAccessibility 主动播报新位置。
    * 无无障碍服务时此 API 静默无副作用（只是一次无监听的事件），不影响正常排序。
    */
   private announceReorder(title: string, newPosition: number): void {
@@ -3080,20 +3099,51 @@ export struct ReaderSettingsPage {
               }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 8, bottom: 5 })
                 .onClick(() => this.toggleTextMenuGroup(0))
               if (this.primaryTextMenuExpanded) {
-                ForEach(this.getTextMenuEntries(0), (item: ReaderTextMenuEntry) => {
+                ForEach(this.getTextMenuEntries(0), (item: ReaderTextMenuEntry, index: number) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
                     Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
-                    Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor(this.rsetTextSecondary)
-                      .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 0))
-                    Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor(this.rsetTextSecondary)
-                      .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, 1, 0))
                     Image($r('app.media.app_reduce')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 1))
                     Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 2))
+                    // 批10（:1403）：删掉自造上下箭头，改行尾拖拽把手（照本文件 bottom/top 配置面板范式）。
+                    Stack({ alignContent: Alignment.Center }) {
+                      Image($r('app.media.reader_drag_handle')).width(24).height(24).fillColor(this.rsetTextTertiary)
+                    }.width(32).height(36).margin({ left: 4 })
+                      .hitTestBehavior(HitTestMode.Block)
+                      .gesture(
+                        PanGesture({ direction: PanDirection.Vertical, distance: 1 })
+                          .onActionStart(() => {
+                            this.textMenuDragGroup = 0;
+                            this.textMenuDragIndex = index;
+                            this.textMenuDragOffset = 0;
+                          })
+                          .onActionUpdate((event: GestureEvent) => {
+                            const offset: number = event.offsetY;
+                            const rowHeight: number = 40;
+                            while (offset - this.textMenuDragOffset > rowHeight / 2) {
+                              if (!this.dragTextMenuWithinGroup(0, this.textMenuDragIndex, 1)) { break; }
+                              this.textMenuDragIndex = this.textMenuDragIndex + 1;
+                              this.textMenuDragOffset = this.textMenuDragOffset + rowHeight;
+                            }
+                            while (offset - this.textMenuDragOffset < -rowHeight / 2) {
+                              if (!this.dragTextMenuWithinGroup(0, this.textMenuDragIndex, -1)) { break; }
+                              this.textMenuDragIndex = this.textMenuDragIndex - 1;
+                              this.textMenuDragOffset = this.textMenuDragOffset - rowHeight;
+                            }
+                          })
+                          .onActionEnd(() => {
+                            this.textMenuDragGroup = -1;
+                            this.textMenuDragIndex = -1;
+                            this.textMenuDragOffset = 0;
+                            this.saveTextMenuConfig();
+                          })
+                      )
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
                     .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
+                    .shadow(this.textMenuDragGroup === 0 && this.textMenuDragIndex === index
+                      ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
@@ -3104,20 +3154,51 @@ export struct ReaderSettingsPage {
               }.width('100%').padding(12).backgroundColor(this.rsetInnerBg).borderRadius(10).margin({ top: 5, bottom: 5 })
                 .onClick(() => this.toggleTextMenuGroup(1))
               if (this.collapsedTextMenuExpanded) {
-                ForEach(this.getTextMenuEntries(1), (item: ReaderTextMenuEntry) => {
+                ForEach(this.getTextMenuEntries(1), (item: ReaderTextMenuEntry, index: number) => {
                   Row() {
                     if (this.showSelectMenuIcon) { this.readerTextMenuIcon(item.id) }
                     Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
-                    Image($r('app.media.reader_reorder_up')).width(16).height(16).fillColor(this.rsetTextSecondary)
-                      .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, -1, 1))
-                    Image($r('app.media.reader_reorder_down')).width(16).height(16).fillColor(this.rsetTextSecondary)
-                      .padding(5).onClick(() => this.reorderTextMenuEntry(item.id, 1, 1))
                     Image($r('app.media.app_add')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 0))
                     Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 2))
+                    // 批10（:1403）：折叠菜单同样改拖拽把手，组内换位。
+                    Stack({ alignContent: Alignment.Center }) {
+                      Image($r('app.media.reader_drag_handle')).width(24).height(24).fillColor(this.rsetTextTertiary)
+                    }.width(32).height(36).margin({ left: 4 })
+                      .hitTestBehavior(HitTestMode.Block)
+                      .gesture(
+                        PanGesture({ direction: PanDirection.Vertical, distance: 1 })
+                          .onActionStart(() => {
+                            this.textMenuDragGroup = 1;
+                            this.textMenuDragIndex = index;
+                            this.textMenuDragOffset = 0;
+                          })
+                          .onActionUpdate((event: GestureEvent) => {
+                            const offset: number = event.offsetY;
+                            const rowHeight: number = 40;
+                            while (offset - this.textMenuDragOffset > rowHeight / 2) {
+                              if (!this.dragTextMenuWithinGroup(1, this.textMenuDragIndex, 1)) { break; }
+                              this.textMenuDragIndex = this.textMenuDragIndex + 1;
+                              this.textMenuDragOffset = this.textMenuDragOffset + rowHeight;
+                            }
+                            while (offset - this.textMenuDragOffset < -rowHeight / 2) {
+                              if (!this.dragTextMenuWithinGroup(1, this.textMenuDragIndex, -1)) { break; }
+                              this.textMenuDragIndex = this.textMenuDragIndex - 1;
+                              this.textMenuDragOffset = this.textMenuDragOffset - rowHeight;
+                            }
+                          })
+                          .onActionEnd(() => {
+                            this.textMenuDragGroup = -1;
+                            this.textMenuDragIndex = -1;
+                            this.textMenuDragOffset = 0;
+                            this.saveTextMenuConfig();
+                          })
+                      )
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
                     .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
+                    .shadow(this.textMenuDragGroup === 1 && this.textMenuDragIndex === index
+                      ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
