@@ -1,4 +1,4 @@
-import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
+import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD, SPACE_8 } from '../components/UiTokens';
 /** “我的”菜单下与 Android 页面结构对应的二级页面。 */
 import curves from '@ohos.curves';
 import { bundleManager } from '@kit.AbilityKit';
@@ -38,6 +38,10 @@ import { TxtTocRule } from '../model/TxtTocRule';
 import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { SourceCheckSheet, SourceCheckOptions } from '../components/booksource/SourceCheckSheet';
+import { SourceCheckRunSheet } from '../components/booksource/SourceCheckRunSheet';
+import {
+  BookSourceCheckCoordinator, BookSourceCheckState, defaultCheckOptions
+} from '../bookSource/BookSourceCheckCoordinator';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiAction } from '../components/settings/UiAction';
 import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
@@ -55,14 +59,21 @@ class SourceRow {
   hasLogin: boolean;
   hasExplore: boolean;
   exploreEnabled: boolean;
+  /**
+   * 校验结果文案。上游 BookSourceScreen.kt:653-684 的 supportingContent 里 group 与
+   * checkMessage 是两行并列显示，且 checkMessage 是 UI 派生量（BookSourceViewModel.kt:215-232
+   * 由 check.results[id].displayMessage() 现算，不是实体字段）——本地同口径，运行时派生。
+   */
+  checkMessage: string;
 
   constructor(source: BookSource, domain: string, hasLogin: boolean,
-    hasExplore: boolean, exploreEnabled: boolean) {
+    hasExplore: boolean, exploreEnabled: boolean, checkMessage: string) {
     this.source = source;
     this.domain = domain;
     this.hasLogin = hasLogin;
     this.hasExplore = hasExplore;
     this.exploreEnabled = exploreEnabled;
+    this.checkMessage = checkMessage;
   }
 }
 
@@ -111,8 +122,10 @@ class SourceDataSource implements IDataSource {
 export struct BookSourceManagePage {
   @State moreMenuVisible: boolean = false;
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  // 发现指示器「已禁用发现」红点：本地无 md_red 语义令牌，复用 error 令牌（见报告差异说明）。
-  @StorageProp('themeColorError') themeColorError: string = '#FFB4AB';
+  /** M3 AlertDialog 的描边色（OutlinedButton / OutlinedTextField 用 outlineVariant）。 */
+  @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#C4C6D0';
+  /** filled Button 的文字色（onPrimary）。 */
+  @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#FFFFFF';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -144,8 +157,16 @@ export struct BookSourceManagePage {
   @State private selectionMode: boolean = false;
   @State private selectedUrls: Set<string> = new Set<string>();
   @State private batchPanelVisible: boolean = false;
-  /** 校验配置弹层：上游 CheckSourceBottomSheet（本地无执行链，确认只回传选择）。 */
+  /** 校验配置弹层：上游 CheckSourceBottomSheet（运行中改写草稿，确认后回到运行弹层）。 */
   @State private checkSheetVisible: boolean = false;
+  /** 校验「运行」弹层：上游 CheckBookSourceSheet（关键字 + 设置/确认两个 action）。 */
+  @State private checkRunSheetVisible: boolean = false;
+  /** 校验草稿选项：上游 checkOptionsDraft。 */
+  @State private checkOptions: SourceCheckOptions = defaultCheckOptions();
+  /** 本次要校验的书源 URL：上游 checkSourceIds。 */
+  @State private checkTargetUrls: string[] = [];
+  /** 逐源校验结果文案：url → displayMessage，驱动行内 checkMessage。 */
+  @State private checkMessages: Map<string, string> = new Map<string, string>();
   private sourceScroller: Scroller = new Scroller();
   /** 当前打开条目菜单的行。 */
   @State private menuRowUrl: string = '';
@@ -176,6 +197,48 @@ export struct BookSourceManagePage {
 
   aboutToAppear(): void {
     this.reloadSources();
+    BookSourceCheckCoordinator.subscribe(this.onCheckStateChanged);
+  }
+
+  aboutToDisappear(): void {
+    BookSourceCheckCoordinator.unsubscribe(this.onCheckStateChanged);
+  }
+
+  /**
+   * 校验状态变化：把逐源 displayMessage 搬到 checkMessages，行上的 checkMessage 随之刷新。
+   * 上游 BookSourceViewModel.kt:215-232 也是从 check.results 现算再拼进 uiState。
+   */
+  private onCheckStateChanged: (state: BookSourceCheckState) => void = (state: BookSourceCheckState): void => {
+    this.checkMessages = BookSourceCheckCoordinator.messages();
+    this.rebuildVisibleSources();
+    // 全部跑完给一条汇总（上游 book_source_check_completed「校验完成，成功 %1$d，失败 %2$d」）。
+    if (!state.isRunning && state.total > 0 && state.completed >= state.total) {
+      let succeeded: number = 0;
+      let failed: number = 0;
+      state.results.forEach((result) => {
+        if (result.status === 'Succeeded') succeeded += 1;
+        else if (result.status === 'Failed') failed += 1;
+      });
+      this.onUnavailableAction('校验完成，成功 ' + succeeded + '，失败 ' + failed);
+    }
+  };
+
+  /**
+   * 开始校验：上游 BookSourceViewModel.kt:295-308 StartCheck。
+   * 运行中再点只提示「正在校验书源,请稍后」（source_already_checking），不重复投递。
+   */
+  private async runCheck(keyword: string): Promise<void> {
+    if (BookSourceCheckCoordinator.currentState().isRunning) {
+      this.onUnavailableAction('正在校验书源,请稍后');
+      return;
+    }
+    const targets: BookSource[] = [];
+    for (const source of this.allSources) {
+      if (this.checkTargetUrls.indexOf(source.bookSourceUrl) >= 0) targets.push(source);
+    }
+    if (targets.length === 0) return;
+    this.onUnavailableAction('开始校验 ' + targets.length + ' 个书源');
+    await BookSourceCheckCoordinator.check(this.checkTargetUrls, keyword, this.checkOptions);
   }
 
   /** 从仓储读全量书源，重建可见列表。 */
@@ -278,7 +341,8 @@ export struct BookSourceManagePage {
       const loginUrl = BookSourceManagePage.sourceField(source.sourceJson, 'loginUrl');
       const exploreUrl = BookSourceManagePage.sourceField(source.sourceJson, 'exploreUrl');
       const enabledExplore = BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') === 'true';
-      const row = new SourceRow(source, domain, loginUrl.length > 0, exploreUrl.length > 0, enabledExplore);
+      const checkMessage = this.checkMessages.get(source.bookSourceUrl) ?? '';
+      const row = new SourceRow(source, domain, loginUrl.length > 0, exploreUrl.length > 0, enabledExplore, checkMessage);
       rows.push(row);
       // 上游 BookSourceScreen.kt:594：分组开启且本行域名与上一行不同，先插一个域名标题项。
       if (this.groupByDomain && domain !== lastDomain) {
@@ -630,10 +694,12 @@ export struct BookSourceManagePage {
     else if (key === 'bottom') { this.moveToEdge(Array.from(this.selectedUrls), false); this.exitSelectionMode(); }
     else if (key === 'interval') { this.selectInterval(); this.batchPanelVisible = false; }
     else if (key === 'check') {
-      // 上游：先记下选中的书源，再打开校验弹层（BookSourceScreen.kt:513-517）。
-      // 本地无校验执行链，这里只呈现校验配置弹层；确认仅回传选择，不伪造进度与结果。
+      // 上游 BookSourceScreen.kt:513-518：先记下选中书源，再打开「运行」弹层
+      // （CheckSheet.Run），并清空多选。配置弹层只从运行弹层的设置按钮进。
       this.batchPanelVisible = false;
-      this.checkSheetVisible = true;
+      this.checkTargetUrls = Array.from(this.selectedUrls);
+      this.exitSelectionMode();
+      this.checkRunSheetVisible = true;
     }
     else if (key === 'export') { this.exportSelection(); this.exitSelectionMode(); }
   }
@@ -780,10 +846,11 @@ export struct BookSourceManagePage {
           Text(row.source.bookSourceName.length > 0 ? row.source.bookSourceName : row.source.bookSourceUrl)
             .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1).layoutWeight(1)
           // 上游 BookSourceScreen.kt:661-663 仅 hasExploreUrl 时画 DiscoveryIndicator，
-          // 颜色由 enabledExplore 决定（:826-838 绿=已启用发现 / 红=已禁用发现）。
+          // 颜色直接取上游 colors_material_design.xml 的 md_green_500(#4CAF50) / md_red_400(#EF5350)
+          // （:826-838 绿=已启用发现 / 红=已禁用发现），本地同名资源见 resources/*/element/color.json。
           if (row.hasExplore) {
             Row().width(8).height(8).borderRadius(4)
-              .backgroundColor(row.exploreEnabled ? this.themeColorAccent : this.themeColorError)
+              .backgroundColor(row.exploreEnabled ? $r('app.color.md_green_500') : $r('app.color.md_red_400'))
               .margin({ left: 6 })
               .accessibilityText(row.exploreEnabled ? '已启用发现' : '已禁用发现')
           }
@@ -798,6 +865,12 @@ export struct BookSourceManagePage {
                 .maxLines(1).margin({ left: 8 })
             }
           }.width('100%').margin({ top: 5 })
+        }
+        // 上游 :673-678 checkMessage 与 group 并列、同为 bodySmall：校验结果文案常驻行上。
+        if (row.checkMessage.length > 0) {
+          Text(row.checkMessage).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
+            .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%').margin({ top: 5 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       UiSwitchControl({ checked: row.source.enabled, interactive: false, scaleValue: 0.8 })
@@ -925,25 +998,65 @@ export struct BookSourceManagePage {
    */
   @Builder
   private PromptDialogContent() {
+    // 对齐上游 BookSourceImportGroupDialog（BookSourceScreen.kt:743-778）：
+    // AppAlertDialog(title=diy_source_group「自定义源分组」, content=AppTextField(group_name「分组名称」)
+    //   + SwitchSettingItem(add_group「添加分组」), confirmText=ok「确定」, dismissText=cancel「取消」)。
+    // AppAlertDialog 的 M3 分支（AppAlertDialog.kt:100-151）= Material3 AlertDialog：
+    //   containerColor=surfaceContainer、titleContentColor=onSurface、textContentColor=onSurfaceVariant、
+    //   确认按钮 PrimaryButton(filled)、取消按钮 SecondaryButton(outlined)，文字 labelLarge。
+    // ArkUI 的 showAlertDialog 带不了输入框（ThemeManagePage.ets:105 既有结论），
+    // 所以仍用 openCustomDialog 承载，但把容器/标题/按钮重排成 M3 Dialog 形态。
     Column() {
       Text('自定义源分组')
-        .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-      TextInput({ placeholder: '分组名称', text: this.promptText })
-        .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
-        .onChange((value: string) => this.promptText = value)
-        .margin({ top: 14 })
-      Row() {
-        Text('添加分组').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        UiSwitchControl({
-          checked: this.promptAddGroup,
-          scaleValue: 0.8,
-          onChange: (checked: boolean) => { this.promptAddGroup = checked; }
-        })
-      }.width('100%').margin({ top: 14 })
-      Row() {
-        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+        .fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary)
+        .width('100%')
+      // M3 AlertDialog 的 content 区：verticalScroll + 与标题的间距。
+      Column({ space: SPACE_8 }) {
+        // AppTextField(label=group_name, singleLine)：M3 OutlinedTextField 形态（描边 + 圆角 4）。
+        Column() {
+          TextInput({ placeholder: '分组名称', text: this.promptText })
+            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+            .backgroundColor(Color.Transparent)
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .onChange((value: string) => this.promptText = value)
+        }
+        .width('100%')
+        .border({ width: 1, color: this.themeColorOutlineVariant })
+        .borderRadius(4)
+        // SwitchSettingItem(add_group)：标题左、开关右。
+        Row() {
+          Text('添加分组').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          UiSwitchControl({
+            checked: this.promptAddGroup,
+            scaleValue: 0.8,
+            onChange: (checked: boolean) => { this.promptAddGroup = checked; }
+          })
+        }.width('100%').height(48)
+      }
+      .width('100%')
+      .margin({ top: 16 })
+      // 底部按钮行：M3 AlertDialog 是 dismissButton(左) + confirmButton(右)，各占一半、间距 12。
+      Row({ space: 12 }) {
+        // SecondaryButton = OutlinedButton（描边 + primary 文字）。
+        Button('取消')
+          .type(ButtonType.Normal)
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(LABEL_LARGE)
+          .fontColor(this.themeColorAccent)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 1, color: this.themeColorOutlineVariant })
+          .borderRadius(20)
           .onClick(() => { this.closePromptDialog(); })
-        Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).layoutWeight(1)
+        // PrimaryButton = filled Button（primary 底 + onPrimary 文字）。
+        Button('确定')
+          .type(ButtonType.Normal)
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(LABEL_LARGE)
+          .fontColor(this.themeColorOnPrimary)
+          .backgroundColor(this.themeColorAccent)
+          .borderRadius(20)
           .onClick(() => {
             const value = this.promptText.trim();
             if (value.length > 0) {
@@ -952,9 +1065,13 @@ export struct BookSourceManagePage {
             this.closePromptDialog();
             this.selectionMode = false;
           })
-      }.width('100%').margin({ top: 18 })
-    }.padding(20).backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
-      .borderRadius(16)
+      }.width('100%').margin({ top: 24 })
+    }
+    // M3 AlertDialog：minWidth 280vp、padding 24、圆角 28、底色 surfaceContainer。
+    .width(312)
+    .padding(24)
+    .backgroundColor(this.themeColorSurfaceTertiary)
+    .borderRadius(28)
   }
 
   /** 打开自定义源分组对话框（系统自定义对话框，能承载输入框）。 */
@@ -1173,11 +1290,27 @@ export struct BookSourceManagePage {
           }
         }.layoutWeight(1)
       }
-      // 校验配置弹层：自带 bindSheet，作为子组件挂载；确认只回传配置，本地无执行链。
+      // 校验配置弹层：自带 bindSheet；确认后把草稿写回 checkOptions，并回到「运行」弹层
+      // （上游 :379-382 onConfirm → UpdateCheckOptions + checkSheet = CheckSheet.Run）。
       SourceCheckSheet({
         visible: $checkSheetVisible,
-        onConfirm: (_options: SourceCheckOptions) => {
-          this.onUnavailableAction('校验配置已保存；校验执行链尚未接入');
+        options: this.checkOptions,
+        onConfirm: (options: SourceCheckOptions) => {
+          this.checkOptions = options;
+          this.checkRunSheetVisible = true;
+        }
+      })
+      // 校验「运行」弹层：上游 CheckBookSourceSheet（关键字 + 设置/确认）。
+      SourceCheckRunSheet({
+        visible: $checkRunSheetVisible,
+        sourceCount: this.checkTargetUrls.length,
+        onOpenSettings: () => {
+          this.checkRunSheetVisible = false;
+          this.checkSheetVisible = true;
+        },
+        onConfirm: (keyword: string) => {
+          this.checkRunSheetVisible = false;
+          this.runCheck(keyword);
         }
       })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))

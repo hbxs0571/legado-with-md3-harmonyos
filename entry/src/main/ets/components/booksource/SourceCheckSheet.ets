@@ -2,26 +2,27 @@
 // 上游壳 AppModalBottomSheet(title=check_source_config「校验设置」)，
 // 超时用 SliderSettingItem（默认 180f、范围 0f..300f），五个 CheckboxItem，
 // 目录 enabled=checkInfo、正文 enabled=checkCategory，底部确认/取消。
-// 本地无校验执行链（BookSourceCheckService 等价物缺失），确认只回传选择，不伪造进度与结果。
+// 确认只回传配置；执行由页面侧的 BookSourceCheckCoordinator 承担（对齐上游
+// CheckSourceBottomSheet 只改草稿、CheckBookSourceSheet 的 Check 才启动的链路）。
 
 import { LABEL_LARGE, TITLE_MEDIUM } from '../typography/TypographyTokens';
 import { ROW_PADDING_H, ROW_PADDING_V, SPACE_12, SPACE_8 } from '../UiTokens';
+// 选项类型统一由协调器提供（ArkTS 不支持结构化类型：两个同形 interface 不能互传）。
+import { BookSourceCheckOptions, defaultCheckOptions } from '../../bookSource/BookSourceCheckCoordinator';
 
-/** 校验配置回传值，字段与上游 BookSourceCheckOptionsUi（BookSourceContract.kt:33-40）一致。 */
-export interface SourceCheckOptions {
-  timeoutSeconds: number;
-  checkSearch: boolean;
-  checkDiscovery: boolean;
-  checkInfo: boolean;
-  checkCategory: boolean;
-  checkContent: boolean;
-}
+/** 兼容旧调用点的别名（与协调器的 BookSourceCheckOptions 是同一个类型）。 */
+export type SourceCheckOptions = BookSourceCheckOptions;
 
 @Component
 export struct SourceCheckSheet {
   /** 显隐由调用方持有；弹层关闭时在 onDisappear 里回写 false。 */
   @Link visible: boolean;
-  /** 确认回传当前配置；本地不执行校验。 */
+  /**
+   * 进入时的草稿值（上游 checkOptionsDraft）。调用方每次打开都会传入当前草稿，
+   * 使「设置 → 运行 → 再设置」能保留上一轮的选择。
+   */
+  @Prop @Watch('onOptionsChanged') options: SourceCheckOptions = defaultCheckOptions();
+  /** 确认回传当前配置；真正执行由调用方的 BookSourceCheckCoordinator 承担。 */
   onConfirm: (options: SourceCheckOptions) => void = (_options: SourceCheckOptions) => {};
 
   // 默认值照抄上游 BookSourceContract.kt:33-40（全 true、超时 180 秒）。
@@ -31,6 +32,16 @@ export struct SourceCheckSheet {
   @State private checkInfo: boolean = true;
   @State private checkCategory: boolean = true;
   @State private checkContent: boolean = true;
+
+  /** options 变化时把草稿搬进本地 state（@Prop 不能直接绑 Slider/Checkbox）。 */
+  onOptionsChanged(): void {
+    this.timeoutSeconds = this.options.timeoutSeconds;
+    this.checkSearch = this.options.checkSearch;
+    this.checkDiscovery = this.options.checkDiscovery;
+    this.checkInfo = this.options.checkInfo;
+    this.checkCategory = this.options.checkCategory;
+    this.checkContent = this.options.checkContent;
+  }
 
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';

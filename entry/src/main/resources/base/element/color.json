@@ -35,6 +35,14 @@
     {
       "name": "theme_surface_elevated",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "md_green_500",
+      "value": "#4CAF50"
+    },
+    {
+      "name": "md_red_400",
+      "value": "#EF5350"
     }
   ]
 }
