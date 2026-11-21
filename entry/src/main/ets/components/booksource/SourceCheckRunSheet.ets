@@ -13,7 +13,7 @@
 //
 // 它的 startAction 只负责回调 onOpenSettings，由页面把配置弹层重新打开；
 // endAction 才真正触发 onConfirm(sourceIds, keyword.trim(), options)。
-import { LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
+import { LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM } from '../typography/TypographyTokens';
 import { ROW_PADDING_H } from '../UiTokens';
 import { AppGlyph } from '../AppGlyph';
 
@@ -32,10 +32,16 @@ export struct SourceCheckRunSheet {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  /** M3 filled TextField 默认容器色 surfaceContainerHighest（上游 AppTextField 未传 backgroundColor 时走 TextFieldDefaults.colors()）。 */
+  @StorageProp('themeColorSurfaceHighest') themeColorSurfaceHighest: string = '#E1E2E7';
+  /** M3 filled TextField 未聚焦指示线色 onSurfaceVariant。 */
+  @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#C4C6D0';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
 
   /** 关键字，初值「我的」（上游 :788-789）。 */
   @State private keyword: string = '我的';
+  /** 输入框聚焦态：决定底部指示线颜色（M3 focusedIndicator=primary / unfocusedIndicator=onSurfaceVariant）。 */
+  @State private keywordFocused: boolean = false;
 
   /** 头部：标题居中、左设置、右确认（复刻 AppModalBottomSheet 的 hasHeader 布局）。 */
   @Builder
@@ -77,24 +83,34 @@ export struct SourceCheckRunSheet {
   private SheetContent() {
     Column() {
       this.Header()
-      // 上游 AppTextField(label=search_book_key, singleLine=true, padding bottom 16)。
+      // 上游 AppTextField(label=search_book_key, singleLine=true, padding bottom 16)
+      // 在非 Miuix 引擎下走 M3 filled TextField：
+      //   容器色 surfaceContainerHighest、顶部圆角 4、底部 1dp 指示线（聚焦 primary / 未聚焦 onSurfaceVariant）；
+      //   label 有值时用 contentPaddingWithLabel()（上 8 下 8 左右 16），label 浮动到左上并缩到 labelSmall。
       Column() {
-        if (this.keyword.length === 0) {
-          Text('搜索关键字')
-            .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
-            .width('100%').padding({ left: 12, top: 8 })
-        }
-        TextInput({ text: this.keyword, placeholder: '' })
+        // 浮动 label：有内容或聚焦时缩小上移，否则作为占位提示居中显示。
+        Text('搜索关键字')
+          .fontSize(this.keyword.length > 0 || this.keywordFocused ? LABEL_SMALL : TITLE_MEDIUM)
+          .fontColor(this.keywordFocused ? this.themeColorAccent : this.themeColorTextTertiary)
+          .width('100%')
+          .padding({ left: 16, right: 16, top: this.keyword.length > 0 || this.keywordFocused ? 6 : 14 })
+        TextInput({ text: this.keyword })
           .width('100%')
           .maxLines(1)
           .fontColor(this.themeColorTextPrimary)
           .backgroundColor(Color.Transparent)
-          .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+          .padding({ left: 16, right: 16, top: 2, bottom: 8 })
           .onChange((value: string) => { this.keyword = value; })
+          .onFocus(() => { this.keywordFocused = true; })
+          .onBlur(() => { this.keywordFocused = false; })
+        // 底部指示线：M3 filled TextField 的 indicator（1dp，聚焦 2dp 效果用同高近似）。
+        Row()
+          .width('100%').height(1)
+          .backgroundColor(this.keywordFocused ? this.themeColorAccent : this.themeColorOutlineVariant)
       }
       .width('100%')
-      .backgroundColor(this.themeColorSurfaceElevated)
-      .borderRadius(8)
+      .backgroundColor(this.themeColorSurfaceHighest)
+      .borderRadius({ topLeft: 4, topRight: 4 })
       // 上游 Modifier.padding(bottom = 16.dp)。
       .margin({ bottom: 16 })
       if (this.sourceCount > 0) {
