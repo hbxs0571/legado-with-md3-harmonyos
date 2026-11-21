@@ -283,7 +283,10 @@ struct Index {
   /** P9 正在登录的书源 URL；非空即显示登录弹层。 */
   @State loginSourceUrl: string = '';
   /** P9 登录弹层显隐（bindSheet 双向绑定；对齐上游 modalOverlay 的进出）。 */
-  @State loginSheetVisible: boolean = true;
+  // 初值必须 false：SourceLoginSheet 按 loginSourceUrl 条件挂载，bindSheet 只在绑定值
+  // 由 false 翻 true 时弹出；首次 build 即为 true 则不弹（曾表现为点「登录」只切回列表页、
+  // 弹层不出现）。打开流程见 openSourceLogin：先置 false，下一帧再置 true。
+  @State loginSheetVisible: boolean = false;
   /** P10 书源调试页：非空的书源 URL 即显示调试覆盖层。 */
   @State debugSourceUrl: string = '';
   /** P9 通用 WebView 页 URL；非空即显示。 */
@@ -9106,9 +9109,14 @@ private canWriteInto(dir: string): boolean {
 
   /** P9 打开书源登录页。 */
   private openSourceLogin(sourceUrl: string): void {
+    // 先落 URL：SourceLoginSheet 按 loginSourceUrl 非空条件挂载。
     this.loginSourceUrl = sourceUrl;
-    // 每次打开都重置弹层显隐（上一次关闭时 bindSheet 回写过 false）。
-    this.loginSheetVisible = true;
+    // bindSheet 只在绑定值 false→true 时弹出。组件与本次赋值同帧挂载时若已是 true 则不弹，
+    // 所以本帧先置 false，下一帧再翻 true（跨帧才构成一次真实的状态跃迁）。
+    this.loginSheetVisible = false;
+    setTimeout(() => {
+      if (this.loginSourceUrl.length > 0) { this.loginSheetVisible = true; }
+    }, 0);
   }
 
   /** P10 打开书源调试页。 */
@@ -9139,8 +9147,12 @@ private canWriteInto(dir: string): boolean {
     this.profileSubpage = ProfileRoute.BOOK_SOURCE_EDIT;
   }
 
-  /** P5 保存书源：整条替换/新增，整表写回仓储后回管理页。 */
-  private async saveBookSource(source: BookSource): Promise<void> {
+  /**
+   * P5 保存书源：整条替换/新增，整表写回仓储。
+   * exitAfter 对齐上游 BookSourceEditViewModel.kt:67-99：FAB 的 Save 保存后退出编辑页（Finish），
+   * 溢出菜单里的 SaveAndLogin/Search/Debug/Variable 只保存、留在编辑页再执行动作。
+   */
+  private async saveBookSource(source: BookSource, exitAfter: boolean = true): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       this.showUnavailableAction('无法访问本地书源存储');
@@ -9156,8 +9168,10 @@ private canWriteInto(dir: string): boolean {
     try {
       await BookSourceRepository.save(context, all);
       this.showUnavailableAction(`已保存书源「${source.bookSourceName || source.bookSourceUrl}」`);
-      this.editingBookSource = undefined;
-      this.profileSubpage = ProfileRoute.BOOK_SOURCE_MANAGE;
+      if (exitAfter) {
+        this.editingBookSource = undefined;
+        this.profileSubpage = ProfileRoute.BOOK_SOURCE_MANAGE;
+      }
     } catch (error) {
       this.showUnavailableAction('书源保存失败：' + (error instanceof Error ? error.message : String(error)));
     }
@@ -11340,7 +11354,7 @@ private canWriteInto(dir: string): boolean {
               this.editingBookSource = undefined;
               this.profileSubpage = ProfileRoute.BOOK_SOURCE_MANAGE;
             },
-            onSaveSource: (source: BookSource) => this.saveBookSource(source),
+            onSaveSource: (source: BookSource, exitAfter: boolean) => this.saveBookSource(source, exitAfter),
             onOpenSourceSearch: (keyword: string, sourceUrl: string) => this.openSourceSearch(keyword, sourceUrl),
             onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
             onClearSourceCookie: (sourceUrl: string) => this.clearSourceCookie(sourceUrl),
@@ -12999,15 +13013,16 @@ private canWriteInto(dir: string): boolean {
     }
     // P9 书源登录：对齐上游 MainNavGraph.kt:390-408 的模态覆盖层（modalOverlay），
     // 本体是 SourceLoginSheetHost 的三态底部弹层，不是整页。本地由 SourceLoginSheet 承载。
-    if (this.loginSourceUrl.length > 0) {
-      SourceLoginSheet({
-        visible: $loginSheetVisible,
-        sourceUrl: this.loginSourceUrl,
-        onClose: () => { this.loginSourceUrl = ''; },
-        onOpenWeb: (url: string) => this.openSourceWeb(url),
-        onUnavailableAction: (message: string) => this.showUnavailableAction(message)
-      })
-    }
+    // 常驻挂载（不再按 loginSourceUrl 非空条件挂载）：bindSheet 的宿主一旦随条件重建，
+    // 绑定值在重建时已为 true 就不会弹出。显隐只由 loginSheetVisible 驱动，
+    // 换源时 SourceLoginSheet 内部的 @Watch(sourceUrl) 会重跑 prepare。
+    SourceLoginSheet({
+      visible: $loginSheetVisible,
+      sourceUrl: this.loginSourceUrl,
+      onClose: () => { this.loginSourceUrl = ''; },
+      onOpenWeb: (url: string) => this.openSourceWeb(url),
+      onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+    })
     // P9 通用 WebView 页（验证码/源站浏览）：盖在登录页之上。
     if (this.sourceWebUrl.length > 0) {
       SourceWebPage({

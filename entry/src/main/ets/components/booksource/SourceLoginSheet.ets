@@ -51,7 +51,8 @@ export struct SourceLoginSheet {
 
   /** 显隐由调用方（Index）持有，与上游 modalOverlay 的进出一一对应。 */
   @Link visible: boolean;
-  @Prop sourceUrl: string = '';
+  /** 换源时要重跑 prepare，否则沿用上一次的表单项与模式。 */
+  @Prop @Watch('onSourceUrlChanged') sourceUrl: string = '';
   /** 弹层关闭：上游 onDismissRequest → SourceLoginIntent.Back。 */
   onClose: () => void = () => {};
   /** 按钮 action 是外部 URL 时交给 Index 打开通用 WebView（验证码页）。 */
@@ -74,6 +75,14 @@ export struct SourceLoginSheet {
   private webController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear(): void {
+    this.prepare();
+  }
+
+  /** 换源（同一弹层实例复用到另一个书源）时重置为 loading 并重跑 prepare。 */
+  onSourceUrlChanged(): void {
+    this.sheetLoading = true;
+    this.menuVisible = false;
+    this.headerSheetVisible = false;
     this.prepare();
   }
 
@@ -377,22 +386,14 @@ export struct SourceLoginSheet {
   }
 
   build() {
-    Column()
-      .width(0).height(0)
-      // 上游 MainNavGraph.kt:390-408 登录是模态覆盖层；本地用 bindSheet 承载同一条壳。
-      .bindSheet($$this.visible, this.SheetContent(), {
-        height: this.mode === 'web' && !this.sheetLoading ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
-        dragBar: true,
-        // 上游 SourceLoginSheets.kt 三个弹层都走 AppModalBottomSheet，其 M3 分支
-        // （AppModalBottomSheet.kt:145-153）只画 DragHandle、无右上关闭按钮。
-        showClose: false,
-        enableOutsideInteractive: true,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
-        onDisappear: () => {
-          this.visible = false;
-          this.onClose();
-        }
-      })
+    // ArkUI 一个组件只能绑定一个半模态：后挂的会覆盖前一个，两个都弹不出来
+    // （编辑页曾因同一写法导致点字段/帮助全无反应）。所以主弹层与登录头必须
+    // 分别挂在不同层级的容器上——主弹层在外层 Column，登录头在内层 Stack。
+    Column() {
+      Stack() {
+        // 占位 1x1，只为承载登录头半模态；主弹层挂在外层 Column。
+      }
+      .width(1).height(1)
       .bindSheet($$this.headerSheetVisible, this.LoginHeaderSheet(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
@@ -402,5 +403,21 @@ export struct SourceLoginSheet {
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
         onDisappear: () => { this.headerSheetVisible = false; }
       })
+    }
+    .width(0).height(0)
+    // 上游 MainNavGraph.kt:390-408 登录是模态覆盖层；本地用 bindSheet 承载同一条壳。
+    .bindSheet($$this.visible, this.SheetContent(), {
+      height: this.mode === 'web' && !this.sheetLoading ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
+      dragBar: true,
+      // 上游 SourceLoginSheets.kt 三个弹层都走 AppModalBottomSheet，其 M3 分支
+      // （AppModalBottomSheet.kt:145-153）只画 DragHandle、无右上关闭按钮。
+      showClose: false,
+      enableOutsideInteractive: true,
+      backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+      onDisappear: () => {
+        this.visible = false;
+        this.onClose();
+      }
+    })
   }
 }

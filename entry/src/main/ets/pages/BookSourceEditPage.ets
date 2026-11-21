@@ -146,7 +146,8 @@ export struct BookSourceEditPage {
   /** 进入时携带的书源；undefined 表示新建。 */
   @Prop @Watch('onSourceChanged') editingSource?: BookSource = undefined;
   onBack: () => void = () => {};
-  onSaveSource: (source: BookSource) => void = (_source: BookSource) => {};
+  onSaveSource: (source: BookSource, exitAfter: boolean) => void =
+    (_source: BookSource, _exitAfter: boolean) => {};
   onOpenSourceSearch: (keyword: string, sourceUrl: string) => void = (_keyword: string, _sourceUrl: string) => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** P9 登录/清 Cookie/源变量回调，由 Index 接线。 */
@@ -249,8 +250,12 @@ export struct BookSourceEditPage {
     return FIELDS_CONTENT;
   }
 
-  /** 保存整条 sourceJson，并从 JSON 重建 5 个派生列（与 BookSourceImporter.toRule 同口径）。 */
-  private save(): void {
+  /**
+   * 保存整条 sourceJson，并从 JSON 重建 5 个派生列（与 BookSourceImporter.toRule 同口径）。
+   * exitAfter 对齐上游：Save（FAB）→ save(Finish) 保存后退出编辑页；
+   * SaveAndLogin/Search/Debug/Variable → save(OpenXxx) **只保存不退出**（BookSourceEditViewModel.kt:67-99）。
+   */
+  private save(exitAfter: boolean = true): void {
     const url = this.readPath('bookSourceUrl').trim();
     if (url.length === 0) {
       this.onUnavailableAction('源 URL 不能为空');
@@ -276,7 +281,7 @@ export struct BookSourceEditPage {
       customOrder: this.editingSource?.customOrder ?? 0,
       sourceJson: json
     };
-    this.onSaveSource(saved);
+    this.onSaveSource(saved, exitAfter);
   }
 
   /** 溢出菜单的动作列表；「自动补全」带当前勾选态（上游 isSelected = state.autoComplete）。 */
@@ -309,7 +314,8 @@ export struct BookSourceEditPage {
       return;
     }
     if (needUrl) {
-      this.save();
+      // 上游 SaveAndXxx 是 save(OpenXxx)：只保存、留在编辑页，再执行动作。
+      this.save(false);
     }
     if (key === 'copy') {
       try {
@@ -547,7 +553,8 @@ export struct BookSourceEditPage {
       this.onUnavailableAction('源 URL 不能为空');
       return;
     }
-    this.save();
+    // 上游 SaveAndDebug = save(OpenDebug)：保存后留在编辑页，调试页盖在其上。
+    this.save(false);
     this.onOpenSourceDebug(url);
   }
 
