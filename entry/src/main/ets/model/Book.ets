@@ -49,6 +49,12 @@ export interface Book {
   dailyChapters?: number;
   /** 与 Android Book.config.reSegment 对应，按书启用正文重分段。 */
   reSegment?: boolean;
+  /**
+   * 超长章节是否自动再拆，对应上游 Book.config.splitLongChapter（Book.kt:485）。
+   * **缺省 true**：undefined 不是 false，读用 `!== false`，写只在 false 时落键。
+   * 翻这个开关会改变整本书的目录，必须重算目录才生效。
+   */
+  splitLongChapter?: boolean;
   /** 上游 Book.delTag 位掩码：hTag=2、rubyTag=4，按书启用 EPUB 正文净化开关。 */
   delTag?: number;
   /**

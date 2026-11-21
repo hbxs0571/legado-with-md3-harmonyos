@@ -39,7 +39,7 @@ import { ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOp
 import { BookSourceRuntime } from '../bookSource/BookSourceRuntime';
 import { AutoChangeSource } from '../bookSource/AutoChangeSource';
 import { SearchBookItem, RemoteChapter } from '../bookSource/SourceModels';
-import { SourceLoginPage } from './SourceLoginPage';
+import { SourceLoginSheet } from '../components/booksource/SourceLoginSheet';
 import { SourceWebPage } from './SourceWebPage';
 import { BookSourceDebugPage } from './BookSourceDebugPage';
 import { BookSourceLoginCoordinator } from '../bookSource/BookSourceLoginCoordinator';
@@ -280,8 +280,10 @@ struct Index {
   @State changeSourceBook: Book | null = null;
   /** 批量换源面板（批10 :564）：非空即显示，值是选择模式里勾中的书。 */
   @State batchChangeSourceBooks: Book[] | null = null;
-  /** P9 正在登录的书源 URL；非空即显示登录页。 */
+  /** P9 正在登录的书源 URL；非空即显示登录弹层。 */
   @State loginSourceUrl: string = '';
+  /** P9 登录弹层显隐（bindSheet 双向绑定；对齐上游 modalOverlay 的进出）。 */
+  @State loginSheetVisible: boolean = true;
   /** P10 书源调试页：非空的书源 URL 即显示调试覆盖层。 */
   @State debugSourceUrl: string = '';
   /** P9 通用 WebView 页 URL；非空即显示。 */
@@ -8945,6 +8947,46 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /**
+   * 批9（:1004）：切换「拆分超长章节」并重算目录。
+   *
+   * 照上游 `BookInfoViewModel.kt:693-702 toggleSplitLongChapter()`：
+   * ① 翻 `readConfig.splitLongChapter` 落盘；② 重跑一次目录重算（本地用现成的
+   * `refreshBookInfo`，它第一行就挡住非本地 TXT，与上游 `book.type and BookType.text > 0` 同口径）；
+   * ③ 关掉时按上游 `need_more_time_load_content` 提示一句「需要更长时间加载正文」。
+   *
+   * 顺序不能换：先落盘再重算，因为 `refreshToc` 是拿库里的 book 去切章的，
+   * 先重算会把旧开关下的目录再写一遍。
+   */
+  private async toggleSplitLongChapter(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架，未切换长章拆分');
+      return;
+    }
+    const current = this.selectedBook;
+    if (!current.isLocal || current.format !== 'txt' || current.contentPath === undefined) {
+      this.showUnavailableAction('仅本地 TXT 书籍支持拆分超长章节');
+      return;
+    }
+    const enabled = current.splitLongChapter === false;
+    const next: Book = BookRepository.copyBook(current);
+    next.splitLongChapter = enabled;
+    try {
+      await BookRepository.saveImportedBooks(context, [next]);
+    } catch (error) {
+      this.showUnavailableAction('设置失败：' + (error instanceof Error ? error.message : `${error}`));
+      return;
+    }
+    this.selectedBook = next;
+    this.books = this.books.map((item: Book): Book => item.id === next.id ? next : item);
+    // 重算目录用刚写回库的那本（refreshToc 从 chapters 行反推旧目录做差异比对）。
+    await this.refreshBookInfo(next);
+    if (!enabled) {
+      this.showUnavailableAction('已关闭长章拆分：需要更长时间加载正文');
+    }
+  }
+
   private async toggleBookCanUpdate(canUpdate: boolean): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -9065,6 +9107,8 @@ private canWriteInto(dir: string): boolean {
   /** P9 打开书源登录页。 */
   private openSourceLogin(sourceUrl: string): void {
     this.loginSourceUrl = sourceUrl;
+    // 每次打开都重置弹层显隐（上一次关闭时 bindSheet 回写过 false）。
+    this.loginSheetVisible = true;
   }
 
   /** P10 打开书源调试页。 */
@@ -10469,6 +10513,7 @@ private canWriteInto(dir: string): boolean {
           onOpenSourceLogin: (sourceUrl: string) => this.openSourceLogin(sourceUrl),
           onOpenSourceEdit: (sourceUrl: string) => this.openBookSourceEdit(sourceUrl),
           onToggleCanUpdate: (canUpdate: boolean) => { void this.toggleBookCanUpdate(canUpdate); },
+          onToggleSplitLongChapter: () => { void this.toggleSplitLongChapter(); },
           onChooseCover: () => this.chooseBookCover(),
           onRestoreCover: () => this.restoreBookCover(),
           onSaveMetadata: (title: string, author: string, category: string, description: string,
@@ -12952,11 +12997,13 @@ private canWriteInto(dir: string): boolean {
           this.runBatchChangeSource(this.batchChangeSourceBooks ?? [], sourceUrls, options, preview)
       })
     }
-    // P9 书源登录页：条件覆盖层，非空即显示，盖在内容之上。
+    // P9 书源登录：对齐上游 MainNavGraph.kt:390-408 的模态覆盖层（modalOverlay），
+    // 本体是 SourceLoginSheetHost 的三态底部弹层，不是整页。本地由 SourceLoginSheet 承载。
     if (this.loginSourceUrl.length > 0) {
-      SourceLoginPage({
+      SourceLoginSheet({
+        visible: $loginSheetVisible,
         sourceUrl: this.loginSourceUrl,
-        onBack: () => { this.loginSourceUrl = ''; },
+        onClose: () => { this.loginSourceUrl = ''; },
         onOpenWeb: (url: string) => this.openSourceWeb(url),
         onUnavailableAction: (message: string) => this.showUnavailableAction(message)
       })

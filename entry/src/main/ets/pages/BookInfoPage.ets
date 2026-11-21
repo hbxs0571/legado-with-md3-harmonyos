@@ -129,6 +129,11 @@ export struct BookInfoPage {
   /** 切换「允许更新」（:289）：Index 写库后刷新 books，@Prop book 随之更新。 */
   onToggleCanUpdate: (canUpdate: boolean) => void = (_canUpdate: boolean) => {};
   /**
+   * 批9（:1004）：切换「拆分超长章节」。翻开关本身在这里不写库，
+   * 落盘与重算目录都在 Index 侧（只有那边拿得到 refreshBookInfo 那条现成路径）。
+   */
+  onToggleSplitLongChapter: () => void = () => {};
+  /**
    * 批8（:369）：书架里与本书同名且作者兼容的书，由 Index 的 `shelfConflictsWith` 算好传入
    * （对齐上游 `FindBookshelfConflictUseCase.kt:18-48`：空白归一 + 作者兼容 + 已下架不算冲突）。
    * 为空时回退到本页 `sameNameCopies()` 的按书名比对，保证老调用点行为不变。
@@ -846,9 +851,10 @@ export struct BookInfoPage {
    * delete_alert → clear_cache → log → private。
    *
    * **上游的显示条件在本地一律不判**：上游这些项各自挂着 `bookSourceUi != null`、
-   * `hasLogin`、`isLocal == false` 之类的前置条件，本地没有书源系统、书目全是本地书，
-   * 照条件判等于全都不显示。按用户要求「哪怕不做实际功能也要把所有按钮做出来」，
-   * 这里全部列出，未接入的项在 `onOverflowSelect` 里提示「未接入」。
+   * `hasLogin`、`isLocal == false` 之类的前置条件。本地书目以本地书为主，按条件判会大面积不显示；
+   * 书源体系在批 8 之后已接入（`bookSource/` 目录、`openSourceLogin()` / `openSourceEdit()`
+   * 都已接上），但在线书的这些前置条件仍不全具备。按用户要求「哪怕不做实际功能也要把所有按钮
+   * 做出来」，这里全部列出，未接入的项在 `onOverflowSelect` 里提示「未接入」。
    */
   private overflowItems(): UiMenuItem[] {
     // 批10（:565）：导出 EPUB 仅对有正文的本地书出现。ArkTS 不允许在 spread 三元里写
@@ -879,7 +885,13 @@ export struct BookInfoPage {
       { key: 'to_top', title: '置顶' },
       // 允许更新：选中态对齐上游 isSelected = book.canUpdate（缺省视为 true）。
       { key: 'allow_update', title: '允许更新', selected: this.book.canUpdate !== false },
-      { key: 'split_long_chapter', title: '拆分超长章节' },
+      // 拆分超长章节：勾选态对齐上游 `isSelected = book.splitLongChapter`（缺省 true），
+      // 只在本地 TXT 上出现（上游 BookInfoScreen.kt:1115-1120 判 isLocal + text 类型）。
+      {
+        key: 'split_long_chapter',
+        title: '拆分超长章节',
+        selected: this.book.splitLongChapter !== false
+      },
       { key: 'delete_alert', title: '删除提醒', selected: this.deleteAlertEnabled },
       { key: 'clear_cache', title: '清理缓存' },
       { key: 'log', title: '日志' },
@@ -919,6 +931,8 @@ export struct BookInfoPage {
       this.onToggleCanUpdate(this.book.canUpdate === false);
     } else if (key === 'to_top') {
       this.onTopBook();
+    } else if (key === 'split_long_chapter') {
+      this.onToggleSplitLongChapter();
     } else if (key === 'delete_alert') {
       this.onToggleDeleteAlert();
     } else if (key === 'clear_cache') {
@@ -935,9 +949,27 @@ export struct BookInfoPage {
       // 引擎不扩展就执行不了源脚本，这里如实说明缺什么，不弹假成功提示。
       this.onUnavailableAction('自定义按钮依赖书源引擎的 customButtonRule（选择器与脚本），本地引擎只移植了 customButton 开关，暂无法执行');
     } else {
-      // 其余项（re_sync_webdav / set_book_variable / split_long_chapter）
-      // 依赖书源脚本回调、远程书库或排版引擎，本地没有对应能力。
-      // 按仓库约定仍然列出来，点了给一句「未接入」，不留死按钮。
+      // 其余项按仓库约定仍然列出来，点了给一句「未接入」，不留死按钮。
+      // 两项缺的东西完全不同，分别写清：
+      //
+      // re_sync_webdav —— 缺「远端书 → 本地书」的回写流程。
+      //   上游 `ui/book/info/BookInfoViewModel.kt:790 syncFromRemote()` 只在 book.isLocal 时跑，
+      //   调 `remoteBookRepository.syncBookFromRemote(book)` 把远端书拉回、删本地书、插回新书，
+      //   不涉及脚本。本地 WebDAV 传输层已经齐：`lib/WebDav.ets:218 listFiles` / `:235 upload` /
+      //   `:249 downloadTo` / `:264 delete`，上传书籍也跑通了（`lib/WebDavSync.ets:129 uploadBookFile`，
+      //   入口本页 `uploadBook()`），备份与进度下载同样走这层。真正缺的是本地没有
+      //   `RemoteBookRepository` 对应层、`model/Book.ets` 不记远端标识（上传只按
+      //   `fileName = localPath.substring(...)` 复制，grep remoteUrl/webDavUrl 零命中），
+      //   也没有把远端正文拉回后重新登记成书那段。
+      //
+      // set_book_variable —— 缺 `book.variable` 字段与书源上下文。
+      //   上游 `BookInfoViewModel.kt:729 requestBookVariableSheet()` 开头就 `bookSource ?: throw`，
+      //   编辑 `book.getCustomVariable()`（`data/entities/BaseBook.kt:30` → `Book.kt:130 variable`，
+      //   JSON 键 custom），文案是「书籍变量可在 js 中通过 book.getVariable("custom") 获取」——
+      //   设置并保存一份变量供书源脚本读取，不执行脚本；显示条件是 bookSourceUi != null。
+      //   本地 `model/Book.ets` 无 variable 字段（grep 零命中），本地书也没有书源上下文；
+      //   引擎侧有（`sourceengine/src/main/ets/model/data/Book.ts:37 variable`、`:58 variableMap`）
+      //   但本地书模型没映射过来。
       this.onUnavailableAction(`${this.overflowTitleOf(key)} 未接入`);
     }
   }

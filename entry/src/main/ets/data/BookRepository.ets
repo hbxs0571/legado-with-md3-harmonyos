@@ -68,6 +68,12 @@ interface StoredReadConfig {
   startChapter?: number;
   /** 每日解锁章数。上游默认 3（Book.kt:489），不是 0。 */
   dailyChapters?: number;
+  /**
+   * 超长章节是否自动再拆（上游 Book.config.splitLongChapter，Book.kt:485，默认 true）。
+   * 上游默认 true，所以缺省按 true 处理：undefined 不是 false。
+   * 这一项会改变整本书的目录，翻开关后必须重算目录，见 appendChapterRange。
+   */
+  splitLongChapter?: boolean;
 }
 
 interface ChapterTextRange {
@@ -1225,6 +1231,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       startChapter: config.startChapter,
       dailyChapters: config.dailyChapters,
       reSegment: config.reSegment === true,
+      // 上游默认 true，所以只有显式 false 才算关；undefined 按开处理（Book.kt:485）。
+      splitLongChapter: config.splitLongChapter !== false,
       useReplaceRule: config.useReplaceRule,
       charset: RdbCodec.optionalText(resultSet, 14),
       description: RdbCodec.optionalText(resultSet, 11),
@@ -1948,7 +1956,9 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       readSimulating: book.readSimulating === true ? true : undefined,
       startDate: book.startDate,
       startChapter: book.startChapter,
-      dailyChapters: book.dailyChapters
+      dailyChapters: book.dailyChapters,
+      // false 才写键；true/undefined 都不写，JSON.stringify 丢掉 undefined 键正好表达「沿用默认 true」。
+      splitLongChapter: book.splitLongChapter === false ? false : undefined
     };
     const totalChapterNum = Number(book.chapterCount ?? '0');
     const lastChapter = book.lastChapter.length > 0 ? book.lastChapter : null;
@@ -2054,7 +2064,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule);
+      const split = BookRepository.splitChapters(content, chapterRule, book.splitLongChapter !== false);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
@@ -2445,7 +2455,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     let offsets: number[] = [];
     let volumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule);
+      const split = BookRepository.splitChapters(content, chapterRule, book.splitLongChapter !== false);
       titles = split.titles;
       offsets = split.offsets;
       volumes = split.volumes;
@@ -2928,7 +2938,7 @@ private static async applyChapterContentAsync(
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule);
+      const split = BookRepository.splitChapters(content, chapterRule, book.splitLongChapter !== false);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
@@ -3110,7 +3120,8 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     importedContent?: string,
     charset?: string,
     maxLengthWithNoToc: number = 3000,
-    parsedAuthor: string = ''
+    parsedAuthor: string = '',
+    splitLongChapter: boolean = true
   ): CreatedLocalBook {
     let content: string = '';
     try {
@@ -3123,7 +3134,7 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
-      const split = BookRepository.splitChapters(content, chapterRule);
+      const split = BookRepository.splitChapters(content, chapterRule, splitLongChapter);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
@@ -3596,7 +3607,8 @@ private static getTitle(fileName: string): string {
       '(?:章|节(?!课)|卷|集(?![合和]))).{0,30}$';
 
   /** 标题、起点与卷标记来自同一次匹配，确保阅读偏移和目录显示对齐。 */
-  private static splitChapters(content: string, chapterRule: string): ChapterSplit {
+  private static splitChapters(content: string, chapterRule: string,
+    splitLongChapter: boolean = true): ChapterSplit {
     const resolvedRule = chapterRule.trim().length > 0
       ? chapterRule : BookRepository.resolveChapterRule(undefined, content);
     const starts = TxtTocRuleRepository.splitChapterStarts(content, resolvedRule);
@@ -3622,8 +3634,8 @@ private static getTitle(fileName: string): string {
       const lineEnd = content.indexOf('\n', start);
       const rawLine = lineEnd >= 0 ? content.substring(start, lineEnd) : content.substring(start);
       const title = rawLine.replace(/\r$/, '').trim().substring(0, 80);
-      BookRepository.appendChapterRange(content, start, end, title, resolvedRule,
-        titles, offsets, volumes);
+      BookRepository.appendChapterRange(content, start, end, title,
+        titles, offsets, volumes, splitLongChapter);
     }
     // 卷标记按最终标题重新判定：长章拆出的子章标题带 `(1)` 后缀，仍应沿用原章的卷归属。
     const flags = TxtTocRuleRepository.markVolumeTitles(titles, volumeRule);
@@ -3631,36 +3643,43 @@ private static getTitle(fileName: string): string {
   }
 
   /**
-   * 追加一章；单章超过 maxLengthWithToc 时按上游 TextFile.kt:66、`:208-226` 二次拆分。
+   * 追加一章；单章超过 maxLengthWithToc 时按上游 TextFile.kt:208-231 二次拆分。
    *
    * 拆出的子章标题是 `原章名(1)`、`原章名(2)`：上游把整段（含标题行）交给子章，
    * 并把原章从目录里去掉，避免留下读不出正文的零长度空壳章。
+   *
+   * 二次拆分走的是**无目录切分**（上游 `analyze(lastStart, curOffset + chapterLength)` 调的是
+   * `TextFile.kt:358` 那个不带 pattern 的重载，按 maxLengthWithNoToc 阈值 + 换行处断开），
+   * 不是再拿目录规则切一遍。这里早前多写了一次 `splitChapterStarts(slice, chapterRule)`，
+   * 而 slice 的首行就是原章标题本身，`splitChapterStarts` 必然返回 [0]，
+   * 于是任何超长章都只产出 1 个子章 `原章名(1)`、等于没拆——已按上游改掉。
    */
   private static appendChapterRange(content: string, start: number, end: number, title: string,
-    chapterRule: string, titles: string[], offsets: number[], volumes: boolean[]): void {
+    titles: string[], offsets: number[], volumes: boolean[],
+    splitLongChapter: boolean = true): void {
     const safeTitle = title.length > 0 ? title : '无标题章节';
     const byteLength = BookRepository.sliceByteLength(content, start, end, undefined);
-    if (byteLength <= BookRepository.maxLengthWithToc || end <= start) {
+    // 关掉长章拆分（上游 Book.config.splitLongChapter = false）时整段直接成一章，
+    // 与上游 TextFile.kt:208 / :334 的 `if (book.getSplitLongChapter() && ...)` 同口径。
+    if (!splitLongChapter || byteLength <= BookRepository.maxLengthWithToc || end <= start) {
       titles.push(safeTitle);
       offsets.push(start);
       volumes.push(false);
       return;
     }
+    // 超过 maxLengthWithToc：按无目录阈值（上游 maxLengthWithNoToc，默认 3000）切成多段，
+    // 每段标题是 `原章名(N)`。
     const slice = content.substring(start, end);
-    const subStarts = TxtTocRuleRepository.splitChapterStarts(slice, chapterRule);
-    if (subStarts.length === 0) {
-      // 段内再没有标题：按无目录分章的长度阈值切开，标题仍用原章名加序号。
-      const layout = BookRepository.buildNoTocChapterLayout(slice, 3000, undefined);
-      for (let index = 0; index < layout.offsets.length; index++) {
-        titles.push(`${safeTitle}(${index + 1})`);
-        offsets.push(start + (layout.offsets[index] ?? 0));
-        volumes.push(false);
-      }
+    const layout = BookRepository.buildNoTocChapterLayout(slice, 3000, undefined);
+    if (layout.offsets.length === 0) {
+      titles.push(safeTitle);
+      offsets.push(start);
+      volumes.push(false);
       return;
     }
-    for (let index = 0; index < subStarts.length; index++) {
+    for (let index = 0; index < layout.offsets.length; index++) {
       titles.push(`${safeTitle}(${index + 1})`);
-      offsets.push(start + (subStarts[index] ?? 0));
+      offsets.push(start + (layout.offsets[index] ?? 0));
       volumes.push(false);
     }
   }
