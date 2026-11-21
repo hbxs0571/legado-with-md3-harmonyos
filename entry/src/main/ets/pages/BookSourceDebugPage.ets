@@ -542,6 +542,9 @@ export struct BookSourceDebugPage {
       // 上游 heightIn(max = 容器高 * 0.8) + animateContentSize：内容多高就多高，上限 80%。
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
+      // 上游 AboutSheets.kt:33-60 的 MarkdownSheet 只有标题 + 内容，没有右上关闭按钮；
+      // ArkUI bindSheet 的 showClose 默认 true 会多画一个 ×，故显式关掉（下滑与点外部仍可关）。
+      showClose: false,
       enableOutsideInteractive: true,
       onDisappear: () => { this.selectedId = -1; }
     })

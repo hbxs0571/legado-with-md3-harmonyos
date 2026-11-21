@@ -130,6 +130,9 @@ export struct SourceCheckRunSheet {
       .bindSheet(this.visible, this.SheetContent(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
+        // 上游 CheckBookSourceSheet 走 AppModalBottomSheet，M3 分支（AppModalBottomSheet.kt:145-153）
+        // 只画 DragHandle、无右上关闭按钮；bindSheet 的 showClose 默认 true 会多画一个 ×。
+        showClose: false,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
         onDisappear: () => { this.visible = false; }
       })

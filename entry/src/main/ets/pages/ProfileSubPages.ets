@@ -1505,7 +1505,9 @@ export struct BookSourceManagePage {
         this.SourceSheetContent(), {
           height: this.importVisible ? SheetSize.FIT_CONTENT : SheetSize.LARGE,
           dragBar: true,
-          showClose: true,
+          // 上游 BookSourceGroupFilterSheet 与导入弹层都走 AppModalBottomSheet，
+          // 其 M3 分支（AppModalBottomSheet.kt:145-153）只有 DragHandle，没有右上关闭按钮。
+          showClose: false,
           backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
           onDisappear: () => {
             this.showGroupFilter = false;

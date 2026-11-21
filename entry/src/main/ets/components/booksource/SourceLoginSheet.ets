@@ -383,6 +383,9 @@ export struct SourceLoginSheet {
       .bindSheet($$this.visible, this.SheetContent(), {
         height: this.mode === 'web' && !this.sheetLoading ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         dragBar: true,
+        // 上游 SourceLoginSheets.kt 三个弹层都走 AppModalBottomSheet，其 M3 分支
+        // （AppModalBottomSheet.kt:145-153）只画 DragHandle、无右上关闭按钮。
+        showClose: false,
         enableOutsideInteractive: true,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
         onDisappear: () => {
@@ -393,6 +396,8 @@ export struct SourceLoginSheet {
       .bindSheet($$this.headerSheetVisible, this.LoginHeaderSheet(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
+        // 上游登录头是 MarkdownSheet（AboutSheets.kt:33-60），同样没有右上关闭按钮。
+        showClose: false,
         enableOutsideInteractive: true,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
         onDisappear: () => { this.headerSheetVisible = false; }

@@ -616,14 +616,25 @@ export struct BookSourceEditPage {
       // ArkUI 一个组件只能绑定一个半模态：原先 fieldSheet 与 helpSheet 都挂在最外层 Column 上，
       // 后一个会覆盖前一个，导致两个 sheet 都弹不出来（表现为点字段卡片、点「帮助」全无反应）。
       // 这里把 helpSheet 移到内层 Stack，两个 sheet 各归一个组件。
-      .bindSheet($$this.helpSheetVisible, this.HelpSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
+      .bindSheet($$this.helpSheetVisible, this.HelpSheetBuilder(), {
+        height: SheetSize.FIT_CONTENT,
+        // 上游 MarkdownSheet 走 AppModalBottomSheet，M3 分支（AppModalBottomSheet.kt:145-153）
+        // 只画 DragHandle、无右上关闭按钮；bindSheet 的 showClose 默认 true 会多画一个 ×。
+        showClose: false,
+        enableOutsideInteractive: true
+      })
     }
     .width('100%').height('100%')
     .backgroundColor(this.themeAppBackground.length > 0 ? this.themeAppBackground : this.themeColorSurfacePrimary)
     // 上游 AppModalBottomSheet 默认 enableOutsideInteractive=true、sheetGesturesEnabled=true：
     // 点遮罩或下滑都能关闭。字段 sheet 按上游去掉了「取消/确认」按钮（SourceEditFieldSheet.kt:220-252），
     // 因此这里必须保留遮罩可点，否则 sheet 打开后无任何关闭途径，整页看起来无法交互。
-    .bindSheet($$this.fieldSheetVisible, this.FieldSheetBuilder(), { height: SheetSize.FIT_CONTENT, enableOutsideInteractive: true })
+    .bindSheet($$this.fieldSheetVisible, this.FieldSheetBuilder(), {
+      height: SheetSize.FIT_CONTENT,
+      // 同上：上游 AppModalBottomSheet 的 M3 分支没有右上关闭按钮。
+      showClose: false,
+      enableOutsideInteractive: true
+    })
   }
 
   /**

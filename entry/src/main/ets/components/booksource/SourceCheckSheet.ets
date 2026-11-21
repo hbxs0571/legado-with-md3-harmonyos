@@ -171,7 +171,8 @@ export struct SourceCheckSheet {
       .bindSheet(this.visible, this.SheetContent(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
-        showClose: true,
+        // 上游 AppModalBottomSheet.kt:145-153 的 M3 分支只画 DragHandle，没有右上关闭按钮。
+        showClose: false,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
         onDisappear: () => { this.visible = false; }
       })
