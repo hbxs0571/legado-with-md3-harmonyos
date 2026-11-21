@@ -67,8 +67,12 @@ struct DebugChip {
     .backgroundColor(this.selected ? this.themeColorPrimaryContainer : this.themeColorSurfaceTertiary)
     .borderRadius(12)
     .margin({ right: 8, top: 2, bottom: 2 })
-    // 上游 ToggleChip 的 toggleableState / stateDescription 无障碍语义（:45-58）。
-    .accessibilityText(this.selected ? (this.label + '，已选择') : (this.label + '，未选择'))
+    // 上游 ToggleChip.kt:45-58 的 toggleableState + stateDescription：
+    // 用 ArkUI 的 accessibilityChecked 表达「可勾选 + 当前是否勾选」，
+    // 用 accessibilityStateDescription 表达「已选择/未选择」（读屏会念出来）。
+    .accessibilityChecked(this.selected)
+    .accessibilityStateDescription(this.selected ? '已选择' : '未选择')
+    .accessibilityText(this.label)
     .onClick(() => { this.onSelect(); })
   }
 }
