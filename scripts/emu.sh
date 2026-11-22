@@ -36,6 +36,8 @@ TREE_DIR="$(to_native "${TMPDIR:-/tmp}")"
 SETTLE="${SETTLE:-0.8}"
 # 录制下来的 UI 路径放在仓库 tmp/routes/ 下：一串「点哪儿」，回放时不用重新摸。
 ROUTES_DIR="${EMU_ROUTES_DIR:-$(to_native "$(cd "$SCRIPT_DIR/.." && pwd)/tmp/routes")}"
+# 截图落在仓库 tmp/shots/ 下：验收要拿两张图比「屏幕到底变没变」。
+SHOT_DIR="${EMU_SHOT_DIR:-$(to_native "$(cd "$SCRIPT_DIR/.." && pwd)/tmp/shots")}"
 
 die() { printf '错误: %s\n' "$1" >&2; exit 1; }
 
@@ -216,17 +218,42 @@ warn_if_other_holds() {
 }
 # 截图。不走 hdc file recv —— 实测它对 JPEG 大文件会挂住不返回；
 # 改用 shell base64 取回再本地解码。
+# 截一张图到本地路径。后缀必须是 .jpeg —— snapshot_display 对 .png 报 invalid。
+take_shot() {
+  local out="$1"
+  local tmp="/data/local/tmp/cap.jpeg"
+  "$HDC_BIN" shell "snapshot_display -f $tmp" >/dev/null 2>&1 || return 1
+  "$HDC_BIN" shell "base64 -w 0 $tmp" 2>/dev/null | base64 -d > "$out" 2>/dev/null
+  [ -s "$out" ] || return 1
+  return 0
+}
+
 do_cap() {
   warn_if_other_holds cap
   local out="${1:-$PWD/cap-$(date +%H%M%S).jpeg}"
-  # 后缀必须是 .jpeg，snapshot_display 对 .png 报 invalid
-  local tmp="/data/local/tmp/cap.jpeg"
   case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
-  "$HDC_BIN" shell "snapshot_display -f $tmp" >/dev/null 2>&1 \
-    || { printf 'snapshot_display 失败\n' >&2; return 1; }
-  "$HDC_BIN" shell "base64 -w 0 $tmp" 2>/dev/null | base64 -d > "$out" 2>/dev/null
-  [ -s "$out" ] || { printf '截图解码失败\n' >&2; return 1; }
+  take_shot "$out" || { printf '截图失败\n' >&2; return 1; }
   printf '已保存: %s (%s 字节)\n' "$out" "$(wc -c < "$out" | tr -d ' ')"
+}
+
+do_shot() {
+  warn_if_other_holds shot
+  local name="${1:-shot-$(date +%H%M%S)}"
+  emu_online || die "设备不在线：先 emu.sh start"
+  mkdir -p "$SHOT_DIR"
+  local out="$SHOT_DIR/$name.jpeg"
+  take_shot "$out" || { printf '截图失败\n' >&2; return 1; }
+  printf '已保存: %s (%s 字节)\n' "$out" "$(wc -c < "$out" | tr -d ' ')"
+}
+
+# 比两张图，先回答「屏幕到底变没变」。退出码 0 有变化 / 4 几乎没变。
+do_diff() {
+  local a="${1:-}" b="${2:-}"
+  if [ -z "$a" ] || [ -z "$b" ]; then
+    die "用法: emu.sh diff A.jpeg B.jpeg [--min 0.0005] [--thr 16]"
+  fi
+  shift 2
+  "${PYTHON:-python}" "$NAV_PY" shotdiff "$a" "$b" "$@"
 }
 
 do_start() {
@@ -353,12 +380,14 @@ do_tree() {
 # 菜单图标按钮点不中也不报错，前后两棵树才是证据。
 do_click() {
   local who="$1"; shift
-  local settle="$SETTLE" verify="" record="" args=()
+  local settle="$SETTLE" verify="" record="" pixels="" minp="" args=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --settle) settle="$2"; shift 2; continue ;;
       --verify) verify="$2"; shift 2; continue ;;
       --record) record="$2"; shift 2; continue ;;
+      --pixels) pixels=1; shift; continue ;;
+      --min) minp="$2"; shift 2; continue ;;
       *) args+=("$1"); shift; continue ;;
     esac
   done
@@ -366,6 +395,12 @@ do_click() {
   emu_online || die "设备不在线：先 emu.sh start"
   local pre="$TREE_DIR/emu-tree-pre.json" post="$TREE_DIR/emu-tree-post.json"
   dump_tree "$pre" || return 1
+  local shot_pre="" shot_post=""
+  if [ -n "$pixels" ]; then
+    mkdir -p "$SHOT_DIR"
+    shot_pre="$SHOT_DIR/_pre-$$.jpeg"
+    take_shot "$shot_pre" || { printf '前置截图失败\n' >&2; return 1; }
+  fi
   local picked rc
   picked=$("${PYTHON:-python}" "$NAV_PY" pick "$pre" "${args[@]}")
   rc=$?
@@ -388,6 +423,19 @@ do_click() {
   fi
   sleep "$settle"
   dump_tree "$post" || return 1
+  if [ -n "$pixels" ]; then
+    shot_post="$SHOT_DIR/_post-$$.jpeg"
+    if take_shot "$shot_post"; then
+      local dargs=() drc=0
+      if [ -n "$minp" ]; then dargs=(--min "$minp"); fi
+      "${PYTHON:-python}" "$NAV_PY" shotdiff "$shot_pre" "$shot_post" "${dargs[@]}" || drc=$?
+      if [ "$drc" -eq 4 ]; then
+        printf '注意: 屏幕几乎没变 —— 这一下可能点空了；局部小改动也可能低于阈值，以下面 verify 的文字结果为准\n' >&2
+      fi
+    else
+      printf '后置截图失败\n' >&2
+    fi
+  fi
   if [ -n "$verify" ]; then
     "${PYTHON:-python}" "$NAV_PY" verify "$pre" "$post" --text "$verify"
   else
@@ -580,6 +628,8 @@ case "${1:-status}" in
   restart) shift; parse_session_flag "$@"; require_lock restart && { do_stop; sleep 2; do_start; } ;;
   status)  do_status ;;
   cap)     shift; do_cap "${1:-}" ;;
+  shot)    shift; do_shot "$@" ;;
+  diff)    shift; do_diff "$@" ;;
   tree)    shift; do_tree "$@" ;;
   tap)     shift; do_tap "$@" ;;
   tap-text) shift; do_tap_text "$@" ;;
@@ -589,8 +639,9 @@ case "${1:-status}" in
   release) shift; do_release "$@" ;;
   who)     do_who ;;
   *)
-     printf '用法: %s {start|stop|restart|status|cap [文件]|tree [--keys|--all]|tap <序号>|tap-text <文字>|tap-seq <步> [更多]|route {list|play|show|check|rm}|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
+     printf '用法: %s {start|stop|restart|status|cap [文件]|shot <名字>|diff <A> <B>|tree [--keys|--all]|tap <序号>|tap-text <文字>|tap-seq <步> [更多]|route {list|play|show|check|rm}|claim [--for 用途]|release [--force]|who} [--session 标识]\n' "$0"
      printf '  --session 或 EMU_SESSION 用来证明「锁是我占的」；不加就按别人的锁处理。\n'
+     printf '  tap / tap-text 加 --pixels 会在点击前后各截一张图比对：屏幕没变会打警告（阈值用 --min 调）。\n'
      printf '  tree 列这一屏可点的控件（带序号）；tap / tap-text 按树里的坐标点，点完自动比对前后两棵树。
   tap-seq 一次命令连点多个（默认每步重新取树，--one-shot 用同一屏坐标）；tap / tap-seq 加 --record 名字 会把步骤存进 tmp/routes/名字.json，route play 名字 逐步重走。\n'
      exit 1 ;;

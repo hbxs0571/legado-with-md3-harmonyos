@@ -262,6 +262,7 @@ def cmd_pick(path, index=None, text=None, contains=False, occurrence=0, show_all
     print('目标: %s %s %s %s' % (node['type'] or '-', node['label'] or '-', fmt_box(box), 'C' if node['clickable'] else '非可点'))
     print('LABEL %s' % (matched_label or '',))
     print('CENTER %d %d' % (cx, cy))
+    print('BOUNDS %d %d %d %d' % box)
     return 0
 
 def label_multiset(root):
@@ -301,8 +302,42 @@ def cmd_verify(pre_path, post_path, text=None):
     return 0
 
 
-EXTERNAL_CMDS = ('pickseq', 'routeadd', 'routeshow', 'routecheck')
+EXTERNAL_CMDS = ('pickseq', 'routeadd', 'routeshow', 'routecheck', 'shotdiff')
 
+
+def cmd_shotdiff(a_path, b_path, thr=16, min_ratio=0.0005):
+    """比较两张截图：先回答「屏幕到底变没变」，再谈变对了没有。"""
+    try:
+        from PIL import Image, ImageChops
+    except Exception:
+        die('shotdiff 需要 Pillow：python -m pip install pillow')
+    for p in (a_path, b_path):
+        if not os.path.isfile(p):
+            die('找不到图片: %s' % p)
+    a = Image.open(a_path).convert('RGB')
+    b = Image.open(b_path).convert('RGB')
+    print('SHOT A %dx%d' % a.size)
+    print('SHOT B %dx%d' % b.size)
+    if a.size != b.size:
+        print('DIFF 尺寸不同，屏幕确实变了')
+        print('CHANGED yes')
+        return 0
+    total = a.size[0] * a.size[1]
+    diff = ImageChops.difference(a, b).convert('L')
+    box = diff.getbbox()
+    if box is None:
+        print('DIFF 像素 0 / %d = 0.000%%' % total)
+        print('CHANGED no')
+        return 4
+    hist = diff.histogram()
+    n = sum(hist[thr + 1:])
+    ratio = n / float(total)
+    print('DIFF 像素 %d / %d = %.3f%%（灰度差 > %d 才计）' % (n, total, ratio * 100.0, thr))
+    changed = ratio >= min_ratio
+    if changed:
+        print('BBOX %d %d %d %d' % box)
+    print('CHANGED %s' % ('yes' if changed else 'no'))
+    return 0 if changed else 4
 
 def cmd_pickseq(path, specs, show_all=False):
     """一次读一棵树，按顺序解析多个目标，每行一个 STEP。
@@ -407,7 +442,26 @@ def cmd_route_check(path):
 
 
 def dispatch_ext(cmd, args):
-    """pickseq / route* 的参数在各自分支里解析，不走下面那套扁平解析。"""
+    """pickseq / route* / shotdiff 的参数在各自分支里解析，不走下面那套扁平解析。"""
+    if cmd == 'shotdiff':
+        thr = 16
+        min_ratio = 0.0005
+        files = []
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == '--thr':
+                i += 1
+                thr = int(args[i])
+            elif a == '--min':
+                i += 1
+                min_ratio = float(args[i])
+            else:
+                files.append(a)
+            i += 1
+        if len(files) != 2:
+            die('用法: shotdiff A.jpeg B.jpeg [--min 0.0005] [--thr 16]', 2)
+        return cmd_shotdiff(files[0], files[1], thr, min_ratio)
     rest = []
     specs = []
     label = None
@@ -452,7 +506,7 @@ def dispatch_ext(cmd, args):
 
 def main(argv):
     if len(argv) < 2:
-        die('用法: emu-nav.py <keys|list|pick|pickseq|verify|routeadd|routeshow|routecheck> ...', 2)
+        die('用法: emu-nav.py <keys|list|pick|pickseq|verify|shotdiff|routeadd|routeshow|routecheck> ...', 2)
     cmd = argv[1]
     args = argv[2:]
     index = text = None

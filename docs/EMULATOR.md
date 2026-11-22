@@ -110,6 +110,74 @@ bash scripts/emu.sh cap out.jpeg
 
 截图备选：`hdc shell uitest screenCap -p /data/local/tmp/x.png`（这个支持 `.png`）。
 
+## 先验「这一步真的发生了」，再验结果对不对
+
+回弹、过渡、翻页这类验收，最容易出的错不是「判断错了」，而是**操作压根没发生**，然后拿两次一样的截图去比，得出「没看到效果」的假结论。
+
+上游 Legado 的渲染基线（`docs/dev/track-c3-reader-parity-baseline.md`）对此有一条硬规矩：
+
+> 脚本在前进操作后停留并截图；若起点与前进页的差异像素不足 1%，立即失败，避免「前进/后退未发生却因终点相同而误报通过」。
+
+我们照这条做。工具在 `scripts/emu.sh` 与 `scripts/emu-nav.py`。
+
+### 三个子命令
+
+```bash
+bash scripts/emu.sh shot before          # 拍一张，落在 tmp/shots/before.jpeg
+# ……做点什么……
+bash scripts/emu.sh shot after
+bash scripts/emu.sh diff tmp/shots/before.jpeg tmp/shots/after.jpeg
+```
+
+`diff` 的输出：
+
+```text
+SHOT A 1280x2832
+SHOT B 1280x2832
+DIFF 像素 1351177 / 3624960 = 37.274%（灰度差 > 16 才计）
+BBOX 47 224 1280 2712
+CHANGED yes
+```
+
+退出码 **0 = 有变化 / 4 = 几乎没变**，可以直接进脚本判断。
+
+### 阈值为什么不是上游那 1%
+
+上游的 1% 是给**翻页**定的——整屏内容换掉，差异必然远超 1%。局部操作（切换一个标签、按下一个按钮、勾一个开关）变化区域可能只占屏幕千分之几，用 1% 会把「真的点中了」误判成「没点中」。
+
+所以默认 `--min 0.0005`（0.05%）、`--thr 16`（灰度差超过 16 才算变，滤掉 JPEG 压缩噪点）。两个都能调：
+
+```bash
+bash scripts/emu.sh diff a.jpeg b.jpeg --min 0.01 --thr 24
+```
+
+实测两条基线（2026-11-22，1280×2832）：
+
+- **同屏连拍两张**：`DIFF 像素 0 = 0.000%` —— `snapshot_display` 是确定性的，没有随机噪点，所以 0 就是 0。
+- **点「本地 2」标签**：`37.274%`，`CHANGED yes`。
+- **再点一次同一个已选中的标签**：`0.000%`，`CHANGED no` —— 这正是要抓的「点了等于没点」。
+
+### 点一下顺手比
+
+`tap` / `tap-text` 加 `--pixels`，点击前后自动各拍一张再比：
+
+```bash
+EMU_SESSION=lead bash scripts/emu.sh tap 9 --pixels --settle 1.2
+```
+
+屏幕没变会多一行警告：
+
+```text
+注意: 屏幕几乎没变 —— 这一下可能点空了；局部小改动也可能低于阈值，以下面 verify 的文字结果为准
+```
+
+它**不判失败**：控件树那边的 verify 才是主判据，像素只回答「屏幕动没动」。这一行的意思是「回去看你是不是点错了位置」，不是「这个功能坏了」。
+
+### 别拿它代替判断
+
+`diff` 只回答「变没变」，不回答「变得对不对」。页面跳到别处也是变。变化对不对，仍然要回到控件树、回到 `docs/parity/` 的对照、回到截图本身。
+
+
 ## 控件树取坐标：不知道该点哪个、点不准怎么办
 
 截图目测坐标有两个老问题：**图标按钮不知道是干什么的**，**点下去经常没命中** —— 点色块要落进 56×56 的圆才算命中（点标题行无效），Toggle 还会偶发第一次点不中且不报错。`uitest dumpLayout` 给每个节点带 `bounds`，那是设备像素，取中心就精准。
