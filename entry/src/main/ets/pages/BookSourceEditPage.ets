@@ -12,7 +12,7 @@ import { AppFab } from '../components/booksource/AppFab';
 import { MarkdownIntro } from '../components/MarkdownIntro';
 import { UiMenuPanel, UiMenuItem } from '../components/UiMenu';
 import { BODY_LARGE, BODY_LARGE_LINE_HEIGHT, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
-import { AppLog } from '../lib/AppLog';
+import { AppLog, AppLogEntry } from '../lib/AppLog';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
 interface FieldSpec {
@@ -181,7 +181,7 @@ export struct BookSourceEditPage {
    * 调试页走顶栏 BugReport（SaveAndDebug）。
    */
   @State private logSheetVisible: boolean = false;
-  @State private logLines: string[] = [];
+  @State private logLines: AppLogEntry[] = [];
   @State private logDetail: string = '';
   /**
    * 日志详情的对话框 id：上游 LogDetailSheet.kt:23-43 用 AppAlertDialog（**居中对话框**，
@@ -409,21 +409,6 @@ export struct BookSourceEditPage {
     } catch (_) {
       this.onUnavailableAction('书源帮助读取失败');
     }
-  }
-
-  /**
-   * AppLog.put 存的是 `[HH:mm:ss] 正文`（lib/AppLog.ets:12），列表项要把时间与正文分开：
-   * 上游 AppLogSheet.kt:121-127 时间走 labelMedium/outline、正文走 bodyMedium/onSurface。
-   */
-  private logTimePart(line: string): string {
-    const end = line.indexOf(']');
-    return (line.startsWith('[') && end > 0) ? line.substring(0, end + 1) : '';
-  }
-
-  /** 见 logTimePart；没有时间前缀时整行都算正文。 */
-  private logMessagePart(line: string): string {
-    const end = line.indexOf(']');
-    return (line.startsWith('[') && end > 0) ? line.substring(end + 1).trim() : line;
   }
 
   /**
@@ -864,14 +849,14 @@ export struct BookSourceEditPage {
           .padding({ top: 24, bottom: 24 })
       } else {
         List() {
-          ForEach(this.logLines, (line: string, index: number) => {
+          ForEach(this.logLines, (entry: AppLogEntry) => {
             ListItem() {
               Column() {
-                // AppLog.put 存的是 `[HH:mm:ss] 正文`，按首个 ']' 拆成时间行与内容行。
-                Text(this.logTimePart(line))
+                // 上游 AppLogSheet.kt:121-127：时间行 labelMedium/outline、正文 bodyMedium/onSurface。
+                Text(AppLog.formatTime(entry.timestamp))
                   .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                   .maxLines(1).width('100%')
-                Text(this.logMessagePart(line))
+                Text(entry.content())
                   .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
                   .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .width('100%').margin({ top: 4 })
@@ -879,9 +864,9 @@ export struct BookSourceEditPage {
               .width('100%')
               .alignItems(HorizontalAlign.Start)
               .padding(16)
-              .onClick(() => { this.openLogDetailDialog(line); })
+              .onClick(() => { this.openLogDetailDialog(entry.content()); })
             }
-          }, (line: string, index: number) => `${index}:${line.length}`)
+          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
         }
         .width('100%')
         // 上游 LazyColumn contentPadding bottom 16。

@@ -18,10 +18,10 @@ import {
   TOP_BAR_SIDE_PADDING, TOP_BAR_ACTIONS_END
 } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
-import { AppLog } from '../lib/AppLog';
+import { AppLog, AppLogEntry } from '../lib/AppLog';
 import { WebDavSync } from '../lib/WebDavSync';
 import { RichIntro } from '../components/RichIntro';
-import { BODY_LARGE, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
 const OVERFLOW_MENU_WIDTH: number = 220;
@@ -182,7 +182,7 @@ export struct BookInfoPage {
   /** 溢出菜单「日志」打开的日志面板（上游 `BookInfoMenuAction.ShowLog` → `AppLogSheet`）。 */
   @State logSheetVisible: boolean = false;
   /** 日志面板的行，打开时从 AppLog 内存缓冲取一次。 */
-  @State logEntries: string[] = [];
+  @State logEntries: AppLogEntry[] = [];
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
@@ -1144,12 +1144,18 @@ export struct BookInfoPage {
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else {
         List() {
-          ForEach(this.logEntries, (line: string) => {
+          ForEach(this.logEntries, (entry: AppLogEntry) => {
             ListItem() {
-              Text(line).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
-                .fontFamily('monospace').width('100%')
-            }.padding({ left: 16, right: 16, top: 4, bottom: 4 })
-          }, (line: string) => line)
+              // 上游 AppLogSheet.kt:115-135：时间行 labelMedium/outline，正文 bodyMedium/onSurface。
+              Column() {
+                Text(AppLog.formatTime(entry.timestamp)).fontSize(LABEL_MEDIUM)
+                  .fontColor(this.themeColorTextTertiary).width('100%')
+                Text(entry.content()).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%').margin({ top: 4 })
+              }.width('100%').alignItems(HorizontalAlign.Start)
+            }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
         }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
       }
     }.width('100%').height('100%').backgroundColor('#17181E')

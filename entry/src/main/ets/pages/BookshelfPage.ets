@@ -20,7 +20,7 @@ import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
-import { AppLog } from '../lib/AppLog';
+import { AppLog, AppLogEntry } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
 import { window } from '@kit.ArkUI';
 import { toTimeAgo } from '../lib/TimeAgo';
@@ -32,7 +32,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import {
   PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, isPrivateBook, requiresPrivateUnlock
 } from '../data/PrivateAccessRepository';
-import { BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /**
  * 卡片式菜单的统一宽度，与详情页溢出菜单同口径。
@@ -188,7 +188,7 @@ export struct BookshelfPage {
   /** 日志面板是否展开；与分组/布局面板共用同一个 bindSheet。 */
   @State showLogSheet: boolean = false;
   /** 打开日志面板时抓取的 AppLog 快照，清空后置空数组触发刷新。 */
-  @State logEntries: string[] = [];
+  @State logEntries: AppLogEntry[] = [];
   /** 「标签显示内容」三复选是否展开（:209 / :224-226）。 */
   @State showTagSources: boolean = false;
   /** 标签行取色缓存：总开关关掉时为空数组，卡片侧统一回落主题色（:124）。 */
@@ -2241,12 +2241,18 @@ export struct BookshelfPage {
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else {
         List() {
-          ForEach(this.logEntries, (line: string) => {
+          ForEach(this.logEntries, (entry: AppLogEntry) => {
             ListItem() {
-              Text(line).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
-                .fontFamily('monospace').width('100%')
-            }.padding({ left: 16, right: 16, top: 4, bottom: 4 })
-          }, (line: string) => line)
+              // 上游 AppLogSheet.kt:115-135：时间行 labelMedium/outline，正文 bodyMedium/onSurface。
+              Column() {
+                Text(AppLog.formatTime(entry.timestamp)).fontSize(LABEL_MEDIUM)
+                  .fontColor(this.themeColorTextTertiary).width('100%')
+                Text(entry.content()).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%').margin({ top: 4 })
+              }.width('100%').alignItems(HorizontalAlign.Start)
+            }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
         }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
       }
     }.width('100%').height('100%').backgroundColor('#17181E')

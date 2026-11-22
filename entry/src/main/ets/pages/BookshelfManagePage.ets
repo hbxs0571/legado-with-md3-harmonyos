@@ -5,12 +5,12 @@ import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { AppGlyph } from '../components/AppGlyph';
-import { AppLog } from '../lib/AppLog';
+import { AppLog, AppLogEntry } from '../lib/AppLog';
 import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownloadQueue';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { Context } from '@kit.AbilityKit';
-import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const MANAGE_MENU_WIDTH: number = 260;
@@ -95,7 +95,7 @@ export struct BookshelfManagePage {
   @State rowMenuKey: string = '';
   /** 批2（:457）：日志面板显隐；内容取 AppLog 内存缓冲快照。 */
   @State showLogSheet: boolean = false;
-  @State logEntries: string[] = [];
+  @State logEntries: AppLogEntry[] = [];
   /**
    * 批2（:455 :459 :466）：每本书的下载状态，键是 bookKey(book)。
    * ArkUI 里 Map 原地 set 不触发刷新，一律整体替换（同 exportMsgByKey 的坑）。
@@ -923,12 +923,18 @@ export struct BookshelfManagePage {
         }.width('100%').height(240).justifyContent(FlexAlign.Center)
       } else {
         List() {
-          ForEach(this.logEntries, (line: string) => {
+          ForEach(this.logEntries, (entry: AppLogEntry) => {
             ListItem() {
-              Text(line).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
-                .fontFamily('monospace').width('100%')
-            }.padding({ top: 4, bottom: 4 })
-          }, (line: string) => line)
+              // 上游 AppLogSheet.kt:115-135：时间行 labelMedium/outline，正文 bodyMedium/onSurface。
+              Column() {
+                Text(AppLog.formatTime(entry.timestamp)).fontSize(LABEL_MEDIUM)
+                  .fontColor(this.themeColorTextTertiary).width('100%')
+                Text(entry.content()).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%').margin({ top: 4 })
+              }.width('100%').alignItems(HorizontalAlign.Start)
+            }.padding({ top: 12, bottom: 12 })
+          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
         }.width('100%').height(440).scrollBar(BarState.Off)
       }
     }.width('100%')

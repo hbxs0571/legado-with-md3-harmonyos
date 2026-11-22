@@ -24,7 +24,7 @@ import { BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, TIT
 import { UiMenuItem, UiMenuPanel } from '../UiMenu';
 import { AppGlyph, AppGlyphName } from '../AppGlyph';
 import { MarkdownIntro } from '../MarkdownIntro';
-import { AppLog } from '../../lib/AppLog';
+import { AppLog, AppLogEntry } from '../../lib/AppLog';
 
 /** 表单项的本地可变副本（引擎 BookSourceLoginItem 字段只读投影到 state）。 */
 class FormItem {
@@ -199,7 +199,7 @@ export struct SourceLoginSheet {
   /** 日志弹层（上游 :102-105 的 AppLogSheet：标题 log「日志」+ endAction 清除 + 空态 no_logs）。 */
   @State private logSheetVisible: boolean = false;
   /** 当前读到的日志行（打开弹层时从 AppLog.getAll() 取一次，清除后置空）。 */
-  @State private logLines: string[] = [];
+  @State private logLines: AppLogEntry[] = [];
   /** 点某条日志弹出的详情文本（上游 LogDetailSheet 的 showDetail；空串表示不显示）。 */
   @State private logDetail: string = '';
   /**
@@ -265,21 +265,6 @@ export struct SourceLoginSheet {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
     this.resultMessage = await BookSourceLoginCoordinator.removeLoginHeader(context, this.sourceUrl);
-  }
-
-  /**
-   * AppLog.put 存的是 `[HH:mm:ss] 正文`（lib/AppLog.ets:12），列表项要把时间与正文分开：
-   * 上游 AppLogSheet.kt:121-127 时间走 labelMedium/outline、正文走 bodyMedium/onSurface。
-   */
-  private logTimePart(line: string): string {
-    const end = line.indexOf(']');
-    return (line.startsWith('[') && end > 0) ? line.substring(0, end + 1) : '';
-  }
-
-  /** 见 logTimePart；没有时间前缀时整行都算正文。 */
-  private logMessagePart(line: string): string {
-    const end = line.indexOf(']');
-    return (line.startsWith('[') && end > 0) ? line.substring(end + 1).trim() : line;
   }
 
   /**
@@ -821,11 +806,11 @@ export struct SourceLoginSheet {
           .padding({ top: 24, bottom: 24 })
       } else {
         List() {
-          ForEach(this.logLines, (line: string, index: number) => {
+          ForEach(this.logLines, (entry: AppLogEntry) => {
             ListItem() {
-              this.LogItemView(line, index)
+              this.LogItemView(entry)
             }
-          }, (line: string, index: number) => `${index}:${line.length}`)
+          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
         }
         .width('100%')
         // 上游 LazyColumn contentPadding bottom 16。
@@ -840,13 +825,13 @@ export struct SourceLoginSheet {
   }
 
   /** 单条日志：上游 AppLogSheet.kt:110-136 LogItem（Column padding 16，时间在上、内容在下）。 */
-  @Builder LogItemView(line: string, index: number) {
+  @Builder LogItemView(entry: AppLogEntry) {
     Column() {
-      // AppLog.put 已把 `[HH:mm:ss]` 拼在消息前面，这里按首个 ']' 拆成时间行与内容行。
-      Text(this.logTimePart(line))
+      // 上游 AppLogSheet.kt:121-127：时间行 labelMedium/outline、正文 bodyMedium/onSurface。
+      Text(AppLog.formatTime(entry.timestamp))
         .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         .maxLines(1).width('100%')
-      Text(this.logMessagePart(line))
+      Text(entry.content())
         .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
         .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%').margin({ top: 4 })
@@ -854,7 +839,7 @@ export struct SourceLoginSheet {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(16)
-    .onClick(() => { this.openLogDetailDialog(line); })
+    .onClick(() => { this.openLogDetailDialog(entry.content()); })
   }
 
   /**
