@@ -1751,16 +1751,23 @@ export struct BookSourceManagePage {
       // Surface(fillMaxWidth, padding bottom 4, RoundedCornerShape(32.dp), color = surfaceContainerLow)
       // 内 AppDenseTextField(backgroundColor=Transparent, leadingIcon 左右各 12, contentPadding 上4下4左右12, heightIn min 48)。
       // 上游 placeholder 取 R.string.search_book_source「搜索书源」。
+      // 进出动画对齐 DynamicTopAppBar.kt:127-134 的 expandVertically()+fadeIn() / shrinkVertically()+fadeOut()。
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary }).padding({ left: 12, right: 12 })
           TextInput({ placeholder: '搜索书源', text: this.searchQuery })
             .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1).padding({ right: 12 })
+            .id('my_book_source_search')
+            // 上游 SearchBar.kt:74-84 默认 autoFocus=true：展开即请求焦点并弹键盘。
+            .onAppear(() => focusControl.requestFocus('my_book_source_search'))
             .onChange((value: string) => this.searchQuery = value)
         }.width('100%').constraintSize({ minHeight: 48 })
           .margin({ left: 16, right: 16, bottom: 4 })
           .backgroundColor(this.themePureBlack ? '#1A1B1F' : this.themeColorSurfaceSecondary).borderRadius(32)
+          .transition(TransitionEffect.OPACITY
+            .combine(TransitionEffect.scale({ x: 1, y: 0.6 }))
+            .animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
       }
 
       // 上游 ListScaffold.kt 无空态分支（列表为空就是空白）；本地原有的 ModuleEmpty 空态属自加，已移除。
