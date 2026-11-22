@@ -118,6 +118,24 @@ class SourceDataSource implements IDataSource {
   }
 }
 
+/**
+ * LazyForEach 的 key 生成器：把「会影响这一行渲染的字段」全部拼进去。
+ * 只拼 bookSourceUrl 时，同一 URL 的行内容变了（启用发现、分组、校验文案、启用开关）
+ * key 不变，LazyForEach 复用旧组件不重建，界面上表现为「点了没反应」。
+ */
+function ProfileSubPagesSourceKey(item: SourceDataItem): string {
+  const row = item.row;
+  return [
+    row.source.bookSourceUrl,
+    row.source.enabled ? '1' : '0',
+    row.source.bookSourceName,
+    row.source.bookSourceGroup ?? '',
+    row.hasExplore ? '1' : '0',
+    row.exploreEnabled ? '1' : '0',
+    row.checkMessage
+  ].join('|');
+}
+
 @Component
 export struct BookSourceManagePage {
   @State moreMenuVisible: boolean = false;
@@ -285,6 +303,23 @@ export struct BookSourceManagePage {
     }
   }
 
+  /**
+   * 读 sourceJson 里的布尔字段。
+   * 不能复用 sourceField：那个只认字符串，而本地写回 enabledExplore 时存的是 JSON 布尔值，
+   * 读出来会永远是空串（表现为「启用发现」点了没反应、圆点不换色）。
+   */
+  private static sourceBoolField(json: string, key: string, fallback: boolean): boolean {
+    try {
+      const parsed = JSON.parse(json) as Record<string, Object>;
+      const value = parsed[key];
+      if (typeof value === 'boolean') { return value; }
+      if (typeof value === 'string') { return value === 'true'; }
+      return fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   /** 域名：从 sourceJson.bookSourceUrl 取 host，'#' 与无协议头的不显示。 */
   private static domainOf(source: BookSource): string {
     const url = BookSourceManagePage.sourceField(source.sourceJson, 'bookSourceUrl');
@@ -314,11 +349,11 @@ export struct BookSourceManagePage {
         return BookSourceManagePage.sourceField(source.sourceJson, 'loginUrl').length > 0;
       }
       if (selected === '发现已启用') {
-        return BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') === 'true';
+        return BookSourceManagePage.sourceBoolField(source.sourceJson, 'enabledExplore', true);
       }
       if (selected === '发现未启用') {
         return BookSourceManagePage.sourceField(source.sourceJson, 'exploreUrl').length > 0 &&
-          BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') !== 'true';
+          !BookSourceManagePage.sourceBoolField(source.sourceJson, 'enabledExplore', true);
       }
       return group === selected;
     });
@@ -352,7 +387,9 @@ export struct BookSourceManagePage {
       const domain = BookSourceManagePage.domainOf(source);
       const loginUrl = BookSourceManagePage.sourceField(source.sourceJson, 'loginUrl');
       const exploreUrl = BookSourceManagePage.sourceField(source.sourceJson, 'exploreUrl');
-      const enabledExplore = BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') === 'true';
+      // 上游 BookSource.kt:54 `var enabledExplore: Boolean = true`：字段缺失时默认 true，
+      // 所以这里 fallback 也是 true（本地旧实现按字符串读，永远读成 false，圆点恒为红）。
+      const enabledExplore = BookSourceManagePage.sourceBoolField(source.sourceJson, 'enabledExplore', true);
       const checkMessage = this.checkMessages.get(source.bookSourceUrl) ?? '';
       const row = new SourceRow(source, domain, loginUrl.length > 0, exploreUrl.length > 0, enabledExplore, checkMessage);
       rows.push(row);
@@ -500,7 +537,7 @@ export struct BookSourceManagePage {
   /** 改某条的发现开关。 */
   private async toggleExplore(source: BookSource): Promise<void> {
     const parsed = BookSourceManagePage.parseJson(source.sourceJson);
-    parsed['enabledExplore'] = BookSourceManagePage.sourceField(source.sourceJson, 'enabledExplore') !== 'true';
+    parsed['enabledExplore'] = !BookSourceManagePage.sourceBoolField(source.sourceJson, 'enabledExplore', true);
     const next = this.allSources.map((item: BookSource) => {
       if (item.bookSourceUrl !== source.bookSourceUrl) { return item; }
       const copy = BookSourceManagePage.cloneSource(item);
@@ -1415,7 +1452,9 @@ export struct BookSourceManagePage {
             }
           }, (item: BookSourceListItem) => isDomainHeader(item)
             ? ('domain:' + (item as DomainHeaderItem).domain)
-            : (item as SourceDataItem).row.source.bookSourceUrl)
+            // key 里必须带上会影响行渲染的字段：LazyForEach 只在 key 变化时重建条目，
+            // 只用 URL 时「启用/禁用发现」「分组」「校验文案」改了都不会重绘（实测点了没反应）。
+            : ProfileSubPagesSourceKey(item as SourceDataItem))
           // onMove 挂在 ForEach/LazyForEach 上，仅手动排序非分组时可拖。
           .onMove(this.canReorder() ? (from: number, to: number) => this.onSourceMove(from, to) : undefined)
         }.layoutWeight(1).width('100%')
