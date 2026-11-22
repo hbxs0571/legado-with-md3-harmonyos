@@ -873,15 +873,14 @@ export struct SourceLoginSheet {
       Text('Log')
         .fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary)
         .maxLines(1).width('100%').textAlign(TextAlign.Start)
-      // M3 AlertDialog 的 text 区：verticalScroll + textContentColor=onSurfaceVariant；
-      // 上游正文用 bodySmall，最高 400dp 可滚动（LogDetailSheet.kt:29-37）。
-      Scroll() {
-        Text(this.logDetail)
-          .fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
-          .width('100%').copyOption(CopyOptions.LocalDevice)
-      }
-      .width('100%').constraintSize({ maxHeight: 400 }).scrollBar(BarState.Auto)
-      .margin({ top: 16 })
+      // M3 AlertDialog 的 text 区：textContentColor=onSurfaceVariant、正文 bodySmall、
+      // 最高 400dp（LogDetailSheet.kt:29-37）。这里直接给 Text 限高而不是包 Scroll：
+      // Column 内的 Scroll 没有确定高度，内容撑不起时高度塌成 0，正文会整段消失。
+      Text(this.logDetail)
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
+        .width('100%').copyOption(CopyOptions.LocalDevice)
+        .constraintSize({ maxHeight: 400 })
+        .margin({ top: 16 })
       // 确认按钮：M3 AlertDialog 的 confirmButton = PrimaryButton（filled，文字 labelLarge）。
       Row() {
         Button('确定')
