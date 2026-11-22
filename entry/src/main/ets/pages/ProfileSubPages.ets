@@ -365,22 +365,31 @@ export struct BookSourceManagePage {
       }
       return group === selected;
     });
-    // 排序：手动用 customOrder，其余按派生列；descending 时整体反转。
+    // 排序逐档照上游 BookSourceViewModel.kt:736-743 的 sortFor：
+    // Name→bookSourceName、Url→bookSourceUrl、Weight→weight、Update→lastUpdateTime **降序**、
+    // Respond→respondTime、Enable→enabled 降序再按名称、Default→customOrder；
+    // 最后统一按 ascending 正/反序（本地 sortDescending 即 !ascending）。
     const desc = this.sortDescending ? -1 : 1;
     list = [...list].sort((a: BookSource, b: BookSource) => {
       let cmp = 0;
       if (this.sortMode === '名称排序') { cmp = a.bookSourceName.localeCompare(b.bookSourceName); }
       else if (this.sortMode === 'URL 排序') { cmp = a.bookSourceUrl.localeCompare(b.bookSourceUrl); }
-      else if (this.sortMode === '按启用状态排序') { cmp = Number(a.enabled) - Number(b.enabled); }
-      else if (this.sortMode === '按更新时间排序') {
-        cmp = BookSourceManagePage.sourceField(a.sourceJson, 'lastUpdateTime')
-          .localeCompare(BookSourceManagePage.sourceField(b.sourceJson, 'lastUpdateTime'));
+      else if (this.sortMode === '按启用状态排序') {
+        // 上游 compareByDescending { enabled }.thenBy { bookSourceName }
+        cmp = Number(b.enabled) - Number(a.enabled);
+        if (cmp === 0) { cmp = a.bookSourceName.localeCompare(b.bookSourceName); }
+      } else if (this.sortMode === '按更新时间排序') {
+        // 上游 compareByDescending { lastUpdateTime }
+        cmp = BookSourceManagePage.sourceNumberField(b.sourceJson, 'lastUpdateTime', 0) -
+          BookSourceManagePage.sourceNumberField(a.sourceJson, 'lastUpdateTime', 0);
       } else if (this.sortMode === '按响应时间排序') {
-        cmp = Number(BookSourceManagePage.sourceField(a.sourceJson, 'respondTime')) -
-          Number(BookSourceManagePage.sourceField(b.sourceJson, 'respondTime'));
+        cmp = BookSourceManagePage.sourceNumberField(a.sourceJson, 'respondTime', 180000) -
+          BookSourceManagePage.sourceNumberField(b.sourceJson, 'respondTime', 180000);
       } else if (this.sortMode === '权重排序') {
-        cmp = a.customOrder - b.customOrder;
-      } else { cmp = a.customOrder - b.customOrder; } // 手动排序
+        // 上游 BookSourceSort.Weight -> compareBy { it.weight }，不是 customOrder。
+        cmp = BookSourceManagePage.sourceNumberField(a.sourceJson, 'weight', 0) -
+          BookSourceManagePage.sourceNumberField(b.sourceJson, 'weight', 0);
+      } else { cmp = a.customOrder - b.customOrder; } // 手动排序 Default -> customOrder
       return cmp === 0 ? 0 : cmp * desc;
     });
     // 按域名分组：以 host 为主键再排一次（每行仍显示自己的域名列）。
@@ -574,6 +583,25 @@ export struct BookSourceManagePage {
       return copy;
     });
     await this.commitSources(next);
+  }
+
+  /**
+   * 从 sourceJson 读数值字段：上游 lastUpdateTime/respondTime/weight 都是实体上的数值列
+   * （BookSource.kt:77/79/81），本地只有 sourceJson 这一份真值，所以按 JSON 里的数值读。
+   */
+  private static sourceNumberField(json: string, key: string, fallback: number): number {
+    try {
+      const obj = JSON.parse(json) as Record<string, Object>;
+      const value = obj[key];
+      if (typeof value === 'number') { return value as number; }
+      if (typeof value === 'string') {
+        const parsed = Number(value as string);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      }
+      return fallback;
+    } catch (_) {
+      return fallback;
+    }
   }
 
   private static parseJson(json: string): Record<string, Object> {
