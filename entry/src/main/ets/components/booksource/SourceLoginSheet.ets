@@ -375,14 +375,32 @@ export struct SourceLoginSheet {
     .backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
   }
 
-  /** 上游 :88-101 MarkdownSheet(title=login_header, content=header, endAction=ContentCopy)。 */
+  /**
+   * 上游 :88-101 登录头是独立的 MarkdownSheet(title=login_header「登录头」, content=header,
+   * endAction=MediumTonalButton(ContentCopy))，与 form/web 弹层**同时**显示、各自独立关闭
+   * （Host 里两个 AppModalBottomSheet 并列 show）。所以这里也是两个弹层叠加，不做内容替换。
+   */
   @Builder LoginHeaderSheet() {
     Column() {
-      Text('登录头')
-        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
-        .fontColor(this.themeColorTextPrimary)
-        .maxLines(1).width('100%').textAlign(TextAlign.Center)
-        .padding({ left: 56, right: 56, bottom: 16 })
+      // 上游 :94-100 endAction = MediumTonalButton(ContentCopy)：标题居中、右上角复制图标。
+      Stack() {
+        Text('登录头')
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary)
+          .maxLines(1).width('100%').textAlign(TextAlign.Center)
+          .padding({ left: 56, right: 56 })
+        Row() {
+          AppGlyph({ name: 'profileContentPaste', glyphSize: 22, tint: this.themeColorAccent })
+        }
+        .width(40).height(40)
+        .borderRadius(20)
+        .justifyContent(FlexAlign.Center)
+        .position({ x: '100%', y: 0 })
+        .markAnchor({ x: 40, y: 0 })
+        .accessibilityText('复制')
+        .onClick(() => { this.copyLoginHeader(); })
+      }
+      .width('100%').height(40).margin({ bottom: 16 })
       Scroll() {
         Column() {
           MarkdownIntro({ source: this.loginHeader(), textColor: this.themeColorTextPrimary })
@@ -390,11 +408,6 @@ export struct SourceLoginSheet {
         }.width('100%')
       }
       .width('100%').constraintSize({ maxHeight: '60%' }).scrollBar(BarState.Auto)
-      Text('复制')
-        .fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
-        .width('100%').textAlign(TextAlign.Center)
-        .padding({ top: 12, bottom: 12 })
-        .onClick(() => { this.copyLoginHeader(); })
     }
     .width('100%')
     .padding({ left: 16, right: 16, bottom: 16 })
@@ -402,7 +415,7 @@ export struct SourceLoginSheet {
   }
 
   build() {
-    // ArkUI 一个组件只能绑定一个半模态：后挂的会覆盖前一个，两个都弹不出来
+    // ArkUI 一个组件只能绑定一个半模态：后挂的会覆盖前一个、两个都弹不出来
     // （编辑页曾因同一写法导致点字段/帮助全无反应）。所以主弹层与登录头必须
     // 分别挂在不同层级的容器上——主弹层在外层 Column，登录头在内层 Stack。
     Column() {
@@ -413,7 +426,7 @@ export struct SourceLoginSheet {
       .bindSheet($$this.headerSheetVisible, this.LoginHeaderSheet(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
-        // 上游登录头是 MarkdownSheet（AboutSheets.kt:33-60），同样没有右上关闭按钮。
+        // 上游 MarkdownSheet（AboutSheets.kt:33-60）没有右上关闭按钮。
         showClose: false,
         enableOutsideInteractive: true,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
