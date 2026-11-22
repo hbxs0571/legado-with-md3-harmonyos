@@ -16,6 +16,7 @@ import {
 } from '@legado/sourceengine';
 import { BookSourceRepository } from '../data/BookSourceRepository';
 import { BookSource } from '../model/BookSource';
+import { AppLog } from '../lib/AppLog';
 import { LegadoSourceMapper } from './LegadoSourceMapper';
 
 /** 登录准备结果：决定 UI 走表单还是 WebView。 */
@@ -158,6 +159,41 @@ export class BookSourceLoginCoordinator {
       return result.errorMessage || result.value || result.toastMessage || '操作已执行';
     } catch (error) {
       return error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /**
+   * 求值 loginUi 里 viewName 的 JS 片段。
+   * 对齐上游 `SourceLoginViewModel.kt:269-282 evaluate(script)`：
+   * `currentSource.evalJS("${currentSource.getLoginJs().orEmpty()}\n$script") { put("result", loginInfo.toMutableMap()); put("book", book); put("chapter", chapter) }`，
+   * 失败时 `AppLog.put("${tag} loginUi err:${it.localizedMessage}", it)` 并返回 null。
+   * 上游注入的三个绑定里，`book` / `chapter` 在本地引擎的脚本作用域本来就是全局，
+   * 只有 `result` 需要补——它就是 loginInfo 的映射，对应引擎的 `java.getLoginInfoMap()`，
+   * 所以代码前加一行 `var result=java.getLoginInfoMap();` 即与上游同名同义。
+   * 返回空串表示求值失败或无结果（调用方回落 `item.name`）。
+   */
+  static async evaluateViewName(sourceUrl: string, script: string): Promise<string> {
+    const local = BookSourceLoginCoordinator.findLocal(sourceUrl);
+    if (local === undefined) { return ''; }
+    const engine = LegadoSourceMapper.fromLocal(local);
+    const loginJs = BookSourceLoginCoordinator.loginJsOf(engine);
+    const req = new StageWebRuntimeRequest();
+    req.source = engine;
+    req.code = `${loginJs}\nvar result=java.getLoginInfoMap();\n${script}`;
+    req.stage = SourceRuntimeStage.LOGIN;
+    req.baseUrl = BookSourceScriptRunner.selectedBaseUrl(engine);
+    req.ownerId = 'login-viewname:' + sourceUrl;
+    try {
+      const result = await BookSourceStageWebRuntime.get().execute(req);
+      if ((result.errorMessage || '').length > 0) {
+        AppLog.put(`${sourceUrl} loginUi err:${result.errorMessage}`);
+        return '';
+      }
+      return result.value || '';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      AppLog.put(`${sourceUrl} loginUi err:${message}`, error instanceof Error ? error : undefined);
+      return '';
     }
   }
 

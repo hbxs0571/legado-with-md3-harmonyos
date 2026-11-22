@@ -389,7 +389,8 @@ export struct BookSourceDebugPage {
 
   @Builder debugActionsSlot() {
     // 上游 :76-80 Icons.Default.ClearAll（清空日志）。图标已按上游 ic_clear_all.xml 补齐为 clearAll。
-    TopBarButton({ icon: 'clearAll', showDivider: false, onSelect: () => this.clear() })
+    // contentDescription = "清空日志"（:79 硬编码），本地走 accessibilityLabel 补上。
+    TopBarButton({ icon: 'clearAll', showDivider: false, accessibilityLabel: '清空日志', onSelect: () => this.clear() })
   }
 
   /** 调试状态文案：Running→停止，其余→开始调试（上游 Screen.kt:94 硬编码）。 */

@@ -554,12 +554,19 @@ export struct BookSourceEditPage {
   @Builder editActionsSlot() {
     // 上游 :101-110 顺序：BugReport（保存并调试）在前、MoreVert（更多）在后。
     // 图标已按上游 ic_bug_report.xml 补齐为 bugReport，不再用近似；
-    // accessibility 文案按上游 contentDescription=debug_source「调试书源」。
-    TopBarButton({ icon: 'bugReport', showDivider: false, onSelect: () => this.saveAndDebug() })
+    // accessibility 文案按上游 contentDescription：debug_source = 「调试源」、more_menu = 「更多菜单」
+    // （values-zh-rCN/strings.xml:654 / :942），此前只写在注释里、没真传给按钮，读屏读不到。
+    TopBarButton({
+      icon: 'bugReport', showDivider: false, accessibilityLabel: '调试源',
+      onSelect: () => this.saveAndDebug()
+    })
     // 「更多」是下拉菜单不是底部弹层：上游 BookSourceEditScreen.kt:382 用 RoundDropdownMenu。
     // @Builder 调用不能链式挂属性，故用 Stack 承载 bindPopup（项目内 UiMenu 的既有用法）。
     Stack() {
-      TopBarButton({ icon: 'more', showDivider: false, onSelect: () => { this.moreMenuVisible = true; } })
+      TopBarButton({
+        icon: 'more', showDivider: false, accessibilityLabel: '更多菜单',
+        onSelect: () => { this.moreMenuVisible = true; }
+      })
     }
     .bindPopup(this.moreMenuVisible, {
       builder: () => { this.MoreMenuPanel(); },

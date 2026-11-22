@@ -315,6 +315,13 @@ export struct TopBarButton {
    * 否则内层点击手势会抢掉 bindMenu 的点击，菜单弹不出来（实测结论）。
    */
   @Prop menuMode: boolean = false;
+  /**
+   * 无障碍文案，对齐上游 `TopBarActionButton(contentDescription = ...)`。
+   * 上游每个动作按钮都带 contentDescription（`BookSourceDebugScreen.kt:79` 的「清空日志」、
+   * `BookSourceEditScreen.kt:104` 的 debug_source、`:109` 的 more_menu），
+   * 不传则读屏只能报出图标，故做成显式参数，文案由调用方按上游字符串填。
+   */
+  @Prop accessibilityLabel: string = '';
   onSelect: () => void = () => {};
 
   private merged(): boolean {
@@ -375,6 +382,7 @@ export struct TopBarButton {
         })
         .opacity(this.disabled ? 0.38 : 1)
         .enabled(!this.disabled)
+        .accessibilityText(this.accessibilityLabel)
     } else {
       Stack({ alignContent: Alignment.Center }) { this.buttonContent() }
         .width(this.buttonSize())
