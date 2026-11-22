@@ -7945,9 +7945,12 @@ export struct ReaderPage {
       return;
     }
     const window = ReaderCanvasWindow.of(this.localReaderPages, this.currentPageIndex);
-    this.readerCanvasRenderer.prefetch(window).catch((error: Error) => {
-      console.warn(`[ReaderCanvas] 预取失败: ${error.message}`);
-    });
+    // 图片解码尺寸要按版面实际铺开的像素算，而版面只在 layoutPage 里产出，
+    // 所以预取要把当前的绘制请求一起传进去（批9 :1009）。
+    this.readerCanvasRenderer.prefetch(window, this.buildReaderCanvasRequest(new ReaderTransitionTransforms()))
+      .catch((error: Error) => {
+        console.warn(`[ReaderCanvas] 预取失败: ${error.message}`);
+      });
     // 文字背景图（气泡图）也要随窗口预热，否则气泡晚一两帧才出现
     const sources: string[] = [];
     for (const highlight of this.buildReaderCanvasHighlights()) {

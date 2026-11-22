@@ -980,54 +980,121 @@ export class ReaderCanvasRenderer {
    * 上游注释明确说按条数会让 18MB 的大图一进就被挤出去。
    */
   private static readonly BG_IMAGE_CACHE_BYTES_LIMIT: number = 16 * 1024 * 1024;
+  /**
+   * 图片缓存的「代」号，对应上游 ReaderImageCachePolicy.withGeneration
+   * （ReaderImageCachePolicy.kt:11-12）与 ReadBookController.readerImageGenerations。
+   *
+   * 为什么需要它：重复导入同一本书时 EpubRepository.importFromUri 先
+   * `clearAssets(context, bookId)` 删掉 epub-assets/<bookId>，再从 0 重写
+   * `<bookId>/0.img`（EpubRepository.ets:183 / :935）——**路径不变、内容全换**。
+   * 而缓存 key 里的 source 就是这条路径，尺寸也没变，光加尺寸维度挡不住旧图。
+   * 换代之后旧 key 全部不再命中，不必逐个 delete。
+   */
+  private static imageCacheGeneration: number = 0;
+
+  /**
+   * 图片缓存 key = `source|宽x高|generation=N`。
+   * 前两段照上游 ReaderImageCachePolicy.key（ReaderImageCachePolicy.kt:5-6），
+   * 第三段照 withGeneration（:11-12）。
+   *
+   * 为什么要尺寸维度：同一张图在两种显示尺寸下必须是两条缓存，各自按目标尺寸解码。
+   * 只按 source 做 key 会逼所有尺寸共用一份解码结果——小图白占大图的内存，
+   * 大图在小位置又糊。尺寸取整到 px，避免亚像素抖动造出无数条缓存。
+   */
+  private static imageCacheKey(source: string, widthPx: number, heightPx: number): string {
+    const width = Math.max(1, Math.round(widthPx));
+    const height = Math.max(1, Math.round(heightPx));
+    return `${source}|${width}x${height}|generation=${ReaderCanvasRenderer.imageCacheGeneration}`;
+  }
+
+  /** 换掉所有已有缓存（上游 readerImageGenerations 的换代语义）。 */
+  private static bumpImageGeneration(): void {
+    ReaderCanvasRenderer.imageCacheGeneration++;
+  }
+
+  /**
+   * 让所有已缓存的图片失效。
+   *
+   * 用在「重导入同一本书」这种时机：渲染器是 ReaderPage 的实例成员，Index 拿不到实例，
+   * 但换代只要动静态计数器就够了——旧 key 从此不再命中，下次进阅读页一定重新解码。
+   * 旧 PixelMap 不会立刻释放，由阅读页的 clear() 或 FIFO 淘汰（IMAGE_CACHE_LIMIT）
+   * 回收；条数有上限，不会无限涨。
+   */
+  static invalidateImageCache(): void {
+    ReaderCanvasRenderer.bumpImageGeneration();
+  }
+
+  /**
+   * 按 source 前缀清掉这张图的所有尺寸缓存（上游 belongsToSource，ReaderImageCachePolicy.kt:8-9）。
+   * 换代已经能让旧 key 失效，但旧 PixelMap 还挂在 Map 里占内存，
+   * 重导入这种「同一 source 内容全换」的时机要连内存一起放掉。
+   */
+  releaseImageSource(source: string): void {
+    const prefix = `${source}|`;
+    for (const key of Array.from(this.imageCache.keys())) {
+      if (!key.startsWith(prefix)) {
+        continue;
+      }
+      this.imageCache.get(key)?.release();
+      this.imageCache.delete(key);
+    }
+  }
 
   /**
    * 预取：把窗口里四页用到的图片全部解进 LRU。
    * 上游注释：翻页前先把 LRU 解好，绘制期直读必然命中，新页就不会出现
    * 「有字无气泡」的那一两帧（翻页闪一下）。
    */
-  async prefetch(window: ReaderCanvasWindow): Promise<void> {
-    const pages = window.all();
-    for (const entry of pages) {
-      for (const line of entry.page.lines) {
-        for (const item of line.items) {
-          if (item.kind !== 'image') {
-            continue;
-          }
-          if (this.imageCache.has(item.value) || this.imageLoading.has(item.value)) {
-            continue;
-          }
-          await this.loadImage(item.value);
+  async prefetch(window: ReaderCanvasWindow, request: ReaderCanvasDrawRequest): Promise<void> {
+    // 解码尺寸要按「图实际铺多大」算，而那个尺寸只在版面几何里才有（layoutPage 产出的
+    // box.widthPx / box.heightPx）。所以预取改成先过一遍 layoutPage、再扫 geometry.boxes，
+    // 不能像早前那样只扫 page.lines 里的 item——那里没有尺寸，只能猜一个上限。
+    for (const entry of window.all()) {
+      const geometry = this.layoutPage(entry.page, entry.pageIndex, request);
+      for (const box of geometry.boxes) {
+        const item = box.item;
+        if (item === undefined || item.kind !== 'image') {
+          continue;
         }
+        const key = ReaderCanvasRenderer.imageCacheKey(item.value, box.widthPx, box.heightPx);
+        if (this.imageCache.has(key) || this.imageLoading.has(key)) {
+          continue;
+        }
+        await this.loadImage(item.value, box.widthPx, box.heightPx);
       }
     }
   }
 
-  private async loadImage(source: string): Promise<void> {
-    this.imageLoading.add(source);
+  private async loadImage(source: string, targetWidthPx: number, targetHeightPx: number): Promise<void> {
+    const key = ReaderCanvasRenderer.imageCacheKey(source, targetWidthPx, targetHeightPx);
+    this.imageLoading.add(key);
     try {
       const imageSource = image.createImageSource(source);
       const info = await imageSource.getImageInfo();
-      const density = info.density > 0 ? info.density / 160 : 1;
-      const naturalWidth = Math.max(1, info.size.width / density);
-      const naturalHeight = Math.max(1, info.size.height / density);
-      // 超宽图按比例缩到上限，保持宽高比（不上限的图原样解）。
-      const scale = naturalWidth > ReaderCanvasRenderer.IMAGE_DECODE_MAX_WIDTH
-        ? ReaderCanvasRenderer.IMAGE_DECODE_MAX_WIDTH / naturalWidth
-        : 1;
+      // 原图按像素算（info.size 就是像素），目标宽取「版面给的显示宽度」并受解码上限收口：
+      // 上游同样把 bounds.width 传给 decodeBitmap，再由 calculateInSampleSize
+      // （BitmapUtils.kt:65-80）按 outWidth / width 降采样。
+      const naturalWidth = Math.max(1, Math.round(info.size.width));
+      const naturalHeight = Math.max(1, Math.round(info.size.height));
+      const wanted = targetWidthPx > 0
+        ? Math.round(targetWidthPx)
+        : ReaderCanvasRenderer.IMAGE_DECODE_MAX_WIDTH;
+      const capWidth = Math.min(ReaderCanvasRenderer.IMAGE_DECODE_MAX_WIDTH, Math.max(1, wanted));
+      // 图本身比目标还小就按原尺寸解（不放大，放大只会糊且白占内存）。
+      const scale = naturalWidth > capWidth ? capWidth / naturalWidth : 1;
+      const desiredWidth = Math.max(1, Math.round(naturalWidth * scale));
+      const desiredHeight = Math.max(1, Math.round(naturalHeight * scale));
+      console.info(`[ReaderCanvas] 图片解码 ${source} 目标 ${capWidth}px → desiredSize ${desiredWidth}x${desiredHeight}`);
       const pixelMap = await imageSource.createPixelMap({
-        desiredSize: {
-          width: Math.max(1, Math.round(naturalWidth * scale)),
-          height: Math.max(1, Math.round(naturalHeight * scale))
-        }
+        desiredSize: { width: desiredWidth, height: desiredHeight }
       });
-      this.imageCache.set(source, pixelMap);
+      this.imageCache.set(key, pixelMap);
       imageSource.release();
     } catch (error) {
       // 解不开的图留着当占位，不影响正文绘制
       console.warn(`[ReaderCanvas] 图片预取失败: ${error}`);
     } finally {
-      this.imageLoading.delete(source);
+      this.imageLoading.delete(key);
     }
     if (this.imageCache.size > ReaderCanvasRenderer.IMAGE_CACHE_LIMIT) {
       // 超出上限就丢最早进来的那张（Map 保持插入顺序）
@@ -1131,6 +1198,9 @@ export class ReaderCanvasRenderer {
     this.bgImageCache.clear();
     this.bgImageBytes.clear();
     this.bgImageLoading.clear();
+    // 换代：即便有 PixelMap 没被 release（比如某个 key 在遍历后又被塞进来），
+    // 旧 key 也不会再命中，下一帧一定重新解码。
+    ReaderCanvasRenderer.bumpImageGeneration();
   }
 
   /** 只清段落缓存（字体、字号、颜色、对齐等样式变更时调用）。 */
@@ -2257,7 +2327,8 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const pixelMap = this.imageCache.get(item.value);
+    const pixelMap = this.imageCache.get(
+      ReaderCanvasRenderer.imageCacheKey(item.value, box.widthPx, box.heightPx));
     if (pixelMap === undefined) {
       const brush = new drawing.Brush();
       brush.setColor(readerCanvasColor(request.style.imagePlaceholderArgb));

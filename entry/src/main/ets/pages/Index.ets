@@ -11,6 +11,7 @@ import { SubscriptionPage } from './SubscriptionPage';
 import { SubscriptionFavoritesPage, SubscriptionRulesPage, SubscriptionSourceManagePage } from './SubscriptionSubPages';
 import { ProfilePage } from './ProfilePage';
 import { ReaderPage } from './ReaderPage';
+import { ReaderCanvasRenderer } from '../reader/ReaderCanvasSurface';
 import { CatalogPage } from './CatalogPage';
 import { TxtTocRulePreviewPage } from './TxtTocRulePreviewPage';
 import { ReaderSettingsPage } from './ReaderSettingsPage';
@@ -7229,6 +7230,10 @@ private canWriteInto(dir: string): boolean {
       }
       this.books = this.books.map((item: Book) =>
         (item.contentPath ?? '') === importedBookUrl ? updatedBook : item);
+      // 批9（:1009）：重导入会把 epub-assets/<bookId> 整目录删掉再从 0 重写图片，
+      // 路径不变、内容全换。图片缓存 key 里的 source 就是这条路径，不换代就会继续
+      // 命中旧图。渲染器是 ReaderPage 的实例成员，这里只能换代（静态计数器）。
+      ReaderCanvasRenderer.invalidateImageCache();
       this.showUnavailableAction(`这本书之前导入过，已更新《${updatedBook.title}》的目录`);
       return updatedBook;
     }
