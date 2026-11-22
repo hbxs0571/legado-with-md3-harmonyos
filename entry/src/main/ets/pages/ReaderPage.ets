@@ -37,6 +37,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { batteryInfo, pasteboard, settings } from '@kit.BasicServicesKit';
 import { common, Want } from '@kit.AbilityKit';
 import { WantLauncher } from '../lib/WantLauncher';
+import { AppLog } from '../lib/AppLog';
 import { AnimatorResult, window } from '@kit.ArkUI';
 import { LengthMetricsUnit } from '@kit.ArkUI';
 import { Action, inputConsumer, KeyCode, KeyEvent } from '@kit.InputKit';
@@ -697,6 +698,13 @@ export struct ReaderPage {
    */
   private observedBookId: string = '';
   @State localReaderPages: LocalReaderPage[] = [];
+  /**
+   * 是否有一轮流式分页正在跑（#1013）。**不加 @State**：它不参与 UI 重建，
+   * 只用来让 `insertBoundaryPlaceholders` 在页表「只排了一半」时收手。
+   */
+  private paginationStreaming: boolean = false;
+  /** 流式分页的轮次令牌：换章/重排就自增，旧轮次看到令牌不符自己停下，不残留旧页。 */
+  private paginationStreamToken: number = 0;
   @State readerBottomJustifyGap: number = 0;
   @State fullBookPageCounts: number[] = [];
   @State fullBookPaginationReady: boolean = false;
@@ -2598,7 +2606,9 @@ export struct ReaderPage {
    * 只补真缺的那一侧：已有真页就不补，免得真页和占位页同时存在。
    */
   private insertBoundaryPlaceholders(pages: LocalReaderPage[], chapterIndex: number): void {
-    if (!this.usesCanvasScroll()) { return; }
+    // 流式分页期间页表是「已排出的一截」，此时补占位页会让每次 onPage 都往中间插一张
+    // 空白页、越排越多；整章排完由 applyReaderPages 一次性补（#1013）。
+    if (!this.usesCanvasScroll() || this.paginationStreaming) { return; }
     const nextChapter = chapterIndex + 1;
     if (nextChapter < this.getChapterCount() && !this.hasChapterPagesIn(pages, nextChapter) &&
       !this.hasPlaceholderIn(pages, nextChapter)) {
@@ -2915,6 +2925,14 @@ export struct ReaderPage {
       '|body=' + this.contentFingerprint(this.content));
     const cachedPages = ReaderChapterPageCache.get(paginationCacheKey);
     const paginateStartedAt = Date.now();
+    // 流式分页（#1013）：只在「没有缓存页」且「正文够长」时走。短章同步排完比起一轮
+    // 异步更快（8000 字约 16 页，是同步排开始肉眼可见的门槛）；缓存命中时本来就不用排。
+    if (cachedPages === undefined && this.content.length > 8000) {
+      this.startReaderPaginationStreaming(document, width, pageHeight, lineHeight, paragraphSpacing,
+        fontSize, paginationImageSizes, titleBlock, paginationCacheKey, onlyImageSizesChanged,
+        forceProgressCommit);
+      return;
+    }
     const paginatedPages = cachedPages ?? LocalReaderPaginator.paginate(
       document,
       width,
@@ -2944,6 +2962,36 @@ export struct ReaderPage {
       this.textBottomJustify,
       this.usesCanvasScroll()
     );
+    const positionStartedAt = this.applyReaderPages(paginatedPages, cachedPages,
+      paginationCacheKey, onlyImageSizesChanged, pageHeight, lineHeight);
+    // 批 1 计时：只取时间戳 + 打日志，不改任何分支。positionMs 含定位/钳位/预解图/重绘，
+    // 正是要观察的渲染开销。任务模板的 paginateMs 实为「语义解析段」，故另补 paginatorMs
+    // 标出真正的 LocalReaderPaginator.paginate 耗时，便于判定最大项。
+    console.info(`[ReaderBench] rebuild semanticsMs=${semanticsStartedAt - startedAt} ` +
+      `paginateMs=${paginateStartedAt - semanticsStartedAt} ` +
+      `positionMs=${Date.now() - paginateStartedAt} ` +
+      `pages=${this.localReaderPages.length} onlyImages=${onlyImageSizesChanged} ` +
+      `reuseSemantic=${reuseSemantic} paginatorMs=${positionStartedAt - paginateStartedAt} ` +
+      `renderMs=${Date.now() - positionStartedAt} ` +
+      `title=[${this.resolvePaginationTitle(this.getChapterIndex())}] ` +
+      `contentLen=${document.content.length} chPages=${this.currentChapterPageCount()}`);
+    this.finishReaderPagination(forceProgressCommit);
+  }
+
+  /**
+   * 把已排好的整章页装进阅读页（#1013 从 `rebuildReaderPages` 原样抽出）。
+   *
+   * 抽出来的唯一目的是让流式分页（`startReaderPaginationStreaming`）在整章排完后
+   * 复用同一段落位逻辑——同步路径与流式路径的落点必须一模一样，抄第二份必然走偏。
+   * 段内代码逐字节搬运，只把 `paginatedPages` / `cachedPages` / `paginationCacheKey` /
+   * `onlyImageSizesChanged` / `pageHeight` / `lineHeight` 改成形参。
+   *
+   * @returns 定位段的起始时间戳，供调用方的 `[ReaderBench]` 计时日志续算。
+   */
+  private applyReaderPages(paginatedPages: LocalReaderPage[],
+    cachedPages: LocalReaderPage[] | undefined, paginationCacheKey: string,
+    onlyImageSizesChanged: boolean, pageHeight: number, lineHeight: number): number {
+    const context = this.getUIContext();
     const nextPages: LocalReaderPage[] = [];
     for (let pageIndex = 0; pageIndex < paginatedPages.length; pageIndex++) {
       const page = paginatedPages[pageIndex];
@@ -3083,17 +3131,16 @@ export struct ReaderPage {
     // 页层批次 4：本章页表已就位，看看邻章页齐不齐；缺哪侧就向宿主开口要一章。
     // 放在 paintReaderCanvas 之后：预读是纯副作用，不能挡住本帧的重绘。
     this.prefetchAdjacentChapters();
-    // 批 1 计时：只取时间戳 + 打日志，不改任何分支。positionMs 含定位/钳位/预解图/重绘，
-    // 正是要观察的渲染开销。任务模板的 paginateMs 实为「语义解析段」，故另补 paginatorMs
-    // 标出真正的 LocalReaderPaginator.paginate 耗时，便于判定最大项。
-    console.info(`[ReaderBench] rebuild semanticsMs=${semanticsStartedAt - startedAt} ` +
-      `paginateMs=${paginateStartedAt - semanticsStartedAt} ` +
-      `positionMs=${Date.now() - paginateStartedAt} ` +
-      `pages=${this.localReaderPages.length} onlyImages=${onlyImageSizesChanged} ` +
-      `reuseSemantic=${reuseSemantic} paginatorMs=${positionStartedAt - paginateStartedAt} ` +
-      `renderMs=${Date.now() - positionStartedAt} ` +
-      `title=[${this.resolvePaginationTitle(this.getChapterIndex())}] ` +
-      `contentLen=${document.content.length} chPages=${this.currentChapterPageCount()}`);
+    return positionStartedAt;
+  }
+
+  /**
+   * 排版收尾：进度上报、整书页数请求、书签目标消费（#1013 从 `rebuildReaderPages` 抽出）。
+   *
+   * 同步路径与流式路径都要跑这一步，抽出来避免两条路径的收尾动作分叉。
+   */
+  private finishReaderPagination(forceProgressCommit: boolean): void {
+    // 书签目标必须在清空之前取：清空后再判就永远是「没消费过」。
     const consumedBookmarkTarget = this.pendingBookmarkTargetPosition >= 0;
     this.pendingBookmarkTargetPosition = -1;
     if (this.effectivePageAnim() !== 3 && forceProgressCommit) {
@@ -3103,6 +3150,86 @@ export struct ReaderPage {
     }
     this.requestFullBookPagination();
     if (consumedBookmarkTarget) { this.onBookmarkTargetConsumed(); }
+  }
+
+  /**
+   * 流式分页外壳（#1013 / #1015）：起一轮异步排版，每排出一页就刷新页表。
+   *
+   * 三条不变量：
+   * ① `rebuildReaderPages` 保持同步（全文 20 处同步调用），本方法立刻返回，
+   *    本帧仍显示上一轮页表；
+   * ② 令牌 `paginationStreamToken` 保证换章/重排时旧轮次自己停下，不残留旧页；
+   * ③ 流式失败（`shouldAbort` 之外的真异常）退回同步重排一次，不把整章留空。
+   *
+   * #1015：滚动模式下当前页由 `currentPageIndex + scrollOffset` 决定，页表变长不影响
+   * 当前帧，逐页重绘纯属浪费——每 4 页刷一次即可；翻页模式每页都要看见，必须逐页刷。
+   * 上游 `ReaderPartialPagePolicy.kt:27-42 shouldPublishPage` 服务的是「窗口是不可变快照、
+   * 何时换窗」，本地 onPage 本来就是每页到就刷，照搬那套判据只会刷得更少、首屏更慢。
+   */
+  private startReaderPaginationStreaming(document: LocalSemanticDocument, width: number,
+    pageHeight: number, lineHeight: number, paragraphSpacing: number, fontSize: number,
+    imageSizes: Map<string, ReaderIntrinsicImageSize>,
+    titleBlock: LocalReaderTitleBlock | undefined, paginationCacheKey: string,
+    onlyImageSizesChanged: boolean, forceProgressCommit: boolean): void {
+    const token = ++this.paginationStreamToken;
+    this.paginationStreaming = true;
+    const context = this.getUIContext();
+    const streamed: LocalReaderPage[] = [];
+    let paintedCount = 0;
+    const publish = (page: LocalReaderPage): void => {
+      if (this.paginationStreamToken !== token) { return; }
+      streamed.push(page);
+      this.localReaderPages = streamed.slice();
+      if (this.usesCanvasScroll()) {
+        // 滚动模式：每 4 页刷一次，前 4 页逐页刷（首屏要尽快看见字）。
+        if (streamed.length <= 4 || streamed.length - paintedCount >= 4) {
+          paintedCount = streamed.length;
+          this.paintReaderCanvas();
+        }
+        return;
+      }
+      this.paintReaderCanvas();
+    };
+    void LocalReaderPaginator.paginateStreaming(
+      document, width, pageHeight, lineHeight, paragraphSpacing,
+      (value: string): number => {
+        return ReaderFontRepository.measureTextWidthForPagination(
+          context, value, this.readerBodyFontFamily, fontSize, this.getReaderFontWeight()) +
+          this.getReaderTextLetterSpacingWidth(value, fontSize);
+      },
+      imageSizes,
+      this.effectiveImageStyle(),
+      context.px2vp(80),
+      (ReaderFontRepository.measureTextWidth(context, '袮', this.readerBodyFontFamily, fontSize) +
+        this.getReaderLetterSpacingVp(fontSize)),
+      // 标题已进流，首屏不再预留任何行。
+      0,
+      publish,
+      (): boolean => this.paginationStreamToken !== token,
+      this.textFullJustify,
+      this.resolveReaderColumnCount(),
+      this.readerSizeOffsets,
+      titleBlock,
+      this.buildReaderTextLayoutStyle(fontSize),
+      this.getChapterIndex(),
+      this.textBottomJustify,
+      this.usesCanvasScroll()
+    ).then((pages: LocalReaderPage[]): void => {
+      if (this.paginationStreamToken !== token) { return; }
+      this.paginationStreaming = false;
+      const positionStartedAt = this.applyReaderPages(pages, undefined,
+        paginationCacheKey, onlyImageSizesChanged, pageHeight, lineHeight);
+      console.info(`[ReaderBench] streaming pages=${pages.length} ` +
+        `renderMs=${Date.now() - positionStartedAt} contentLen=${document.content.length} ` +
+        `chPages=${this.currentChapterPageCount()}`);
+      this.finishReaderPagination(forceProgressCommit);
+    }).catch((error: Error): void => {
+      if (this.paginationStreamToken !== token) { return; }
+      this.paginationStreaming = false;
+      AppLog.put(`流式分页失败，退回同步：${error.message}`);
+      console.error(`[ReaderBench] streaming failed: ${error.message}`);
+      this.rebuildReaderPages(forceProgressCommit);
+    });
   }
 
   private calculateReaderBottomJustifyGap(pageHeight: number, lineHeight: number, titleReservedLines: number): number {
