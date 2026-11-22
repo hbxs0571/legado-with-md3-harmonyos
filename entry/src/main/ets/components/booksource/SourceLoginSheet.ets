@@ -73,6 +73,11 @@ export struct SourceLoginSheet {
   @State private menuVisible: boolean = false;
   /** 登录头 MarkdownSheet（上游 :88-101，标题 login_header + endAction ContentCopy）。 */
   @State private headerSheetVisible: boolean = false;
+  /**
+   * 主动收起主弹层去显示登录头时置 true：此时主弹层的 onDisappear 不能回调 onClose()，
+   * 否则 Index 会把 loginSourceUrl 清空、整个组件被卸载，登录头也跟着消失。
+   */
+  private suppressClose: boolean = false;
   private webController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear(): void {
@@ -293,6 +298,10 @@ export struct SourceLoginSheet {
       onSelect: (key: string) => {
         this.menuVisible = false;
         if (key === 'show_header') {
+          // 两个 bindSheet 无法叠加（见 build() 注释），所以先收起主弹层再开登录头。
+          // suppressClose 防止主弹层的 onDisappear 把整个组件关掉。
+          this.suppressClose = true;
+          this.visible = false;
           this.headerSheetVisible = true;
         } else if (key === 'del_header') {
           this.deleteLoginHeader();
@@ -401,13 +410,23 @@ export struct SourceLoginSheet {
         .onClick(() => { this.copyLoginHeader(); })
       }
       .width('100%').height(40).margin({ bottom: 16 })
-      Scroll() {
-        Column() {
-          MarkdownIntro({ source: this.loginHeader(), textColor: this.themeColorTextPrimary })
-          Row().height(16)
-        }.width('100%')
+      if (this.loginHeader().length === 0) {
+        // 上游把登录头存在 CacheManager（BaseSource.kt:137-140），由书源 JS 调
+        // source.putLoginHeader 写入。本地 Stage 运行时不提供该桥接，登录头恒为空，
+        // 直接留白会让人以为界面坏了，所以给一行说明（本地扩展，上游无此文案）。
+        Text('暂无登录头')
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').textAlign(TextAlign.Center)
+          .padding({ top: 24, bottom: 24 })
+      } else {
+        Scroll() {
+          Column() {
+            MarkdownIntro({ source: this.loginHeader(), textColor: this.themeColorTextPrimary })
+            Row().height(16)
+          }.width('100%')
+        }
+        .width('100%').constraintSize({ maxHeight: '60%' }).scrollBar(BarState.Auto)
       }
-      .width('100%').constraintSize({ maxHeight: '60%' }).scrollBar(BarState.Auto)
     }
     .width('100%')
     .padding({ left: 16, right: 16, bottom: 16 })
@@ -417,8 +436,10 @@ export struct SourceLoginSheet {
   build() {
     // ArkUI 一个组件只能绑定一个半模态：同一组件上后挂的会覆盖前一个、两个都弹不出来
     // （编辑页曾因同一写法导致点字段/帮助全无反应）。所以两个弹层各挂一个兄弟 Stack。
-    // 兄弟的先后顺序决定层级：后声明的在上——上游 SourceLoginSheets.kt:88-101 里
-    // 登录头 MarkdownSheet 写在 form/web 弹层之后，视觉上叠在它上面。
+    // 注意：兄弟的声明顺序**不**决定层级（上机实测：调整顺序后截图 sha256 与调整前完全相同），
+    // 两个 bindSheet 无法像上游那样叠加显示。上游 SourceLoginSheets.kt:88-101 是 form 弹层与
+    // 登录头 MarkdownSheet 并列 show、视觉叠加；本地改成「打开登录头时收起主弹层、关掉后恢复」，
+    // 形态不同但用户能看到登录头内容，不会出现被主弹层压住只剩一条标题的情况。
     Column() {
       // 主弹层（form / web / loading 三态）。
       // 上游 MainNavGraph.kt:390-408 登录是模态覆盖层；本地用 bindSheet 承载同一条壳。
@@ -431,14 +452,20 @@ export struct SourceLoginSheet {
         // 上游 SourceLoginSheets.kt 三个弹层都走 AppModalBottomSheet，其 M3 分支
         // （AppModalBottomSheet.kt:145-153）只画 DragHandle、无右上关闭按钮。
         showClose: false,
-        enableOutsideInteractive: true,
+        // 同登录头：上游点 scrim 关闭，本地必须保持 enableOutsideInteractive 默认 false。
+        enableOutsideInteractive: false,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
         onDisappear: () => {
           this.visible = false;
-          this.onClose();
+          if (this.suppressClose) {
+            // 正在切到登录头弹层：不清源、不通知关闭。
+            this.suppressClose = false;
+          } else {
+            this.onClose();
+          }
         }
       })
-      // 登录头弹层：声明在主弹层之后，层级更高，与主弹层叠加显示。
+      // 登录头弹层：与主弹层互斥显示（两个 bindSheet 无法叠加，见 build() 开头注释）。
       Stack() {
       }
       .width(1).height(1)
@@ -447,9 +474,17 @@ export struct SourceLoginSheet {
         dragBar: true,
         // 上游 MarkdownSheet（AboutSheets.kt:33-60）没有右上关闭按钮。
         showClose: false,
-        enableOutsideInteractive: true,
+        // 上游 M3 ModalBottomSheet 点 scrim 走 onDismissRequest 关闭。ArkUI 的
+        // enableOutsideInteractive=true 是「允许与弹层外部交互」= 点击穿透到下层、
+        // 弹层不关（实测点遮罩截图 sha256 不变）；要「点遮罩关闭」必须保持默认 false。
+        enableOutsideInteractive: false,
         backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
-        onDisappear: () => { this.headerSheetVisible = false; }
+        // 上游 SourceLoginViewModel.kt:99-102 DismissSheet：关掉登录头后
+        // activeSheet 回到 Form（form 模式）或 null（web 模式）。这里同样回到主弹层。
+        onDisappear: () => {
+          this.headerSheetVisible = false;
+          if (this.mode === 'form') { this.visible = true; }
+        }
       })
     }
     .width(0).height(0)
