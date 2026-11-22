@@ -106,9 +106,9 @@ class TimeoutGate {
   private timer: number = -1;
 
   constructor(seconds: number) {
-    if (seconds > 0) {
-      this.timer = setTimeout(() => { this.timedOut = true; }, seconds * 1000);
-    }
+    // 上游 withTimeout(0) 是「立即超时」，不是「不限时」；本地原先写成 seconds > 0 才起定时器，
+    // 等于把 0 解释成不限时，与上游语义相反。这里 0 也照样起一个 0ms 定时器。
+    this.timer = setTimeout(() => { this.timedOut = true; }, Math.max(0, seconds * 1000));
   }
 
   /** 每个 await 之间调用；已超时就抛超时错误，模拟上游的 cancellation 点。 */
@@ -260,7 +260,12 @@ export class BookSourceCheckCoordinator {
       BookSourceCheckCoordinator.updateResult(url, name, { status: 'Succeeded' });
     } catch (error) {
       gate.clear();
-      const detail: string = error instanceof Error ? error.message : String(error);
+      // 上游 BookSourceCheckRepository.kt:125 把 TimeoutCancellationException 单独识别出来，
+      // 打组「校验超时」；本地超时是闸门标记 + 掐断请求，底层抛的是 HttpClient 的
+      // 「书源请求已取消」，不识别就会显示成「HTTP 0 书源请求已取消」，用户看不出是超时。
+      const detail: string = gate.timedOut
+        ? '校验超时'
+        : (error instanceof Error ? error.message : String(error));
       BookSourceCheckCoordinator.updateResult(url, name, {
         status: 'Failed',
         failure: 'CheckFailed',
