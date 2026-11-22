@@ -137,6 +137,7 @@ if (span.start >= 0 && this.localReaderPages.length > 0) {
 | 流式播放（系统 TTS） | 系统 TTS 只吃文本、无流式音频输出 |
 | AnalyzeUrl 模板/JS、loginCheckJs、jsLib | 鸿蒙 ArkTS 无 JS 引擎（Rhino 对应物），字段保留不执行 |
 | 后台焦点/退出保留（ignoreAudioFocus / keepReadAloudOnExit） | 系统 TTS 不暴露音频焦点控制；鸿蒙无「退出应用后保留」对应位，靠长时任务 |
+| 听书播放页几何 morph | ArkUI 布局属性动画会让内容跳变或拉伸；无「手势进度交给应用」的通道；封面可用 `geometryTransition` 但圆角与子组件受限。详见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的「听书播放页的 morph 浮层（r367 盘点）」 |
 
 ## 八、文档收尾
 

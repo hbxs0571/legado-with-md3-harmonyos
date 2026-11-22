@@ -214,6 +214,8 @@
   缺的是把合成内核放进应用进程。另有一条**平台事实**要记住：鸿蒙没有「系统 TTS 引擎插槽」（五条证据链见 KNOWN-ISSUES），
   所以「做成独立应用、让别的应用调用」这条路不成立。详见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的「朗读的平台底座（r358 盘点）」。
 
+- **听书播放页没有几何 morph**：上游是 Activity 级共享元素浮层（`ReadAloudMorphState` 单一进度驱动面板、封面、透明度与圆角），本地是根 `Stack` 条件渲染，打开只有整层出现。封面飞行可以做（`geometryTransition`），面板从胶囊矩形长成整窗只能近似（ArkUI 布局动画会让内容跳变或拉伸），返回手势跟手做不到（无 predictive back）。详见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的「听书播放页的 morph 浮层（r367 盘点）」。
+
 ### 3.3 算做完的判据（按实测）
 
 - [x] 底栏朗读键短按起播，逐段合成链走到 `onComplete`，段间高亮跟随并回写阅读进度。

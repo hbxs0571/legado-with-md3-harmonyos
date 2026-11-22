@@ -2024,6 +2024,111 @@ MiMo 这类 SSE 供应商的音频块是裸 PCM（`format: "pcm16"`，24kHz / 16
 
 ---
 
+## 听书播放页的 morph 浮层：上游是共享元素几何动画，本地是根 Stack 条件渲染（r367 盘点）
+
+**KI-ALOUD4 听书播放页的几何 morph 没做，其中两条在 ArkUI 上做不到** —— 状态：**部分做**（浮层挂载已等价；封面飞行与面板展开可近似；「几何变化中内容不变形」与「手势跟手」做不到）。
+
+### 一、上游的「Activity 级 morph 浮层」是两件事
+
+**其一，浮层不在导航栈里。** 上游播放页不是 `NavKey`、不是 `NavDestination`，而是盖在 Activity 根内容上的一层 Compose 覆盖（由 `PlayerMorphHost` 承载）。上游自己在 `ui/book/read/ReadBookScreen.kt:711` 写明了：「听书播放页是 Activity 级 morph 浮层（见 `ReadAloudPlayerMorphHost`），阅读器内只保留经典控制面板自己的朗读配置卡片；两者共用同一份配置内容。」后果是返回键只关浮层，不 pop 页面。
+
+**其二，它带一套共享元素几何动画。** `ui/book/readaloud/morph/ReadAloudMorphState.kt:36`：
+
+```kotlin
+class ReadAloudMorphState(
+    val progress: Animatable<Float, AnimationVector1D>,
+    private val density: Density,
+)
+```
+
+类注释原文：「单一进度同时驱动视觉面、封面、内容透明度与阴影；两端（胶囊 / 播放页封面）通过布局回调上报自己的矩形；旋转角独立同步，不依赖重新布局。」另注：「这是纯动画状态：不进 ViewModel、不进 UiState、不持久化。」
+
+`progress` 从 0 走到 1 期间，两端各报自己的几何：
+
+| 端 | 上报内容 |
+| --- | --- |
+| 屏幕（`PlayerMorphHost`） | `screenBounds`、`screenCornerRadii`（`reportScreenCorners`） |
+| 起点胶囊 | `panelStartBounds`、`panelStartCornerRadiusPx`、`panelStartColor`、`coverStartBounds`、`coverStartCornerRadiusPx` |
+
+`panelStartColor` 的注释解释了为什么必须由胶囊上报：「面板在进度 0 时要与胶囊完全重合，所以底色必须由胶囊上报：阅读界面的可拖拽胶囊是黑白纯色，底栏式胶囊是主题容器色，两者不同，宿主猜不出来。」
+
+宿主是 `ui/book/readaloud/ReadAloudPlayerMorphHost.kt:56`，函数注释：「朗读特有的设置与经典控制；几何、封面和返回手势由共用宿主处理。」进度经 `:305` 的 `LocalReadAloudMorph = staticCompositionLocalOf<ReadAloudMorphState?> { null }` 下发。
+
+→ 所以播放页是从阅读界面右下角的胶囊**长出来**的：面板矩形从胶囊大小插值到整窗、封面从胶囊小图插值到大封面、内容透明度随之变化、圆角与阴影同步、封面旋转角另算。不是淡入切页。
+
+### 二、本地现状：根 Stack 条件渲染
+
+`pages/Index.ets:12950-12951` 的注释与结构：
+
+```
+// 听书界面浮层：上游是 Activity 级 morph 浮层（不在导航栈），本地用根 Stack 全屏浮层近似。
+if (this.showReadAloudPlayer) {
+  Stack() { ReadAloudPlayerPage({ ... }) }
+}
+```
+
+- 开关是 `@State showReadAloudPlayer: boolean = false`（`:843`），开在 `:9588`（`openReadAloudPlayer`）、关在 `:9592`/`:9635`。
+- 「不占导航栈」这一半**已经等价**：根 Stack 最上层的覆盖层，返回只关浮层。
+- 「源在场」也不缺：打开浮层时阅读页仍在组件树里（`route === AppRoute.READER` 的分支在 `:900`，浮层叠在 `:12951`），朗读胶囊也在。
+- 缺的是 morph 本身。`Index.ets:3643-3650` 已写明为什么没做：「ArkUI 的 `geometryTransition` 要求源与目标组件同时在场，本地是整页 if/else 切换，做不到真正的共享元素，所以打开时用『缩小淡入 + 放大淡出』近似，关闭时只做淡入淡出。」——注意这句把原因归给「整页 if/else」，实测源与目标**同时在**场（见上一行），真正的原因是第四节、第五节的两条限制加上「本地没有 morph 状态」。这句注释本轮未改，归因待下一轮订正。
+- 全仓无 morph 状态：`entry/src/main/ets` 里 `morph` 只出现在注释中，没有 `ReadAloudMorphState` 的对应物；`onAreaChange` 现有 6 处都在做布局测量（`components/BookCover.ets:253`、`Index.ets:12932`、`BookshelfPage.ets:2874`、`CatalogPage.ets:1032`/`:1129`、`ReaderPage.ets:8397`），没有一处是「上报矩形给动画用」。
+
+### 三、四个环节逐条对照
+
+| 环节 | 结论 | 依据 |
+| --- | --- | --- |
+| 浮层不占导航栈、返回只关浮层 | **已等价** | 根 `Stack` 条件渲染 + `showReadAloudPlayer` |
+| 封面从小图飞到大图（共享元素） | **能做** | ArkUI `geometryTransition`（API 10+，必须配 `animateTo`；同一 id 只能两个组件绑定、不能相互嵌套、建议 `onFinish` 置空；圆角只同步绑定组件本身、作用不到子组件）；本地已有 `onAreaChange` 与 `curves.springMotion` |
+| 整个面板从胶囊矩形长成整窗 | **只能近似** | `width/height` 是布局属性，逐帧改触发布局重算；官方文档写明「布局类属性动画时内容（文字、Canvas 内容）直接跳变到终态」；换 `scale` 则内容整体拉伸 |
+| 返回手势跟手（进度驱动预览、反向取消） | **做不到** | 鸿蒙把返回手势交系统接管，不把进度交给应用；SDK 里 `predictive` 只命中 `@ohos.multimodalInput.keyCode.d.ts` 的一个键码名；`UIAbility.onBackPressed(): boolean`（`@ohos.app.ability.UIAbility.d.ts:737`）语义是「手势已发生、你拦不拦」 |
+
+另有两条次要差异：圆角与阴影插值能自算（`@State` 进度或 `AttributeUpdater` 直接刷属性）；封面旋转角在做封面 morph 时一并算即可。
+
+### 四、为什么「面板展开」只能近似
+
+ArkUI 与 Compose 的差别不在有没有动画 API，而在**动画到底改什么**：
+
+- 上游 morph 是**纯绘制变换**：面板始终是整窗大小，只是被裁剪、缩放绘制到胶囊矩形里，内容（文字）以透明度配合，不会变形。
+- 本地若逐帧改 `width/height`：每一帧都触发一次布局与重排，且 ArkUI 官方文档明确「布局类属性动画时内容直接跳变到终态」，要靠 `renderFit` 才能让内容跟随尺寸；`renderFit` 只解决「内容跟着缩放」，解决不了「文字在不同宽高下重新折行」。
+- 本地若用 `scale` 从 0.85 放到 1.0：不改布局，但内容（含文字）整体被拉伸、压缩，观感是「放大」，不是「面板长出来」。
+
+→ 能做「像」，不能做「是」。要写就选不逐帧改宽高的那条（`scale` + `opacity` + `borderRadius`），并接受「内容缩放」这一处差别。
+
+### 五、为什么「跟手」做不到
+
+上游把 `predictiveBackEnabled` 传给 `ReadAloudPlayerMorphHost`（函数签名 `ReadAloudPlayerMorphHost.kt:56-70` 的 `predictiveBackEnabled: Boolean = true`），浮层几何进度的来源之一正是返回手势；手势取消时进度反向回 0。
+
+鸿蒙侧：`predictive` 在整个 SDK 只命中 `@ohos.multimodalInput.keyCode.d.ts`（键码名，与手势无关）；应用能接的返回是 `UIAbility.onBackPressed(): boolean`，语义为「返回已发生，是否拦截」。没有「手指按下未松手、把手势进度交给应用」的通道，因此返回手势驱动 morph 预览在 ArkUI 上不可实现（与上一条「预测性返回手势」是同一处平台限制，只是那边是开关、这边是动画数据源）。
+
+### 六、真要做时的折中
+
+1. 建一个 `@State morphProgress: number`（或单例 `@ObservedV2`），打开浮层时 0→1、关闭 1→0，用 `curves.springMotion` 驱动；
+2. 封面单独走 `geometryTransition`（一个元素，最容易做像），或自算两端 `Rect` 插值；
+3. 面板**不逐帧改宽高**，只用 `scale`（0.85→1.0）+ `opacity`（0→1）+ `borderRadius` 插值 + `translate` 归位；
+4. 面板与封面**共用同一条进度**（上游就是一个 `progress`），不能各播各的；
+5. 时间线与上游对齐：胶囊 → 全屏的 morph 是一次连续手势动画，不是「浮层淡入 + 内部再展开」两段。
+
+工作量：一个进度状态 + 两端矩形上报（`onAreaChange`）+ 一条插值链，另要改 `Index.ets` 的浮层挂载与 `ReadAloudPlayerPage` 入参。**本仓目前零基础**。
+
+### 七、与已有记录的关系
+
+同一件事在四处记过，但都只说「近似了」，没说「能近似到哪、卡在哪」：
+
+- `docs/KNOWN-ISSUES.md:29`：「上游是 Activity 级 morph 浮层、不在导航栈；本地用 Index 根 `Stack` 的全屏浮层近似」；
+- `docs/KNOWN-ISSUES.md:45`：「`PlayerBackground` 的 haze 流动光背景、morph 形变动画、3 个 bottom sheet 的花字动画是 Compose 专属效果，本地以静态背景/普通浮层近似」；
+- `docs/KNOWN-ISSUES.md:1741`（r356 第 11 行）：「morph 浮层族（8 文件）→ 封面从书架无缝展开到阅读器/听书页 → 无。`geometryTransition` 可用，但圆角只同步绑定处、不管子组件」；
+- `docs/FEATURES.md:386`：「本地只有下拉刷新与开关两个有等价物，其余全无」。
+
+本节把这些散点收成一份可执行判断，并指出第二节末那处归因需要订正（不是「源不在场」，是「没 morph 状态 + 两条平台限制」）。
+
+### 八、没验的
+
+- 没上机看本地浮层当前的实际动画（纯静态读代码）。
+- 没写任何 morph 实现，第六节的折中方案未验证观感与帧率。
+- `geometryTransition` 的约束来自 SDK 文档与既有 r356 记录，本轮未重跑探针。
+
+---
+
 ## 书源引擎：能接、已上机验证、但还差调度层（r359）
 
 与「在线书源抓取仍未排期」那条不冲突：这一节说的是**技术上能不能接**，不是「排期到了」。素材来自工程外最小验证工程 `<workspace>tmp\probe-sourceengine`（包名 `io.legado.probe.sourceengine`），**主仓一行未改**。被测对象是社区实现 [`wip3l/harmony-book-source-engine`](https://github.com/wip3l/harmony-book-source-engine)（GPL-3.0）的 `sourceengine/` 与 `quickjs/` 两个目录，zip 1,844,595 B。
