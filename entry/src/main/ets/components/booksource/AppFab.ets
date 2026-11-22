@@ -46,7 +46,9 @@ export struct AppFab {
     }
     .width(56)
     .height(56)
-    .borderRadius(28)
+    // M3 FloatingActionButton 的默认 shape 是 RoundedCornerShape(16.dp)——
+    // 圆角方形，不是圆形；上游走的是 M3 分支（AppFloatingActionButton.kt:114-119）。
+    .borderRadius(16)
     .backgroundColor(this.fabContainerColor)
     .shadow({ radius: 6, color: this.fabShadowColor, offsetX: 0, offsetY: 3 })
     .accessibilityText(this.fabAccessibilityText)
