@@ -415,12 +415,31 @@ export struct SourceLoginSheet {
   }
 
   build() {
-    // ArkUI 一个组件只能绑定一个半模态：后挂的会覆盖前一个、两个都弹不出来
-    // （编辑页曾因同一写法导致点字段/帮助全无反应）。所以主弹层与登录头必须
-    // 分别挂在不同层级的容器上——主弹层在外层 Column，登录头在内层 Stack。
+    // ArkUI 一个组件只能绑定一个半模态：同一组件上后挂的会覆盖前一个、两个都弹不出来
+    // （编辑页曾因同一写法导致点字段/帮助全无反应）。所以两个弹层各挂一个兄弟 Stack。
+    // 兄弟的先后顺序决定层级：后声明的在上——上游 SourceLoginSheets.kt:88-101 里
+    // 登录头 MarkdownSheet 写在 form/web 弹层之后，视觉上叠在它上面。
     Column() {
+      // 主弹层（form / web / loading 三态）。
+      // 上游 MainNavGraph.kt:390-408 登录是模态覆盖层；本地用 bindSheet 承载同一条壳。
       Stack() {
-        // 占位 1x1，只为承载登录头半模态；主弹层挂在外层 Column。
+      }
+      .width(1).height(1)
+      .bindSheet($$this.visible, this.SheetContent(), {
+        height: this.mode === 'web' && !this.sheetLoading ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
+        dragBar: true,
+        // 上游 SourceLoginSheets.kt 三个弹层都走 AppModalBottomSheet，其 M3 分支
+        // （AppModalBottomSheet.kt:145-153）只画 DragHandle、无右上关闭按钮。
+        showClose: false,
+        enableOutsideInteractive: true,
+        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        onDisappear: () => {
+          this.visible = false;
+          this.onClose();
+        }
+      })
+      // 登录头弹层：声明在主弹层之后，层级更高，与主弹层叠加显示。
+      Stack() {
       }
       .width(1).height(1)
       .bindSheet($$this.headerSheetVisible, this.LoginHeaderSheet(), {
@@ -434,19 +453,5 @@ export struct SourceLoginSheet {
       })
     }
     .width(0).height(0)
-    // 上游 MainNavGraph.kt:390-408 登录是模态覆盖层；本地用 bindSheet 承载同一条壳。
-    .bindSheet($$this.visible, this.SheetContent(), {
-      height: this.mode === 'web' && !this.sheetLoading ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
-      dragBar: true,
-      // 上游 SourceLoginSheets.kt 三个弹层都走 AppModalBottomSheet，其 M3 分支
-      // （AppModalBottomSheet.kt:145-153）只画 DragHandle、无右上关闭按钮。
-      showClose: false,
-      enableOutsideInteractive: true,
-      backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
-      onDisappear: () => {
-        this.visible = false;
-        this.onClose();
-      }
-    })
   }
 }
