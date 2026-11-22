@@ -9,7 +9,10 @@
  *    展示时拼成 `message\n<stackTrace>`（AppLogSheet.kt:97-101）；本地原来只存字符串。
  * 3. 时间戳存毫秒数（上游 `System.currentTimeMillis()`，AppLog.kt:38），
  *    展示格式 `yy-MM-dd HH:mm:ss.SSS`（LogUtils.kt:27-28）；本地原来只到秒且无日期。
+ *
+ * 另补 `putDebug`（上游 AppLog.kt:66-70）：受「记录日志」开关门控，供调试类日志使用。
  */
+import { OtherSettingsRepository } from '../data/OtherSettingsRepository';
 
 /** 一条日志。字段与上游 Triple<Long, String, Throwable?> 一一对应。 */
 export class AppLogEntry {
@@ -53,6 +56,18 @@ export class AppLog {
       AppLog.entries.pop();
     }
     AppLog.entries.unshift(new AppLogEntry(Date.now(), message, AppLog.stackText(throwable)));
+  }
+
+  /**
+   * 调试日志：只有「记录日志」开关打开时才真的记。
+   * 对齐上游 AppLog.kt:66-70 `putDebug`——`if (otherGateway.currentSettings.recordLog) put(message, throwable)`。
+   * 开关落盘在 OtherSettingsRepository（键 recordLog，上游 PreferKey.kt:70）。
+   */
+  static putDebug(message: string, throwable?: Error): void {
+    if (!OtherSettingsRepository.get().recordLog) {
+      return;
+    }
+    AppLog.put(message, throwable);
   }
 
   /** 按「最新在前」返回全部日志条目（上游 `logs` 是头插列表，直接顺序消费）。 */

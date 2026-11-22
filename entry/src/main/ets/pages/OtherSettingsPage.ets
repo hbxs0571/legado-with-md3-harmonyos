@@ -64,6 +64,9 @@ export struct OtherSettingsPage {
     if (context !== undefined) {
       OtherSettingsRepository.load(context).then((settings: OtherSettings) => {
         this.otherSettings = settings;
+        // 「记录日志」开关是落盘偏好，进页时把真实值同步到 @State，
+        // 否则开关永远显示 false，用户以为没打开（对齐上游 recordLog 持久化）。
+        this.recordLog = settings.recordLog;
       });
     }
   }
@@ -79,7 +82,8 @@ export struct OtherSettingsPage {
     this.otherSettings = {
       defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
       sourceEditMaxLine: isNaN(value) ? DEFAULT_OTHER_SETTINGS.sourceEditMaxLine : Math.max(1, value),
-      webPort: this.otherSettings.webPort
+      webPort: this.otherSettings.webPort,
+      recordLog: this.otherSettings.recordLog
     };
     this.saveOtherSettings();
   }
@@ -91,7 +95,20 @@ export struct OtherSettingsPage {
     this.otherSettings = {
       defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
       sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
-      webPort: port
+      webPort: port,
+      recordLog: this.otherSettings.recordLog
+    };
+    this.saveOtherSettings();
+  }
+
+  /** 「记录日志」开关：写回偏好（上游 PreferKey.recordLog），AppLog.putDebug 按它门控。 */
+  private confirmRecordLog(value: boolean): void {
+    this.recordLog = value;
+    this.otherSettings = {
+      defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
+      sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
+      webPort: this.otherSettings.webPort,
+      recordLog: value
     };
     this.saveOtherSettings();
   }
@@ -111,7 +128,8 @@ export struct OtherSettingsPage {
       this.otherSettings = {
         defaultBookTreeUri: uri,
         sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
-        webPort: this.otherSettings.webPort
+        webPort: this.otherSettings.webPort,
+        recordLog: this.otherSettings.recordLog
       };
       this.saveOtherSettings();
     } catch (error) {
@@ -185,7 +203,7 @@ export struct OtherSettingsPage {
             UiAction({ title: '清除 WebView 数据', detail: '清除内置浏览器所有数据', onSelect: () => this.confirmClearWebView() })
             UiSwitch({ title: '阻止书源打开内置浏览器', detail: '开启后，书源无法通过 java.startBrowser 等接口弹出内置浏览器，等待网页结果的调用会直接报错', value: this.blockSourceBrowser, onChange: (value: boolean) => this.blockSourceBrowser = value })
             UiSwitch({ title: '文字操作显示搜索', detail: '长按文字在操作菜单中显示阅读 · 搜索', value: this.processText, onChange: (value: boolean) => this.processText = value })
-            UiSwitch({ title: '记录日志', detail: '记录调试日志', value: this.recordLog, onChange: (value: boolean) => this.recordLog = value })
+            UiSwitch({ title: '记录日志', detail: '记录调试日志', value: this.recordLog, onChange: (value: boolean) => this.confirmRecordLog(value) })
             UiSwitch({showDivider: false, title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
           }
         }.width('100%').padding({ top: 4, bottom: 120 })

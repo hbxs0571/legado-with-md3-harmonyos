@@ -14,12 +14,18 @@ export interface OtherSettings {
   sourceEditMaxLine: number;
   /** Web 服务端口，上游默认 1122。 */
   webPort: number;
+  /**
+   * 记录调试日志开关。上游 OtherSettings.kt:22 `val recordLog: Boolean = false`，
+   * 落盘键 PreferKey.kt:70 `recordLog`；AppLog.putDebug 用它门控（AppLog.kt:66-70）。
+   */
+  recordLog: boolean;
 }
 
 export const DEFAULT_OTHER_SETTINGS: OtherSettings = {
   defaultBookTreeUri: '',
   sourceEditMaxLine: 2147483647,
-  webPort: 1122
+  webPort: 1122,
+  recordLog: false
 };
 
 export class OtherSettingsRepository {
@@ -27,17 +33,20 @@ export class OtherSettingsRepository {
   private static readonly keyDefaultBookTreeUri: string = 'defaultBookTreeUri';
   private static readonly keySourceEditMaxLine: string = 'sourceEditMaxLine';
   private static readonly keyWebPort: string = 'webPort';
+  private static readonly keyRecordLog: string = 'recordLog';
   private static cached: OtherSettings = {
     defaultBookTreeUri: '',
     sourceEditMaxLine: 2147483647,
-    webPort: 1122
+    webPort: 1122,
+    recordLog: false
   };
 
   private static publish(settings: OtherSettings): void {
     OtherSettingsRepository.cached = {
       defaultBookTreeUri: settings.defaultBookTreeUri,
       sourceEditMaxLine: settings.sourceEditMaxLine,
-      webPort: settings.webPort
+      webPort: settings.webPort,
+      recordLog: settings.recordLog
     };
   }
 
@@ -46,7 +55,8 @@ export class OtherSettingsRepository {
     return {
       defaultBookTreeUri: OtherSettingsRepository.cached.defaultBookTreeUri,
       sourceEditMaxLine: OtherSettingsRepository.cached.sourceEditMaxLine,
-      webPort: OtherSettingsRepository.cached.webPort
+      webPort: OtherSettingsRepository.cached.webPort,
+      recordLog: OtherSettingsRepository.cached.recordLog
     };
   }
 
@@ -55,18 +65,21 @@ export class OtherSettingsRepository {
     let defaultBookTreeUri = DEFAULT_OTHER_SETTINGS.defaultBookTreeUri;
     let sourceEditMaxLine = DEFAULT_OTHER_SETTINGS.sourceEditMaxLine;
     let webPort = DEFAULT_OTHER_SETTINGS.webPort;
+    let recordLog = DEFAULT_OTHER_SETTINGS.recordLog;
     try {
       const store = await preferences.getPreferences(context, OtherSettingsRepository.preferenceName);
       defaultBookTreeUri = store.getSync(OtherSettingsRepository.keyDefaultBookTreeUri, defaultBookTreeUri) as string;
       sourceEditMaxLine = store.getSync(OtherSettingsRepository.keySourceEditMaxLine, sourceEditMaxLine) as number;
       webPort = store.getSync(OtherSettingsRepository.keyWebPort, webPort) as number;
+      recordLog = store.getSync(OtherSettingsRepository.keyRecordLog, recordLog) as boolean;
     } catch (error) {
       console.error(`其它设置读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
     const settings: OtherSettings = {
       defaultBookTreeUri: defaultBookTreeUri,
       sourceEditMaxLine: sourceEditMaxLine,
-      webPort: webPort
+      webPort: webPort,
+      recordLog: recordLog
     };
     OtherSettingsRepository.publish(settings);
     return settings;
@@ -78,6 +91,7 @@ export class OtherSettingsRepository {
     await store.put(OtherSettingsRepository.keyDefaultBookTreeUri, settings.defaultBookTreeUri);
     await store.put(OtherSettingsRepository.keySourceEditMaxLine, settings.sourceEditMaxLine);
     await store.put(OtherSettingsRepository.keyWebPort, settings.webPort);
+    await store.put(OtherSettingsRepository.keyRecordLog, settings.recordLog);
     await store.flush();
     OtherSettingsRepository.publish(settings);
   }
