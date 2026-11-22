@@ -12,6 +12,10 @@ import { AppFontSheet } from '../components/settings/AppFontSheet';
 import { NavIconManageSheet } from '../components/settings/NavIconManageSheet';
 import { TopBottomBarSettingsSheet } from '../components/settings/TopBottomBarSettingsSheet';
 import { LauncherIconPickerSheet } from '../components/settings/LauncherIconPickerSheet';
+import {
+  BackgroundImageManageSheet, BackgroundImageExtraOption, blurExtraOption
+} from '../components/theme/BackgroundImageManageSheet';
+import { MainNavigationSettingsSheet } from '../components/theme/MainNavigationSettingsSheet';
 import { ThemeGroupColumn, ThemeGroupItem } from '../components/settings/ThemeGroupColumn';
 import { ThemeRefactorTipStore } from '../data/ThemeRefactorTipStore';
 import { resolvePaletteColors, ThemePaletteColors } from '../data/ThemePalette';
@@ -409,6 +413,20 @@ export struct ThemeSettingsPage {
     return barParts.join(' · ');
   }
 
+  /**
+   * sheet 高度。
+   *
+   * 字体 / 导航图标 / 启动图标三个面板是长列表，上游 `AppModalBottomSheet` 走可滚动内容，
+   * 本地给固定 620；背景图片与首页与导航是定长内容，用 `SheetSize.FIT_CONTENT` 贴合内容，
+   * 否则面板下方留一大片空白（上游这两个面板就是内容多高就多高）。
+   */
+  private sheetHeight(): SheetSize | number {
+    if (this.activeSheet === 'backgroundImage' || this.activeSheet === 'mainNavigation') {
+      return SheetSize.FIT_CONTENT;
+    }
+    return 620;
+  }
+
   private navigationSummary(): string {
     const visible: string[] = this.visibleNavigationOptions();
     const hidden = 3 - (this.showHome ? 1 : 0) - (this.showDiscovery ? 1 : 0) - (this.showRss ? 1 : 0);
@@ -446,6 +464,18 @@ export struct ThemeSettingsPage {
     paths.push(this.navIconRssSelected);
     paths.push(this.navIconMySelected);
     return paths;
+  }
+
+  /** 已设置的自定义图标数量，供「首页与导航」sheet 的图标行摘要用。 */
+  private customNavIconCount(): number {
+    const paths: string[] = this.navIconPaths();
+    let count = 0;
+    for (const path of paths) {
+      if (path.length > 0) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /** 可见导航项（按配置顺序），供「默认主页面」下拉使用。 */
@@ -623,6 +653,41 @@ export struct ThemeSettingsPage {
         onDismiss: () => { this.activeSheet = ''; },
         onIconChanged: (iconId: string) => this.onLauncherIconChange(iconId)
       })
+    } else if (this.activeSheet === 'backgroundImage') {
+      // 上游 `BackgroundImageManageSheet.kt:60-70` 在背景图面板里给的是 `Blur` 档：
+      // 日夜两格 + 两档虚化滑块（0..100，默认 0），滑块只在对应图存在时才画。
+      BackgroundImageManageSheet({
+        title: '背景图片',
+        lightPath: this.appBackgroundImage,
+        darkPath: this.appBackgroundImageNight,
+        extraOption: blurExtraOption(this.appBackgroundBlur, this.appBackgroundNightBlur),
+        onDismissRequest: () => { this.activeSheet = ''; },
+        onSelectLight: () => this.onPickBackgroundImage(false),
+        onSelectDark: () => this.onPickBackgroundImage(true),
+        onRemoveLight: () => this.onClearBackgroundImage(false),
+        onRemoveDark: () => this.onClearBackgroundImage(true),
+        onLightBlurChange: (value: number) => this.onBackgroundBlurChange(false, value),
+        onDarkBlurChange: (value: number) => this.onBackgroundBlurChange(true, value),
+        onOpacityChange: (_value: number) => {}
+      })
+    } else if (this.activeSheet === 'mainNavigation') {
+      MainNavigationSettingsSheet({
+        mainNavigationOrder: this.mainNavigationOrder,
+        defaultHomePage: this.defaultHomePage,
+        labelVisibilityMode: this.labelVisibilityMode,
+        showHome: this.showHome,
+        showDiscovery: this.showDiscovery,
+        showRss: this.showRss,
+        customNavIconCount: this.customNavIconCount(),
+        onDismissRequest: () => { this.activeSheet = ''; },
+        onNavigationVisibilityChange: (route: string, visible: boolean) =>
+          this.onNavigationVisibilityChange(route, visible),
+        onNavigationReorder: (from: number, to: number) => this.onNavigationReorder(from, to),
+        onNavigationMove: (route: string, up: boolean) => this.onNavigationMove(route, up),
+        onDefaultHomePageChange: (route: string) => this.onDefaultHomePageChange(route),
+        onLabelVisibilityModeChange: (value: string) => this.onLabelVisibilityModeChange(value),
+        onOpenNavIcons: () => { this.activeSheet = 'navIcon'; }
+      })
     }
   }
 
@@ -746,124 +811,29 @@ export struct ThemeSettingsPage {
             ThemeGroupItem() {
               UiAction({showDivider: false, title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onOpenThemeManage() })
             }
+            // 背景图片：上游是 `BackgroundImageManageSheet`（199 行）—— 日夜两格 + 两档虚化滑块，
+            // 不是行内展开。本地改走 sheet（`activeSheet = 'backgroundImage'`）。
             ThemeGroupItem() {
-              UiAction({showDivider: false, title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
-            }
-            if (this.backgroundExpanded) {
-              ThemeGroupItem() {
-                UiAction({showDivider: false, title: '日间背景图片', detail: this.appBackgroundImage.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(false) })
-              }
-              ThemeGroupItem() {
-                Slider({ value: this.appBackgroundBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
-                  .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(false, value))
-              }
-              ThemeGroupItem() {
-                UiAction({showDivider: false, title: '夜间背景图片', detail: this.appBackgroundImageNight.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(true) })
-              }
-              ThemeGroupItem() {
-                Slider({ value: this.appBackgroundNightBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
-                  .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(true, value))
-              }
-              ThemeGroupItem() {
-                UiAction({showDivider: false, title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
-              }
+              UiAction({showDivider: false, title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.activeSheet = 'backgroundImage'; } })
             }
           }
 
           ThemeGroupColumn({ title: '主界面' }) {
+            // 首页与导航：上游是 `MainNavigationSettingsSheet`（195 行）—— 默认主页 / 标签显示方式 /
+            // 导航栏图标入口 / 可拖拽的显隐列表，不是行内展开。本地改走 sheet。
             ThemeGroupItem({ first: true }) {
-              UiAction({showDivider: false, title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.navigationExpanded = !this.navigationExpanded; } })
+              UiAction({showDivider: false, title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.activeSheet = 'mainNavigation'; } })
             }
-            if (this.navigationExpanded) {
-              Column() {
-                // 逐项显隐：上游 `setVisibilityForRoute`，书架与我的恒可见。
-                ThemeGroupItem() {
-                  ThemeSwitchRow({ title: '首页', detail: '在底部导航显示首页', checked: this.showHome, onChange: (value: boolean) => this.onNavigationVisibilityChange('home', value) })
-                }
-                ThemeGroupItem() {
-                  ThemeSwitchRow({ title: '发现', detail: '在底部导航显示发现', checked: this.showDiscovery, onChange: (value: boolean) => this.onNavigationVisibilityChange('explore', value) })
-                }
-                ThemeGroupItem() {
-                  ThemeSwitchRow({ title: '订阅', detail: '在底部导航显示订阅', checked: this.showRss, onChange: (value: boolean) => this.onNavigationVisibilityChange('rss', value) })
-                }
-                // 默认主页面：只能选可见项，对齐上游 `MainNavigationSettingsSheet.kt:81-84`。
-                ThemeGroupItem() {
-                  UiDropdown({showDivider: false,
-                    title: '默认主页面',
-                    option: this.defaultHomePage,
-                    options: this.visibleNavigationOptions(),
-                    labelOf: (value: string) => mainNavigationLabel(value),
-                    onSelect: (value: string) => this.onDefaultHomePageChange(value)
-                  })
-                }
-                ThemeGroupItem() {
-                  UiDropdown({showDivider: false,
-                    title: '导航标签显示',
-                    option: this.labelVisibilityMode,
-                    options: LABEL_VISIBILITY_VALUES,
-                    labelOf: (value: string) => labelVisibilityLabel(value),
-                    onSelect: (value: string) => this.onLabelVisibilityModeChange(value)
-                  })
-                }
-                // 平板界面：上游 `AppShellSettings` 的 tabletInterface 档位，决定底栏还是左侧栏。
-                // 四档判据（自动/始终侧栏/横屏侧栏/始终底栏）在 data/MainNavigationSettings.ets。
-                ThemeGroupItem() {
-                  UiDropdown({showDivider: false,
-                    title: '平板界面',
-                    option: this.tabletInterface,
-                    options: TABLET_INTERFACE_VALUES,
-                    labelOf: (value: string) => tabletInterfaceLabel(value),
-                    onSelect: (value: string) => this.onTabletInterfaceChange(value)
-                  })
-                }
-                // 主导航顺序：上游 `MainNavigationSettingsSheet.kt:38-46` 用
-                // `rememberReorderableLazyListState` 做拖拽重排，松手时把整串顺序回写。
-                // 本地用 `List` + `onItemDragStart`/`onItemDrop`（ArkUI 的列表内拖拽），
-                // 上下移两枚按钮保留在同一行右侧，作为无障碍与「拖不动」时的回退路径。
-                ThemeGroupItem() {
-                  Column() {
-                    Text('主导航顺序').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
-                    List() {
-                      ForEach(this.navigationOrderRoutes(), (navRoute: string, index: number) => {
-                        ListItem() {
-                          Row() {
-                            AppGlyph({ name: 'list', tint: this.themeColorTextTertiary, glyphSize: 18 })
-                              .margin({ right: 8 })
-                            Text(mainNavigationLabel(navRoute)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-                            Button('上移').fontSize(LABEL_MEDIUM).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
-                            Button('下移').fontSize(LABEL_MEDIUM).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
-                          }
-                          .width('100%')
-                          .padding({ left: 16, right: 16, top: 6, bottom: 6 })
-                          .alignItems(VerticalAlign.Center)
-                        }
-                        .accessibilityText(`${mainNavigationLabel(navRoute)}，第 ${index + 1} 项`)
-                      }, (navRoute: string) => navRoute)
-                    }
-                    .width('100%')
-                    .editMode(true)
-                    .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
-                      this.draggingRoute = this.navigationOrderRoutes()[itemIndex];
-                    })
-                    .onItemDrop((_event: ItemDragInfo, itemIndex: number, insertIndex: number, isSuccess: boolean) => {
-                      if (!isSuccess) { return; }
-                      this.onNavigationReorder(itemIndex, insertIndex);
-                      this.draggingRoute = '';
-                    })
-                  }.width('100%')
-                }
-                // 导航栏图标：上游 `MainNavigationSettingsSheet.kt:90-96` 的
-                // `CompactClickableSettingItem('导航图标', description = 自定义数量文案)`，
-                // 点开 `NavIconManageSheet`。数量文案取上游 `theme_config_nav_icons_custom_count`。
-                ThemeGroupItem() {
-                  UiAction({showDivider: false,
-                    title: '导航栏图标',
-                    detail: this.navIconSummary(),
-                    onSelect: () => { this.activeSheet = 'navIcon'; }
-                  })
-                }
-              }
-              .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+            // 平板界面：上游 `AppShellSettings` 的 tabletInterface 档位，决定底栏还是左侧栏。
+            // 四档判据（自动/始终侧栏/横屏侧栏/始终底栏）在 data/MainNavigationSettings.ets。
+            ThemeGroupItem() {
+              UiDropdown({showDivider: false,
+                title: '平板界面',
+                option: this.tabletInterface,
+                options: TABLET_INTERFACE_VALUES,
+                labelOf: (value: string) => tabletInterfaceLabel(value),
+                onSelect: (value: string) => this.onTabletInterfaceChange(value)
+              })
             }
             ThemeGroupItem() {
               ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
@@ -1063,10 +1033,15 @@ export struct ThemeSettingsPage {
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.SheetContent(), {
-        height: 620,
+        // 面板高度按内容取：字体/导航图标/启动图标是三行以上长列表，给 620；
+        // 背景图片与首页与导航是定长内容，FIT_CONTENT 才不留大片空白。
+        height: this.sheetHeight(),
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        // 上游 `AppModalBottomSheet.kt:62` `sheetContainerColor = surfaceContainer`
+        // （本地 `themeColorSurfaceTertiary`）。用 `surfaceContainerHigh`
+        // （`themeColorSurfaceElevated`）会与面板里的卡片同色，卡片边界看不出来。
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.activeSheet = ''; }
       })
   }

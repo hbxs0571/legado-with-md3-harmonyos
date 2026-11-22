@@ -216,14 +216,18 @@ export function normalizeBookInfoBackground(value: string): string {
 
 /** 字体缩放夹取到 8..16，非法值回落到默认 10。 */
 /**
- * 背景图虚化半径归一（0..40）。上游 `ThemeSettings.kt:54 backgroundImageBlurring: Int = 0`，
- * 界面滑块上限 40（`ThemeConfigScreen.kt:828-880` 的 BackgroundImageManageSheet）。
+ * 背景图虚化半径归一（0..100）。
+ *
+ * 上游 `ThemeSettings.kt:54 backgroundImageBlurring: Int = 0`，面板滑块范围是
+ * `valueRange = 0f..100f`（`ui/config/themeConfig/BackgroundImageManageSheet.kt:106` 与 `:115`），
+ * 渲染侧 `ui/theme/AppBackground.kt:37` 直接 `blur(blur.dp)`。本地上限此前误取 40，
+ * 与上游面板范围对不上，这里按上游改成 100。
  */
 export function normalizeBackgroundBlur(value: number): number {
   if (!Number.isFinite(value)) { return 0; }
   const rounded = Math.round(value);
   if (rounded < 0) { return 0; }
-  return rounded > 40 ? 40 : rounded;
+  return rounded > 100 ? 100 : rounded;
 }
 
 export function normalizeFontScale(value: number): number {
