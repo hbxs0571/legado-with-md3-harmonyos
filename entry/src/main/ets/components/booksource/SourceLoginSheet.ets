@@ -498,8 +498,11 @@ export struct SourceLoginSheet {
           onItemClick: () => { this.cycleToggle(item, index); }
         })
       } else {
-        // 上游 LoginRowUi.Text → AppTextField(label=row.title, singleLine)，是 M3 filled 文本框
-        // （顶部圆角 + 底部指示线 + 浮动 label），不是「上方说明文字 + 下方输入框」。
+        // 上游 LoginRowUi.Text → AppTextField(label=row.title, singleLine)，是 M3 filled 文本框：
+        // label 在框内、聚焦时上浮到框上方。ArkUI 的 TextInput 没有 floating label 能力，
+        // 这里把 label 放在输入框上方（等价于聚焦态的位置），顺序与上游一致。
+        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').margin({ bottom: 4 })
         TextInput({ text: item.value })
           .type(item.type === 'password' ? InputType.Password : InputType.Normal)
           .placeholderColor(this.themeColorTextTertiary)
@@ -508,8 +511,6 @@ export struct SourceLoginSheet {
           .borderRadius({ topLeft: 4, topRight: 4 })
           .border({ width: { bottom: 1 }, color: this.themeColorTextTertiary })
           .onChange((value: string) => { this.items[index].value = value; })
-        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
-          .width('100%').margin({ top: 4 })
       }
     }.width('100%')
   }

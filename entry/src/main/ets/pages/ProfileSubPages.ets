@@ -1886,6 +1886,17 @@ export struct BookSourceManagePage {
           // 其 M3 分支（AppModalBottomSheet.kt:145-153）只有 DragHandle，没有右上关闭按钮。
           showClose: false,
           backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+          // 上游 GroupManageBottomSheet.kt:83-86 用 BackHandler：分组管理处于选择态时按返回键
+          // 只退出选择态、不关弹层。bindSheet 的系统返回键默认直接关 sheet，这里用 onWillDismiss
+          // 拦下 PRESS_BACK（common.d.ts:12287 明确「Touching the Back button」）自行处理。
+          onWillDismiss: (action: DismissSheetAction) => {
+            if (this.groupManageVisible && this.groupManageSelectionMode) {
+              this.groupManageSelectionMode = false;
+              this.groupManageSelected = new Set<string>();
+              return;
+            }
+            action.dismiss();
+          },
           onDisappear: () => {
             this.showGroupFilter = false;
             this.batchPanelVisible = false;
