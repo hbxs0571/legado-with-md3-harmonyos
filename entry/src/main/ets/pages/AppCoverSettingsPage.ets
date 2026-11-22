@@ -32,6 +32,7 @@ import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_
  */
 @Component
 export struct AppCoverSettingsPage {
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
@@ -436,7 +437,7 @@ export struct AppCoverSettingsPage {
         height: 620,
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.activeSheet = ''
       })
   }

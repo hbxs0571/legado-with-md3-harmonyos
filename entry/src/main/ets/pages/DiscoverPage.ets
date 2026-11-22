@@ -8,6 +8,7 @@ import { ExploreCoordinator, ExploreOutcome } from '../bookSource/ExploreCoordin
 import { ExploreMenu } from '../bookSource/ExploreMenuParser';
 import { SearchBookItem } from '../bookSource/SourceModels';
 import { MergedBook } from '../bookSource/SearchResultMerger';
+import { cardRadiusOf } from '../data/ThemeCardStyle';
 import { Book } from '../model/Book';
 import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
@@ -26,6 +27,13 @@ struct ExploreBookCard {
     intro: '', lastChapter: '', wordCount: '', updateTime: '', tocUrl: ''
   };
   onSelect: () => void = () => {};
+  /**
+   * 形状两键：卡片容器跟随「覆盖卡片圆角」。上游 `DiscoverScreen` 用 `SearchBookListItem`
+   * （`SearchBookItem.kt:68`，本身不带卡片底），本地这张卡是自造的容器，未覆盖时保留 14，
+   * 打开覆盖后与其它页卡片一起被全局值统一。
+   */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
 
   build() {
     Row() {
@@ -49,7 +57,7 @@ struct ExploreBookCard {
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
     }.width('100%').padding(12)
       .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
-      .borderRadius(14).margin({ left: 16, right: 16, bottom: 9 })
+      .borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 14)).margin({ left: 16, right: 16, bottom: 9 })
       .onClick(() => this.onSelect())
   }
 }

@@ -360,6 +360,7 @@ export struct ExploreKindItem {
       }
     })
     .bindSheet(this.errorVisible, this.ErrorSheet(), {
+      backgroundColor: this.themeColorSurfaceTertiary,
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
       showClose: false,

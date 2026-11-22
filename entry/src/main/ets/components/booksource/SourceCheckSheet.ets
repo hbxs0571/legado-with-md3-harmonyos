@@ -43,6 +43,7 @@ export struct SourceCheckSheet {
     this.checkContent = this.options.checkContent;
   }
 
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
@@ -173,7 +174,7 @@ export struct SourceCheckSheet {
         dragBar: true,
         // 上游 AppModalBottomSheet.kt:145-153 的 M3 分支只画 DragHandle，没有右上关闭按钮。
         showClose: false,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.visible = false; }
       })
   }

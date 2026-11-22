@@ -1,4 +1,5 @@
 import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
+import { cardRadiusOf } from '../data/ThemeCardStyle';
 import curves from '@ohos.curves';
 import { Book } from '../model/Book';
 import { BookRepository } from '../data/BookRepository';
@@ -17,6 +18,7 @@ const HOME_MENU_WIDTH: number = 260;
 
 @Component
 export struct HomePage {
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
@@ -31,6 +33,13 @@ export struct HomePage {
    */
   @StorageProp('themeUseFloatingBottomBar') themeUseFloatingBottomBar: boolean = false;
   @StorageProp('themeEnableBlur') themeEnableBlur: boolean = false;
+  /**
+   * 形状两键。首页四张卡在上游都是 `GlassCard`（`HomepageModuleFeed.kt:193` 等）且不传
+   * `cornerRadius`，走默认值；`GlassCard.kt:78-82` 在「覆盖卡片圆角」打开时用全局值覆盖。
+   * 本地这四张卡各写了一个接近值，未覆盖时保留它们，覆盖时统一跟随。
+   */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   @Prop books: Book[] = [];
   @Prop totalReadTimeMs: number = 0;
   // 今日阅读目标：由 Index 从偏好与今日阅读记录灌入，本页只显示与编辑（回写走 onGoalChange）。
@@ -153,6 +162,16 @@ export struct HomePage {
     return this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
   }
 
+  /**
+   * 首页卡片圆角。四张卡（最近阅读 / 今日目标 / WebDAV 备份 / 摘要）在上游都不传
+   * `cornerRadius`，走 `MiuixCardDefaults.CornerRadius`；本地此前分别写死 17/16/16/14。
+   * 未开「覆盖卡片圆角」时保留这些值（与上游「不传即默认」的观感一致），
+   * 打开后统一由全局值接管（`GlassCard.kt:78-82`）。
+   */
+  private homeCardRadius(perCardRadius: number): number {
+    return cardRadiusOf(this.themeCardOverride, this.themeCardRadius, perCardRadius);
+  }
+
   private getRecentBook(): Book {
     const localBooks = this.getLocalBooks();
     for (let index = localBooks.length - 1; index >= 0; index--) {
@@ -271,7 +290,7 @@ export struct HomePage {
             Progress({ value: this.getRecentBookProgress(this.getRecentBook()), total: 100, type: ProgressType.Linear })
               .width('100%').height(3).color(this.themeColorAccent).backgroundColor('#3A3B43')
               .animation({ duration: 300, curve: Curve.EaseInOut })
-            }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(17).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+            }.width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(17)).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.openBook(this.getRecentBook()))
           } else if (this.visibleSections.includes('recentBook')) {
             Column() {
@@ -283,7 +302,7 @@ export struct HomePage {
               Text('暂无阅读记录').fontSize(TITLE_SMALL).fontColor('#AEB0BA').alignSelf(ItemAlign.Center)
               Blank().layoutWeight(1)
             }.width('100%').height(160).padding({ left: 16, right: 16, top: 16, bottom: 14 }).justifyContent(FlexAlign.Center)
-              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(17).alignItems(HorizontalAlign.Center).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(17)).alignItems(HorizontalAlign.Center).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           if (this.visibleSections.includes('totalBooks') || this.visibleSections.includes('totalTime')) {
             Row() {
@@ -325,7 +344,7 @@ export struct HomePage {
                 Text('分钟').fontSize(BODY_SMALL).fontColor('#B6B8C2').margin({ top: 3 })
               }.width('100%').alignItems(HorizontalAlign.Center).margin({ bottom: 20 })
           }.width('100%').height(136)
-          }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16).margin({ top: 12 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(16)).margin({ top: 12 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           if (this.visibleSections.includes('backup')) {
           Column() {
@@ -362,7 +381,7 @@ export struct HomePage {
               }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
                 .onClick(() => this.onOpenBackup())
             }.margin({ top: 12 })
-          }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(16).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(16)).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           Column({ space: 12 }) {
             AppGlyph({ name: 'add', tint: this.themeColorTextSecondary, glyphSize: 32 })
@@ -370,7 +389,7 @@ export struct HomePage {
             Row() {
               Text('浏览书源模块添加').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             }.padding({ left: 16, right: 16, top: 8, bottom: 8 })
-              .backgroundColor(this.themeColorSurfaceElevated).borderRadius(14)
+              .backgroundColor(this.themeColorSurfaceElevated).borderRadius(this.homeCardRadius(14))
               .onClick(() => this.onUnavailableAction('浏览书源模块尚未迁移'))
           }.width('100%').constraintSize({ minHeight: 220 }).justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
@@ -421,7 +440,7 @@ export struct HomePage {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.showHomeOptions = false; this.showGoalDialog = false; }
       })
   }
@@ -501,6 +520,9 @@ struct SummaryCard {
   @Prop unit: string = '';
   onSelect: () => void = () => {};
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
+  /** 形状两键：摘要卡在上游也是不传 cornerRadius 的 GlassCard，理由见 HomePage.homeCardRadius()。 */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   build() {
     Row() {
       AppGlyph({ name: this.icon, tint: this.themeColorAccent, glyphSize: 20 }).margin({ right: 12 })
@@ -512,7 +534,7 @@ struct SummaryCard {
         }
       }.alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 8 })
-      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(14).onClick(() => this.onSelect()).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 14)).onClick(() => this.onSelect()).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
   }
 }
 

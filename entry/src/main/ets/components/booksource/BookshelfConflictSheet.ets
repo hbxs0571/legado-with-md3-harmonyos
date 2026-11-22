@@ -363,6 +363,7 @@ export struct BookshelfConflictSheet {
     .padding({ left: SPACE_16, right: SPACE_16, top: SPACE_16, bottom: SPACE_12 })
     .alignItems(HorizontalAlign.Start)
     .bindSheet(this.showOptions && this.hasConflict(), this.OptionsPanel(), {
+      backgroundColor: this.themeColorSurfaceTertiary,
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
       showClose: false,

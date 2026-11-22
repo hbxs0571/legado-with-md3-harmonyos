@@ -383,7 +383,7 @@ export struct TxtTocRulePreviewPage {
         height: 520,
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.sheetRuleName = ''
       })
   }

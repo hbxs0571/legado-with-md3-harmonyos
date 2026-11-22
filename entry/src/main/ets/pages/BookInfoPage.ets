@@ -6,6 +6,7 @@ import { BookRepository } from '../data/BookRepository';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/BookInfoBackdropStyle';
+import { cardRadiusOf } from '../data/ThemeCardStyle';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 import { lerpHexColor, withAlphaHex } from '../data/ColorLerp';
 import { ProgressiveBackdrop } from '../components/ProgressiveBackdrop';
@@ -52,6 +53,13 @@ export struct BookInfoPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /**
+   * 形状两键：详情页里的卡片（同名冲突面板的候选卡、缺正文提示条、阅读记录累计卡）
+   * 在上游都是不传 `cornerRadius` 的 `GlassCard`，跟随「覆盖卡片圆角」开关
+   * （`GlassCard.kt:78-82`）。按钮、标签、FAB 不算卡片，仍用各自字面值。
+   */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   /**
    * 状态栏高度（vp）。打开全屏布局后本页内容画到状态栏底下，
    * 自绘顶栏与头部占位都要让出这一段，否则返回键与状态栏文字重叠。
@@ -862,7 +870,7 @@ export struct BookInfoPage {
               .layoutWeight(1).padding({ top: 10, bottom: 10 }).backgroundColor('#B9C6FF').borderRadius(12)
               .margin({ left: 10 }).onClick(() => this.applyShelfConflictChoice(this.bookKey(item), 'migrate'))
           }.width('100%').margin({ top: 8 })
-        }.width('100%').padding(12).borderRadius(14).backgroundColor('#1B1C24')
+        }.width('100%').padding(12).borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 14)).backgroundColor('#1B1C24')
           .margin({ top: 10 })
       }, (item: Book) => item.id)
       Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
@@ -1465,7 +1473,7 @@ export struct BookInfoPage {
                   .fontSize(BODY_SMALL).lineHeight(BODY_SMALL_LINE_HEIGHT).fontColor(this.themeColorTextTertiary).margin({ top: 8 })
               }
             }.width('100%').alignItems(HorizontalAlign.Start).padding(16)
-              .backgroundColor('#2A1D20').borderRadius(16).margin({ left: 16, right: 16, bottom: 14 })
+              .backgroundColor('#2A1D20').borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 16)).margin({ left: 16, right: 16, bottom: 14 })
           }
 
           Column() {
@@ -1616,7 +1624,7 @@ export struct BookInfoPage {
               Text('累计阅读').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
               Text(this.readRecordPanel.totalLabel).fontSize(HEADLINE_LARGE).fontWeight(FontWeight.Bold)
                 .fontColor(this.themeColorAccent).margin({ top: 6 })
-            }.width('100%').padding(16).backgroundColor('#292A31').borderRadius(14)
+            }.width('100%').padding(16).backgroundColor('#292A31').borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 14))
               .alignItems(HorizontalAlign.Start)
             if (this.readRecordPanel.days.length === 0) {
               Text('暂无阅读记录').fontSize(TITLE_SMALL).fontColor('#AEB0BA')
@@ -1674,7 +1682,7 @@ export struct BookInfoPage {
         height: this.logSheetVisible ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => {
           if (this.deleteSheetVisible) {
             this.deleteSheetVisible = false;
@@ -1735,6 +1743,9 @@ struct BookInfoAction {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  /** 形状两键：功能卡在上游是 `BookInfoScreen.kt:1506` 的 `GlassCard`（不传 cornerRadius），跟随覆盖开关。 */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   @Prop icon: AppGlyphName = 'book';
   @Prop label: string = '';
   /** 冲突态：底色用 secondaryContainer 档（本地降级成 surfaceElevated）。 */
@@ -1760,7 +1771,7 @@ struct BookInfoAction {
       .backgroundColor(this.themeAppBackground.length > 0
         ? Color.Transparent
         : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
-      .borderRadius(16)
+      .borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 16))
       .onClick(() => this.onSelect())
       .gesture(LongPressGesture({ duration: 500 }).onAction(() => this.onLongPress()))
   }

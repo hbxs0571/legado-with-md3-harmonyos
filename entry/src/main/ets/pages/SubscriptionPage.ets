@@ -2,6 +2,7 @@ import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import curves from '@ohos.curves';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
+import { cardRadiusOf } from '../data/ThemeCardStyle';
 import { BODY_SMALL, LABEL_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
@@ -18,6 +19,9 @@ export struct SubscriptionPage {
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
+  /** 形状两键：规则/收藏两个入口卡跟随「覆盖卡片圆角」（上游 RssScreen.kt:216/243 的 GlassCard 不传 cornerRadius）。 */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onOpenRules: () => void = () => {};
   onOpenFavorites: () => void = () => {};
@@ -126,13 +130,13 @@ export struct SubscriptionPage {
               AppGlyph({ name: 'ruleSubscription', glyphSize: 18, tint: '#C5C7D0' })
               Text('规则').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
-              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(13).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 13)).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenRules())
             Row() {
               AppGlyph({ name: 'favoriteStar', glyphSize: 18, tint: '#C5C7D0' })
               Text('收藏').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
             }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(12)
-              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(13).margin({ left: 10 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+              .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 13)).margin({ left: 10 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
               .onClick(() => this.onOpenFavorites())
           }.width('100%').padding({ left: 16, right: 16, top: this.collapsedHeader ? 16 : 1, bottom: 14 })
 

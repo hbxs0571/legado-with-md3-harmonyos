@@ -54,6 +54,7 @@ export struct BookshelfManagePage {
   /** 批10（:564）：选择模式「批量换源」，交给 Index 打开 BatchChangeSourceSheet。 */
   onBatchChangeSource: (books: Book[]) => void = (_books: Book[]) => {};
 
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#F1F2F6';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#AEB0BA';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#858792';
@@ -1024,7 +1025,7 @@ export struct BookshelfManagePage {
       .bindSheet(this.showDeleteConfirm || this.showExportSheet || this.showGroupSelect || this.showLogSheet ||
         this.showSegmentedExport,
         this.ManageSheet(), {
-          height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, backgroundColor: '#17181E',
+          height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
           onDisappear: () => {
             this.showDeleteConfirm = false;
             this.showExportSheet = false;

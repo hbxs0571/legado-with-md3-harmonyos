@@ -79,6 +79,7 @@ export struct AppTranslationSettingsPage {
 
 @Component
 struct TranslationSettingsChoice {
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -125,7 +126,7 @@ struct TranslationSettingsChoice {
       .onClick(() => { if (!this.disabled) { this.showOptions = true; } })
       .bindSheet(this.showOptions, this.ChoiceSheet(), {
         height: SheetSize.FIT_CONTENT,
-        dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceSecondary,
+        dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.showOptions = false
       })
   }

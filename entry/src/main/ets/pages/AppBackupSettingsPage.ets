@@ -11,6 +11,7 @@ import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LIN
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
 @Component
 export struct AppBackupSettingsPage {
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -237,7 +238,7 @@ export struct AppBackupSettingsPage {
         height: 520,
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceSecondary,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.activeSheet = ''
       })
   }

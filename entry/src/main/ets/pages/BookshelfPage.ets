@@ -21,6 +21,7 @@ import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
+import { cardRadiusOf } from '../data/ThemeCardStyle';
 import { AppLog, AppLogEntry } from '../lib/AppLog';
 import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
 import { window } from '@kit.ArkUI';
@@ -121,6 +122,18 @@ export struct BookshelfPage {
   @StorageProp('themeColorCardContainer') themeColorCardContainer: string = '#FFFFFF';
   /** 卡片色输入框未设置时的初始色。上游 `BookshelfConfigSheet.kt:677` 用 `surfaceVariant`。 */
   @StorageProp('themeColorSurfaceVariant') themeColorSurfaceVariant: string = '#E1E4D5';
+  /**
+   * 形状四键。上游 `GlassCard.kt:78-96` 的 BaseCard 是
+   * `if (overrideBaseCardCornerRadius) baseCardCornerRadius.dp else cornerRadius`，
+   * 也就是「覆盖没开时用调用点自己写的值」。书架书卡对应 `BookItem.kt:184` 的 8.dp，
+   * 分组卡对应 `GroupManageSheet.kt:310` 的 12.dp —— 这两个数只有未覆盖时生效，
+   * 覆盖打开后统一被 `themeCardRadius` 吃掉，所以要把「覆盖开关」也订阅下来。
+   */
+  @StorageProp('themeCardOverride') themeCardOverride: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderOverride') themeCardBorderOverride: boolean = false;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -1460,7 +1473,7 @@ export struct BookshelfPage {
                   .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 4 }).width('100%')
-              }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(14)
+              }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(this.groupCardRadius())
                 .alignItems(HorizontalAlign.Start)
                 // 内置分组没有可编辑字段（上游对内置行也不给编辑入口），点了不打开编辑面板。
                 .onClick(() => {
@@ -1838,6 +1851,19 @@ export struct BookshelfPage {
     const color = this.readerNightMode
       ? this.layout.bookshelfCardColorDark : this.layout.bookshelfCardColor;
     return color === 0 ? this.themeColorCardContainer : bookshelfCardIntToHex(color);
+  }
+
+  /**
+   * 书架卡片圆角。上游 `BookItem.kt:184` 写 `NormalCard(cornerRadius = 8.dp)`，
+   * `GlassCard.kt:78-82` 在「覆盖卡片圆角」打开时把它换成全局 `baseCardCornerRadius`。
+   */
+  private bookCardRadius(): number {
+    return cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 8);
+  }
+
+  /** 分组卡片圆角。上游 `GroupManageSheet.kt:310` 写 `GlassCard(cornerRadius = 12.dp)`。 */
+  private groupCardRadius(): number {
+    return cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 12);
   }
 
   /** 紧凑样式下封面内标题的渐变黑底，对齐上游 BookItem.kt:123-131 的垂直渐变。 */
@@ -2879,7 +2905,7 @@ export struct BookshelfPage {
                 }
               }.width('100%').alignItems(HorizontalAlign.Center)
                 .backgroundColor(this.cardBackgroundColor())
-                .borderRadius(8)
+                .borderRadius(this.bookCardRadius())
                 // 按下轻缩：书卡面积大，0.96 只缩 4%，比 LIGHT 默认的 0.9 克制。
                 // 不用 stateStyles 换底色——卡片底色由封面/主题决定，换色会盖掉卡片自身的层次。
                 .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
@@ -3011,7 +3037,7 @@ export struct BookshelfPage {
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet || this.showPasswordPanel, this.ShelfSheetContent(), {
-        height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: '#17181E',
+        height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; this.showPasswordPanel = false; }
       })
 

@@ -4233,6 +4233,11 @@ struct Index {
     AppStorage.setOrCreate('themeCardRadius', resolveCardCornerRadius(snapshot, CARD_RADIUS_DEFAULT));
     AppStorage.setOrCreate('themeCardBorderWidth', resolveCardBorderWidth(snapshot, 0));
     AppStorage.setOrCreate('themeCardBorderColor', resolveCardBorderColor(snapshot, isDark));
+    // 两个「覆盖开关」单独广播：`themeCardRadius` / `themeCardBorderWidth` 已经是解析后的值，
+    // 页面拿不到「覆盖有没有打开」，就无法还原上游 `NormalCard(cornerRadius = 8.dp)` 的语义
+    // ——未覆盖时用调用点自己写的 8，覆盖时才用全局值（GlassCard.kt:78-92）。
+    AppStorage.setOrCreate('themeCardOverride', snapshot.overrideBaseCardCornerRadius);
+    AppStorage.setOrCreate('themeCardBorderOverride', snapshot.overrideBaseCardBorder);
     AppStorage.setOrCreate('themeCardBackground', resolveCardBackgroundColor(snapshot, isDark));
     AppStorage.setOrCreate('themeDividerWidth', resolveDividerWidth(snapshot));
     AppStorage.setOrCreate('themeDividerLength', resolveDividerLength(snapshot));

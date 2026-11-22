@@ -28,6 +28,7 @@ export struct SourceCheckRunSheet {
   /** 开始校验（上游 endAction → onConfirm）。 */
   onConfirm: (keyword: string) => void = (_keyword: string) => {};
 
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
@@ -133,7 +134,7 @@ export struct SourceCheckRunSheet {
         // 上游 CheckBookSourceSheet 走 AppModalBottomSheet，M3 分支（AppModalBottomSheet.kt:145-153）
         // 只画 DragHandle、无右上关闭按钮；bindSheet 的 showClose 默认 true 会多画一个 ×。
         showClose: false,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.visible = false; }
       })
   }

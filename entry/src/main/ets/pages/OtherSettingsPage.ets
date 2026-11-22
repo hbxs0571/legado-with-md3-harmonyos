@@ -17,6 +17,7 @@ const OTHER_SETTINGS_MENU_WIDTH: number = 260;
 
 @Component
 export struct OtherSettingsPage {
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
@@ -248,7 +249,7 @@ export struct OtherSettingsPage {
         height: this.activeSheet === 'directLink' ? 620 : 300,
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.activeSheet = ''
       })
   }

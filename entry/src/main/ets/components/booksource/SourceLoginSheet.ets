@@ -935,7 +935,7 @@ export struct SourceLoginSheet {
         showClose: false,
         // 同登录头：上游点 scrim 关闭，本地必须保持 enableOutsideInteractive 默认 false。
         enableOutsideInteractive: false,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => {
           this.visible = false;
           if (this.suppressClose) {
@@ -959,7 +959,7 @@ export struct SourceLoginSheet {
         // enableOutsideInteractive=true 是「允许与弹层外部交互」= 点击穿透到下层、
         // 弹层不关（实测点遮罩截图 sha256 不变）；要「点遮罩关闭」必须保持默认 false。
         enableOutsideInteractive: false,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         // 上游 SourceLoginViewModel.kt:99-102 DismissSheet：关掉登录头后
         // activeSheet 回到 Form（form 模式）或 null（web 模式）。这里同样回到主弹层。
         onDisappear: () => {
@@ -977,7 +977,7 @@ export struct SourceLoginSheet {
         // 上游 AppLogSheet 走 AppModalBottomSheet，M3 分支无右上关闭按钮。
         showClose: false,
         enableOutsideInteractive: false,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => {
           this.logSheetVisible = false;
           // 上游 SourceLoginViewModel.kt:99-102 DismissSheet：form 模式回到表单。

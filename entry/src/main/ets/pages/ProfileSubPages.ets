@@ -1925,7 +1925,7 @@ export struct BookSourceManagePage {
           // 上游 BookSourceGroupFilterSheet 与导入弹层都走 AppModalBottomSheet，
           // 其 M3 分支（AppModalBottomSheet.kt:145-153）只有 DragHandle，没有右上关闭按钮。
           showClose: false,
-          backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+          backgroundColor: this.themeColorSurfaceTertiary,
           // 上游 GroupManageBottomSheet.kt:83-86 用 BackHandler：分组管理处于选择态时按返回键
           // 只退出选择态、不关弹层。bindSheet 的系统返回键默认直接关 sheet，这里用 onWillDismiss
           // 拦下 PRESS_BACK（common.d.ts:12287 明确「Touching the Back button」）自行处理。
@@ -2488,7 +2488,7 @@ export struct ReplaceRulesPage {
         height: this.ruleActionSheet === 'confirmDelete' ? SheetSize.FIT_CONTENT : SheetSize.MEDIUM,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.ruleActionSheet = ''
       })
   }
@@ -2963,7 +2963,7 @@ export struct ReplaceRuleEditPage {
         height: SheetSize.MEDIUM,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.activeSheet = ''
       })
   }
@@ -3811,7 +3811,7 @@ export struct TxtTocRulesPage {
         height: 620,
         dragBar: true,
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.showAddRule = false
       })
       .bindSheet(this.confirmSheet === 'confirmDelete', this.DeleteConfirmSheet(), {
@@ -3819,7 +3819,7 @@ export struct TxtTocRulesPage {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.confirmSheet = ''
       })
   }
@@ -4150,7 +4150,7 @@ export struct DictionaryRulesPage {
         height: SheetSize.LARGE,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.showRuleEditor = false; this.showPasteAuthorization = false; }
       })
   }
@@ -4603,7 +4603,7 @@ export struct HighlightTagRulesPage {
         height: SheetSize.LARGE,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => { this.showRuleEditor = false; this.showPasteAuthorization = false; }
       })
   }
@@ -6573,7 +6573,7 @@ export struct ReadRecordsPage {
         height: (this.showClearConfirm || this.showDeleteConfirm) ? SheetSize.FIT_CONTENT : (this.showCalendarSheet ? 570 : 500),
         dragBar: !(this.showClearConfirm || this.showDeleteConfirm),
         showClose: false,
-        backgroundColor: this.themeColorSurfaceElevated,
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => {
           this.showActionsSheet = false; this.showCalendarSheet = false;
           this.showClearConfirm = false; this.showDeleteConfirm = false; this.showMergeSheet = false;
@@ -7648,6 +7648,7 @@ struct SettingsPageHeader {
 
 @Component
 export struct AiChatPage {
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
@@ -7788,7 +7789,7 @@ export struct AiChatPage {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
-        backgroundColor: '#17181E',
+        backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => this.showReasoningSheet = false
       })
   }

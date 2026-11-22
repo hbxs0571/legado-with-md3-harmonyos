@@ -765,7 +765,7 @@ export struct ExploreShowPage {
       height: this.kindSheetVisible ? SheetSize.MEDIUM : SheetSize.FIT_CONTENT,
       dragBar: true,
       showClose: false,
-      backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+      backgroundColor: this.themeColorSurfaceTertiary,
       onDisappear: () => {
         this.layoutSheetVisible = false;
         this.kindSheetVisible = false;

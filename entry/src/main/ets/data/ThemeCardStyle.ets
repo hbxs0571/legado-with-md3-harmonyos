@@ -176,6 +176,29 @@ export function resolveCardBorderColor(snapshot: ThemeCardStyleSnapshot, isDark:
 }
 
 /**
+ * 给「持有 `@StorageProp` 的组件」用的圆角解析：把「覆盖开关」与「全局圆角」两个广播键
+ * 折成调用点要的那个数。
+ *
+ * 上游 `GlassCard.kt:78-82` / `NormalCard` 的写法是
+ * `if (overrideBaseCardCornerRadius) baseCardCornerRadius.dp else cornerRadius`，
+ * 即未覆盖时保留调用点自己写的值（书架书卡 8、面板卡 12、设置组 16 各不相同），
+ * 覆盖时才被全局值统一吃掉。组件只能拿到解析后的 `themeCardRadius`，拿不到
+ * 「覆盖有没有开」，所以这里把三个数一起收。
+ */
+export function cardRadiusOf(override: boolean, globalRadius: number, perCardRadius: number): number {
+  return override ? globalRadius : perCardRadius;
+}
+
+/**
+ * 边框宽度的同一套折法。上游 `GlassCard.kt:83-96`：不覆盖时保留调用点自己的 `BorderStroke`，
+ * 覆盖时用 `baseCardBorderWidth`（可选 `forcedBorderWidthExtra` 加粗）。
+ */
+export function cardBorderWidthOf(override: boolean, globalWidth: number, perCardWidth: number,
+  extraWidth: number = 0): number {
+  return override ? globalWidth + extraWidth : perCardWidth;
+}
+
+/**
  * 从 AppStorage 读取当前卡片外观快照，给不在 Index 里、无法持有 @State 的组件用。
  *
  * Index.ets 的 publishThemeCardStyle() 把完整快照写到 'themeCardStyleSnapshot' 键；

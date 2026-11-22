@@ -549,6 +549,7 @@ export struct BookSourceDebugPage {
     .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
     .bindSheet($$this.detailSheetVisible, this.DetailSheetBuilder(), {
       // 上游 heightIn(max = 容器高 * 0.8) + animateContentSize：内容多高就多高，上限 80%。
+      backgroundColor: this.themeColorSurfaceTertiary,
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
       // 上游 AboutSheets.kt:33-60 的 MarkdownSheet 只有标题 + 内容，没有右上关闭按钮；
