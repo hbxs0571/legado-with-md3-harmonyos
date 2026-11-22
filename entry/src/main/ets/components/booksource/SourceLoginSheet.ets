@@ -20,9 +20,9 @@ import { BookSourceRepository } from '../../data/BookSourceRepository';
 import {
   BookSourceLoginCoordinator, LoginPrepare, LoginSubmitResult
 } from '../../bookSource/BookSourceLoginCoordinator';
-import { LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
+import { LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
 import { UiMenuItem, UiMenuPanel } from '../UiMenu';
-import { AppGlyph } from '../AppGlyph';
+import { AppGlyph, AppGlyphName } from '../AppGlyph';
 import { MarkdownIntro } from '../MarkdownIntro';
 
 /** 表单项的本地可变副本（引擎 BookSourceLoginItem 字段只读投影到 state）。 */
@@ -59,6 +59,103 @@ class FormItemStyle {
   basisPercent: number = -1;
   wrapBefore: boolean = false;
   justify: string = 'auto';
+}
+
+/**
+ * button / toggle / select 三类登录控件的壳，照上游 ExploreKindItem.kt:46-145：
+ * GlassCard(cornerRadius 12dp, containerColor=surface) 包一层 Box(fillMaxWidth,
+ * heightIn(min), padding vertical 8)，文字 labelMediumEmphasized 居中、右侧 trailingIcon
+ * 14dp 贴 CenterEnd（文字右侧让出 18dp）。三者只有 trailingIcon 与点击行为不同：
+ * button=KeyboardArrowRight 执行 action、toggle=Refresh 循环 chars、select=UnfoldMore 弹菜单。
+ * 抽成独立 @Component 是为了点击后 @Prop 变化能真的刷新（@Builder 按值传参不重建）。
+ */
+@Component
+struct LoginKindItem {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#FDFBFF';
+  @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#C4C6D0';
+
+  @Prop label: string = '';
+  /** 空串表示不画尾部图标。 */
+  @Prop glyphName: string = '';
+  /** 上游 textAlign：justifySelf === 'right' 时文字靠右。 */
+  @Prop alignEnd: boolean = false;
+  @Prop itemEnabled: boolean = true;
+  /** 非空表示 select 型：点击弹选项菜单，而不是直接执行 action。 */
+  @Prop options: string[] = [];
+  onItemClick: () => void = () => {};
+  onOptionPick: (option: string) => void = (_option: string) => {};
+
+  @State private menuVisible: boolean = false;
+
+  private optionItems(): UiMenuItem[] {
+    const list: UiMenuItem[] = [];
+    for (const option of this.options) {
+      list.push({ key: option, title: option });
+    }
+    return list;
+  }
+
+  @Builder OptionMenu() {
+    UiMenuPanel({
+      items: this.optionItems(),
+      panelWidth: 200,
+      onSelect: (key: string) => {
+        this.menuVisible = false;
+        this.onOptionPick(key);
+      }
+    })
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.Center }) {
+      // 上游 KindText：Box(fillMaxWidth, heightIn(min), padding vertical 8) 里文字 fillMaxWidth
+      // 居中（有 trailingIcon 时 padding end 18dp 让位），图标绝对贴在 CenterEnd + padding end 8dp。
+      Text(this.label)
+        .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(this.alignEnd ? TextAlign.End : TextAlign.Center)
+        .width('100%')
+        .padding({ left: 12, right: this.glyphName.length > 0 ? 30 : 12 })
+      if (this.glyphName.length > 0) {
+        Row() {
+          AppGlyph({
+            name: this.glyphName as AppGlyphName,
+            glyphSize: 14,
+            tint: this.themeColorOutlineVariant
+          })
+        }
+        .width('100%')
+        .padding({ right: 8 })
+        .justifyContent(FlexAlign.End)
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 44 })
+    .padding({ top: 8, bottom: 8 })
+    .backgroundColor(this.themeColorSurfacePrimary)
+    .borderRadius(12)
+    .opacity(this.itemEnabled ? 1 : 0.38)
+    .accessibilityText(this.label)
+    .onClick(() => {
+      if (!this.itemEnabled) { return; }
+      if (this.options.length > 0) {
+        this.menuVisible = true;
+      } else {
+        this.onItemClick();
+      }
+    })
+    .bindPopup(this.menuVisible, {
+      builder: () => { this.OptionMenu(); },
+      placement: Placement.Bottom,
+      enableArrow: false,
+      autoCancel: true,
+      onStateChange: (event: PopupStateChangeParam) => {
+        if (!event.isVisible) { this.menuVisible = false; }
+      }
+    })
+  }
 }
 
 @Component
@@ -319,14 +416,6 @@ export struct SourceLoginSheet {
     }
   }
 
-  private selectOptions(chars: string[]): SelectOption[] {
-    const options: SelectOption[] = [];
-    for (const c of chars) {
-      options.push({ value: c });
-    }
-    return options;
-  }
-
   private async runItemAction(item: FormItem): Promise<void> {
     if (item.action.trim().length === 0) { return; }
     if (/^https?:\/\//i.test(item.action.trim())) {
@@ -354,34 +443,40 @@ export struct SourceLoginSheet {
     Column() {
       if (item.type === 'button') {
         // 上游 SourceLoginSheets.kt:223-242 把 button 交给 ExploreKindMultiTypeItem，
-        // 后者（ExploreKindItem.kt:46-106）的壳是 GlassCard(cornerRadius=12dp,
-        // containerColor=surface) + KindText 居中 labelMediumEmphasized、
-        // Box heightIn(min=44dp) padding vertical 8dp——不是 Material Button 的 primary 底大胶囊。
-        Text(item.viewName)
-          .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
-          .fontColor(this.themeColorTextPrimary)
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(item.justify === 'right' ? TextAlign.End : TextAlign.Center)
-          .width('100%')
-          .constraintSize({ minHeight: 44 })
-          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .backgroundColor(this.themeColorSurfacePrimary)
-          .borderRadius(12)
-          .enabled(!this.submitting)
-          .onClick(() => { this.runItemAction(item); })
-      } else if (item.type === 'select' || (item.type === 'toggle' && item.chars.length > 0)) {
-        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
-          .width('100%').margin({ bottom: 4 })
-        Select(this.selectOptions(item.chars))
-          .value(item.value.length > 0 ? item.value : (item.chars.length > 0 ? item.chars[0] : ''))
-          .onSelect((i: number) => { this.items[index].value = item.chars[i]; })
-          .fontColor(this.themeColorTextPrimary)
+        // 后者（ExploreKindItem.kt:46-145）是 GlassCard 圆角 12 + surface 底 + 居中
+        // labelMediumEmphasized + 右侧 KeyboardArrowRight——不是 Material Button 大胶囊。
+        LoginKindItem({
+          label: item.viewName,
+          glyphName: 'arrowForward',
+          alignEnd: item.justify === 'right',
+          itemEnabled: !this.submitting,
+          onItemClick: () => { this.runItemAction(item); }
+        })
+      } else if (item.type === 'select') {
+        // 上游 SelectTypeItem：文字是「标题 当前值」，点击弹 RoundDropdownMenu 选项。
+        LoginKindItem({
+          label: item.viewName + ' ' + (item.value.length > 0 ? item.value :
+            (item.chars.length > 0 ? item.chars[0] : '')),
+          glyphName: 'profileExpandMore',
+          alignEnd: item.justify === 'right',
+          itemEnabled: !this.submitting,
+          options: item.chars,
+          onItemClick: () => {},
+          onOptionPick: (option: string) => {
+            this.items[index].value = option;
+            this.runItemAction(item);
+          }
+        })
       } else if (item.type === 'toggle') {
-        Row() {
-          Text(item.viewName).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: item.value === 'true' || item.value === '1' })
-            .onChange((on: boolean) => { this.items[index].value = on ? 'true' : 'false'; })
-        }
+        // 上游 ToggleTypeItem：文字是「char + 标题」（justifySelf === 'right' 时反过来），
+        // 点击在 chars 之间循环并执行 action，右侧 Refresh 图标提示「可切换」。
+        LoginKindItem({
+          label: item.justify === 'right' ? item.viewName + item.value : item.value + item.viewName,
+          glyphName: 'profileRefresh',
+          alignEnd: item.justify === 'right',
+          itemEnabled: !this.submitting,
+          onItemClick: () => { this.cycleToggle(item, index); }
+        })
       } else {
         // 上游 LoginRowUi.Text → AppTextField(label=row.title, singleLine)，是 M3 filled 文本框
         // （顶部圆角 + 底部指示线 + 浮动 label），不是「上方说明文字 + 下方输入框」。
@@ -397,6 +492,18 @@ export struct SourceLoginSheet {
           .width('100%').margin({ top: 4 })
       }
     }.width('100%')
+  }
+
+  /**
+   * 上游 ToggleTypeItem 的 internalOnClick：在 chars 里找当前值，切到下一个（越界回 0），
+   * 写回后执行该行的 action。
+   */
+  private cycleToggle(item: FormItem, index: number): void {
+    const chars = item.chars.length > 0 ? item.chars : ['chars', 'is null'];
+    const current = chars.indexOf(item.value);
+    const next = current < 0 ? 0 : (current + 1) % chars.length;
+    this.items[index].value = chars[next];
+    this.runItemAction(item);
   }
 
   /**
