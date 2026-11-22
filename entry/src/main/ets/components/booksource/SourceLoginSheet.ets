@@ -44,6 +44,7 @@ class FormItem {
 export struct SourceLoginSheet {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#FDFBFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
@@ -193,8 +194,20 @@ export struct SourceLoginSheet {
   @Builder ControlView(item: FormItem, index: number) {
     Column() {
       if (item.type === 'button') {
-        Button(item.viewName)
-          .width('100%').enabled(!this.submitting)
+        // 上游 SourceLoginSheets.kt:223-242 把 button 交给 ExploreKindMultiTypeItem，
+        // 后者（ExploreKindItem.kt:46-106）的壳是 GlassCard(cornerRadius=12dp,
+        // containerColor=surface) + KindText 居中 labelMediumEmphasized、
+        // Box heightIn(min=44dp) padding vertical 8dp——不是 Material Button 的 primary 底大胶囊。
+        Text(item.viewName)
+          .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center).width('100%')
+          .constraintSize({ minHeight: 44 })
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .backgroundColor(this.themeColorSurfacePrimary)
+          .borderRadius(12)
+          .enabled(!this.submitting)
           .onClick(() => { this.runItemAction(item); })
       } else if (item.type === 'select' || (item.type === 'toggle' && item.chars.length > 0)) {
         Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
@@ -349,7 +362,10 @@ export struct SourceLoginSheet {
           .padding({ bottom: 24 })
         }
         .width('100%')
-        .constraintSize({ maxHeight: '60%' })
+        // 不给 Scroll 设百分比高度：sheet 是 FIT_CONTENT，百分比相对父容器会形成循环依赖，
+        // 算出的高度小于内容 → 表单底部控件被裁掉。上游 AppModalBottomSheet.kt:145-168 的
+        // 做法是 Column(verticalScroll) 不设高、由 sheet 的 heightIn(max=容器高*0.8) 兜底，
+        // 内容超高时 sheet 自身封顶、内容区内部滚动。
         .scrollBar(BarState.Auto)
       }
     }
