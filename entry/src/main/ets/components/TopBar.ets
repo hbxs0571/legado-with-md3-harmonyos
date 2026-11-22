@@ -1,4 +1,5 @@
 import { AppGlyph, AppGlyphName } from './AppGlyph';
+import { cubicBezierEasing } from './motion/CubicBezier';
 import { TYPE_SCALE_HEADLINE_MEDIUM, TYPE_SCALE_LABEL_LARGE, TYPE_SCALE_TITLE_LARGE } from './typography/TypographyTokens';
 
 // 全部来自 M3 官方 token，不要凭手感改。
@@ -24,6 +25,17 @@ export const TOP_BAR_SIDE_PADDING: number = 4;
 export const TOP_BAR_TITLE_START: number = 16;
 /** 动作区右端距屏幕边，= 4（布局）+ 12（上游外层 Box）。 */
 export const TOP_BAR_ACTIONS_END: number = 16;
+/**
+ * 展开标题底边距，M3 `MediumTitleBottomPadding = 24.dp`（AppBar.kt:3611-3612）。
+ * 注意这与「展开区剩余高度」是两件事：上游把它交给布局按基线算，
+ * 本地见 `titleBottomPadding()` 的注释。
+ */
+export const TOP_BAR_MEDIUM_TITLE_BOTTOM_PADDING: number = 24;
+/**
+ * 收起行标题透明度缓动：M3 `TopTitleAlphaEasing = CubicBezierEasing(.8f, 0f, .8f, .15f)`
+ * （AppBar.kt:3609）。collapsedFraction 从 0 到 1 时，收起行标题按这条曲线淡入。
+ */
+export const topTitleAlphaEasing: (fraction: number) => number = cubicBezierEasing(0.8, 0, 0.8, 0.15);
 
 /** 按钮尺寸：plain 40，其余四档 36（TopBarButton.kt 的 MediumSeriesIconButtonSize / TopBarSeriesIconButtonSize）。 */
 export function topBarButtonSize(style: string): number {
@@ -85,6 +97,11 @@ export struct AppTopBar {
   /** 非空即「有副标题」：展开高从 112 变 136，大标题下多一行小字。 */
   @Prop subtitle: string = '';
   @Prop collapsed: boolean = false;
+  /**
+   * 连续折叠进度 0..1，由页面按滚动偏移算好后传入（对齐 M3 `collapsedFraction`）。
+   * 传 -1（默认）表示「调用方没有连续进度」，此时退回 `collapsed` 布尔两态。
+   */
+  @Prop collapseFraction: number = -1;
   /** 是否有左侧导航按钮。没有时标题左起点 16，有则紧接按钮右缘（44 或 40）。 */
   @Prop hasNavigation: boolean = false;
   @BuilderParam navigationIcon: () => void = this.emptySlot;
@@ -126,9 +143,25 @@ export struct AppTopBar {
     return this.subtitle.length > 0 ? TOP_BAR_EXPANDED_HEIGHT_SUBTITLE : TOP_BAR_EXPANDED_HEIGHT;
   }
 
+  /**
+   * 折叠进度 0..1，等价 M3 `TopAppBarState.collapsedFraction = heightOffset / heightOffsetLimit`
+   * （AppBar.kt:2106-2110）。
+   * 上游由滚动偏移连续驱动；本组件接收外部算好的 `collapseFraction`，
+   * 收不到时退化为 `collapsed ? 1 : 0`（保持旧行为，避免未迁移页面视觉突变）。
+   */
+  private fraction(): number {
+    const raw = this.collapseFraction >= 0 ? this.collapseFraction : (this.collapsed ? 1 : 0);
+    return Math.min(1, Math.max(0, raw));
+  }
+
+  /** 下行（展开大标题）当前布局高度 = 满高 × (1 - fraction)，对齐 M3 的 layoutHeight 收缩。 */
+  private currentExpandedBodyHeight(): number {
+    return this.expandedBodyHeight() * (1 - this.fraction());
+  }
+
   private totalHeight(): number {
     if (!this.themeUseFlexibleTopAppBar) { return TOP_BAR_COLLAPSED_HEIGHT; }
-    return this.collapsed ? TOP_BAR_COLLAPSED_HEIGHT : this.expandedHeight();
+    return TOP_BAR_COLLAPSED_HEIGHT + this.currentExpandedBodyHeight();
   }
 
   private expandedBodyHeight(): number {
@@ -137,12 +170,25 @@ export struct AppTopBar {
 
   /**
    * 展开标题的底边距。
-   * M3 是 MediumTitleBottomPadding = 24，但那个值配的是两行按 collapsedFraction 联动插值；
-   * 本地布尔折叠要保证 112 / 136 的固定高度内不裁字，按可用空间收敛：
-   * 无副标题（展开区 48，标题约 36）取 8；有副标题（展开区 72，标题+副标题约 56）取 12。
+   * 上游 M3 是 `MediumTitleBottomPadding = 24.dp`（AppBar.kt:3611-3612），由布局按基线算：
+   * `paddingFromBottom = 24 - (titleHeight - baseline)`，放不下时按 `maxLayoutHeight` 收敛。
+   * 本地 Text 拿不到基线，改为「在剩余空间里留出 24 与可用高度的较小者」——
+   * 展开态 48 高的下半区里标题约 36 高，剩 12，所以实际生效值是 12，与上游收敛结果同向。
    */
   private titleBottomPadding(): number {
-    return this.subtitle.length > 0 ? 12 : 8;
+    const body = this.expandedBodyHeight();
+    const titleHeight = this.subtitle.length > 0 ? 56 : 36;
+    return Math.max(0, Math.min(TOP_BAR_MEDIUM_TITLE_BOTTOM_PADDING, body - titleHeight));
+  }
+
+  /** 收起行标题透明度：M3 `TopTitleAlphaEasing.transform(collapsedFraction)`（AppBar.kt:2835）。 */
+  private topTitleAlpha(): number {
+    return topTitleAlphaEasing(this.fraction());
+  }
+
+  /** 展开行标题透明度：M3 `1f - collapsedFraction`（AppBar.kt:2836）。 */
+  private bottomTitleAlpha(): number {
+    return 1 - this.fraction();
   }
 
   private mergedCapsule(): boolean {
@@ -175,8 +221,9 @@ export struct AppTopBar {
           this.titleLine(TOP_BAR_TITLE_COLLAPSED_SIZE)
         }
         .padding({ left: this.hasNavigation ? 0 : TOP_BAR_TITLE_START, right: TOP_BAR_SIDE_PADDING })
-        // 折叠被关掉时这一行就是常驻标题，不需要淡入淡出。
-        .opacity(!this.themeUseFlexibleTopAppBar || this.collapsed ? 1 : 0)
+        // 收起行标题透明度：M3 走 TopTitleAlphaEasing(collapsedFraction)，不是布尔两态。
+        // 折叠被关掉时这一行就是常驻标题，恒为 1。
+        .opacity(!this.themeUseFlexibleTopAppBar ? 1 : this.topTitleAlpha())
         Blank()
         Row({ space: this.actionsSpacing() }) { this.actions() }
           .height(topBarButtonSize(this.themeTopBarButtonStyle))
@@ -195,7 +242,9 @@ export struct AppTopBar {
       .padding({ right: TOP_BAR_ACTIONS_END })
 
       // 第二行：展开态大标题（+ 可选副标题）。导航与动作都不放，照 TwoRowsTopAppBar 的第二行。
-      if (this.themeUseFlexibleTopAppBar) {
+      // M3 里这一行的布局高度 = maxLayoutHeight + heightOffset，随 collapsedFraction 连续收缩
+      // （AppBar.kt:3123-3128 + 2920），所以这里高度也按比例收缩而不是布尔切换。
+      if (this.themeUseFlexibleTopAppBar && this.currentExpandedBodyHeight() > 0) {
         Column() {
           Column() {
             this.titleLine(TOP_BAR_TITLE_EXPANDED_SIZE)
@@ -213,10 +262,12 @@ export struct AppTopBar {
           }
         }
         .width('100%')
-        .height(this.expandedBodyHeight())
+        .height(this.currentExpandedBodyHeight())
         .justifyContent(FlexAlign.End)
         .padding({ left: TOP_BAR_TITLE_START, right: TOP_BAR_TITLE_START, bottom: this.titleBottomPadding() })
-        .opacity(this.collapsed ? 0 : 1)
+        .clip(true)
+        // 展开行标题透明度：M3 `1f - collapsedFraction`。
+        .opacity(this.bottomTitleAlpha())
       }
     }
     .width('100%')

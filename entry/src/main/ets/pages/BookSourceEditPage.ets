@@ -6,13 +6,12 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
 import curves from '@ohos.curves';
 import { BookSource } from '../model/BookSource';
-import { AppTopBar, TopBarBackButton, TopBarButton } from '../components/TopBar';
+import { AppTopBar, TopBarBackButton, TopBarButton, TOP_BAR_COLLAPSED_HEIGHT, TOP_BAR_EXPANDED_HEIGHT } from '../components/TopBar';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppFab } from '../components/booksource/AppFab';
 import { MarkdownIntro } from '../components/MarkdownIntro';
 import { UiMenuPanel, UiMenuItem } from '../components/UiMenu';
 import { BODY_LARGE, BODY_LARGE_LINE_HEIGHT, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
-import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
 import { AppLog } from '../lib/AppLog';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
@@ -192,8 +191,14 @@ export struct BookSourceEditPage {
   private logDetailDialogId: number = -1;
   /** openCustomDialog 的 builder 需要存成成员（@Builder 方法不能直接传给 SDK）。 */
   private logDetailBuilder: (() => void) | undefined = undefined;
-  /** 顶栏随内容滚动折叠（动画不作为验收项，按 yOffset 阈值切换）。 */
+  /** 顶栏随内容滚动折叠。上游是随滚动连续插值（collapsedFraction），本地同向实现。 */
   @State private collapsedHeader: boolean = false;
+  /**
+   * 连续折叠进度 0..1，等价 M3 `TopAppBarState.collapsedFraction = heightOffset / heightOffsetLimit`。
+   * 上游 heightOffsetLimit 由下行（展开标题区）实测高度决定（AppBar.kt:2927-2933），
+   * 本地下行高度是固定的「展开高 - 收起高」，所以分母直接用这个差值。
+   */
+  @State private headerCollapseFraction: number = 0;
   /** 六个 tab 各自独立的 Scroller，供顶栏折叠判定读取 yOffset。 */
   private tabScrollers: Scroller[] = [
     new Scroller(), new Scroller(), new Scroller(), new Scroller(), new Scroller(), new Scroller()
@@ -594,19 +599,31 @@ export struct BookSourceEditPage {
     this.onOpenSourceDebug(url);
   }
 
-  /** 顶栏折叠判定：滚动偏移超过阈值折叠，低于阈值展开，中间区间保持原态。 */
+  /**
+   * 顶栏折叠：按滚动偏移算连续进度，对齐 M3 `collapsedFraction = heightOffset / heightOffsetLimit`
+   * （androidx AppBar.kt:2106-2110）。上游由 nestedScroll 直接驱动 heightOffset，
+   * 这里拿 ArkUI 的 Scroll 偏移折算：滚过下行（展开标题区）的全部高度即视为完全收起。
+   * 不挂 animateTo —— 上游随手指连续变化，加动画反而滞后。
+   */
   private updateHeaderOffset(scroller: Scroller): void {
     const offset = scroller.currentOffset().yOffset;
-    const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true
-      : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
-    if (shouldCollapse !== this.collapsedHeader) {
-      // 对齐上游 GlassTopAppBarDefaults.defaultScrollBehavior()（BookSourceEditScreen.kt:70）的高度过渡：
-      // 上游随 nestedScroll 连续插值，本地是布尔折叠，用 springMotion 包住赋值让高度/透明度有过渡，
-      // 写法与项目内其它折叠页（AppAiSettingsPage.ets:21）一致。
-      this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
-        this.collapsedHeader = shouldCollapse;
-      });
+    // 下行高度 = 展开高 - 收起高（112/136 - 64），与 AppBar.kt:2920 的 height 实参同义。
+    const limit = this.collapsedHeaderLimit();
+    const next = limit > 0 ? Math.min(1, Math.max(0, offset / limit)) : (offset > 0 ? 1 : 0);
+    if (Math.abs(next - this.headerCollapseFraction) > 0.001) {
+      this.headerCollapseFraction = next;
     }
+    // 布尔折叠仍保留：其它依赖 collapsed 的判定（无障碍、点击区）继续可用。
+    const shouldCollapse = offset > limit * 0.5;
+    if (shouldCollapse !== this.collapsedHeader) {
+      this.collapsedHeader = shouldCollapse;
+    }
+  }
+
+  /** 折叠分母：展开高与收起高的差。副标题存在时展开高是 136，否则 112。 */
+  private collapsedHeaderLimit(): number {
+    const expanded = TOP_BAR_EXPANDED_HEIGHT;
+    return expanded - TOP_BAR_COLLAPSED_HEIGHT;
   }
 
   build() {
@@ -615,6 +632,7 @@ export struct BookSourceEditPage {
         title: this.editingSource === undefined ? '新建书源' : '编辑书源',
         hasNavigation: true,
         collapsed: this.collapsedHeader,
+        collapseFraction: this.headerCollapseFraction,
         navigationIcon: () => { this.editNavSlot() },
         actions: () => { this.editActionsSlot() }
       })
