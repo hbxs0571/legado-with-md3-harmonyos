@@ -11,6 +11,12 @@ export class SourceHttp {
   private static client: HttpClient | null = null;
   /** 全局取消标记：一次搜索的取消对它在途的所有源请求生效。 */
   private static cancelCheck: () => boolean = () => false;
+  /**
+   * 按书源登记的取消钩子：校验一类的场景里每路源各有自己的超时闸门，
+   * 全局 cancelCheck 只能表达「全体取消」，表达不了「这一路超时了」。
+   * key 是 bookSourceUrl，值是该源当前请求的取消判定。
+   */
+  private static sourceChecks: Map<string, () => boolean> = new Map<string, () => boolean>();
 
   /** 全局单例客户端：复用连接池与 cookie 会话，避免每条源 new 一个。 */
   static getClient(): HttpClient {
@@ -30,11 +36,33 @@ export class SourceHttp {
     SourceHttp.cancelCheck = () => false;
   }
 
+  /**
+   * 给单个书源挂取消钩子（校验超时用）：命中后该源在途的 HTTP 传输会被掐断，
+   * 对齐上游 BookSourceCheckRepository.kt:116 `withTimeout(...)` 的取消语义。
+   */
+  static setSourceCancelCheck(sourceUrl: string, check: () => boolean): void {
+    SourceHttp.sourceChecks.set(sourceUrl, check);
+  }
+
+  /** 撤销单源钩子；必须在请求收尾时调用，否则下次同源请求会带着过期闸门。 */
+  static clearSourceCancelCheck(sourceUrl: string): void {
+    SourceHttp.sourceChecks.delete(sourceUrl);
+  }
+
+  /** 合并全局取消与单源取消；没有单源钩子时直接用全局那个，避免每次多一层闭包。 */
+  private static mergedCancelCheck(source: BookSource): () => boolean {
+    const sourceCheck = SourceHttp.sourceChecks.get(source.bookSourceUrl);
+    if (sourceCheck === undefined) {
+      return SourceHttp.cancelCheck;
+    }
+    return (): boolean => SourceHttp.cancelCheck() || sourceCheck();
+  }
+
   /** 建一个绑定书源的 AnalyzeUrl，带限流与取消钩子。 */
   static newAnalyzer(source: BookSource, timeoutMs: number = 15000): AnalyzeUrl {
     const au = new AnalyzeUrl(source, SourceHttp.getClient());
     au.setRequestTimeout(timeoutMs);
-    au.setCancelCheck(SourceHttp.cancelCheck);
+    au.setCancelCheck(SourceHttp.mergedCancelCheck(source));
     return au;
   }
 

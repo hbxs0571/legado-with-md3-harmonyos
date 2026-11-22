@@ -323,6 +323,20 @@ export class HttpClient {
       expired = true;
       try { client.destroy(); } catch (_) { }
     }, Math.max(1, req.deadlineAt - Date.now())) : -1;
+    // 本地补：对齐上游 BookSourceCheckRepository.kt:116 `withTimeout(...)` 的取消语义。
+    // 上游靠协程取消直接打断在途 HTTP，本地没有协程，只能轮询 cancelCheck，命中即 destroy()
+    // 掐断传输。二进制路径 executeBinaryWithProtocol 早就有这段轮询，文本路径此前只在发请求前
+    // 查一次，所以「校验超时」只能等请求自己结束，等于不能真中止。
+    let cancelTimer: number = -1;
+    let cancelled = false;
+    if (req.cancelCheck) {
+      cancelTimer = setInterval((): void => {
+        if (!cancelled && req.cancelCheck && req.cancelCheck()) {
+          cancelled = true;
+          try { client.destroy(); } catch (_) { }
+        }
+      }, 50);
+    }
     try {
       const method = this.resolveMethod(req.method);
       const headers: Record<string, string> = this.requestHeaders(req.headers);
@@ -430,6 +444,8 @@ export class HttpClient {
       const transportStartedAt = Date.now();
       const resp = await client.request(req.url, options);
       if (expired || (req.deadlineAt && Date.now() >= req.deadlineAt)) return HttpClient.timeoutResponse(req);
+      // 对齐上游 withTimeout 的取消：被 destroy() 掐断的连接可能带着半个结果回来，这里一律按取消收口。
+      if (cancelled || (req.cancelCheck && req.cancelCheck())) return this.cancelledResponse(req);
       this.endTransportTiming(req, transportStartedAt, forceHttp1, resp);
       const responseHeaders = (resp.header || {}) as Record<string, string>;
       if (maxResponseBytes > 0 && resp.result instanceof ArrayBuffer && resp.result.byteLength > maxResponseBytes) {
@@ -442,6 +458,7 @@ export class HttpClient {
       return response;
     } catch (e) {
       if (expired || (req.deadlineAt && Date.now() >= req.deadlineAt)) return HttpClient.timeoutResponse(req);
+      if (cancelled || (req.cancelCheck && req.cancelCheck())) return this.cancelledResponse(req);
       return {
         url: req.url,
         statusCode: 0,
@@ -454,6 +471,7 @@ export class HttpClient {
       };
     } finally {
       if (deadlineTimer >= 0) clearTimeout(deadlineTimer);
+      if (cancelTimer >= 0) clearInterval(cancelTimer);
       this.activeClients.delete(client);
       try { client.destroy(); } catch (_) { }
     }

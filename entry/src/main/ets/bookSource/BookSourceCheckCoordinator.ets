@@ -19,6 +19,7 @@ import { BookSource as EngineBookSource } from '@legado/sourceengine';
 import { BookSource as LocalBookSource } from '../model/BookSource';
 import { BookSourceRepository } from '../data/BookSourceRepository';
 import { LegadoSourceMapper } from './LegadoSourceMapper';
+import { SourceHttp } from './SourceHttp';
 import { WebBookService } from './WebBookService';
 import { RemoteChapter, RemoteBookDetail, SearchBookItem } from './SourceModels';
 
@@ -95,9 +96,10 @@ export function checkDisplayMessage(result: BookSourceCheckResult | undefined): 
 
 /**
  * 一次校验的超时包装。上游用 withTimeout(timeoutMillis) + TimeoutCancellationException；
- * 本地没有协程取消，用 Promise.race 造一个必然 reject 的定时器，超时后置标记位让
- * 后续步骤自查是否已超时（无法真正中止底层网络请求，这一点与上游的协作式取消等价度有限，
- * 属已知差距，写进报告）。
+ * 本地没有协程取消，用 setTimeout 置标记位，再由两处消费：
+ * ①checkpoint() 在每个 await 之间自查，模拟上游的 cancellation 点；
+ * ②checkOne 把 timedOut 挂到 SourceHttp 的单源取消钩子上，超时那一刻在途 HTTP 会被掐断
+ *   （HttpClient 轮询 cancelCheck 后 client.destroy()），与上游的协作式取消等价。
  */
 class TimeoutGate {
   timedOut: boolean = false;
@@ -248,6 +250,10 @@ export class BookSourceCheckCoordinator {
     const source: EngineBookSource = LegadoSourceMapper.fromLocal(local);
     BookSourceCheckCoordinator.updateResult(url, name, { status: 'Running' });
     const gate: TimeoutGate = new TimeoutGate(options.timeoutSeconds);
+    // 对齐上游 BookSourceCheckRepository.kt:116 `withTimeout(...)`：上游超时是协程取消，
+    // 会直接打断在途 HTTP；本地没有协程，改成把闸门挂到该源的取消钩子上，
+    // 超时那一刻由 HttpClient 的 cancelCheck 轮询把连接 destroy() 掉。
+    SourceHttp.setSourceCancelCheck(url, (): boolean => gate.timedOut);
     try {
       await BookSourceCheckCoordinator.checkSource(source, keyword, options, gate);
       gate.clear();
@@ -260,6 +266,9 @@ export class BookSourceCheckCoordinator {
         failure: 'CheckFailed',
         detail: detail.length > 0 ? detail : '校验失败'
       });
+    } finally {
+      // 钩子必须撤销：留着会让下一次同源请求带着已超时的闸门，直接秒取消。
+      SourceHttp.clearSourceCancelCheck(url);
     }
   }
 
