@@ -87,6 +87,9 @@ _避免_：把书源和 RSS 订阅源混为一谈，或把「书源配置导入�
 **规则**：书源里用 CSS 选择器 / XPath / JSONPath / `@js:` 脚本等语法写成的取字段表达式，由 `@legado/sourceengine` 规则引擎求值（本地整条链路见 `bookSource/WebBookService.ets`）。`sourceJson` 始终保留 Legado 原格式，映射成引擎模型时只做只读投影。
 _避免_：为了「看起来能用」把备份里的 `sourceJson` 改成引擎格式——那样真 Legado 就读不回用户的备份
 
+**脚本运行时（script runtime）**：书源规则里 `@js:` 与 `<js>` 脚本的执行环境。上游是 Rhino（Java 版 JS 引擎，脚本可直接访问任意 Java 类）；本地是三层——手写解释器（白名单，兼容书源主路径）、QuickJS（只算纯表达式残渣，不暴露网络/文件/平台桥）、ArkWeb（分阶段跑完整脚本，异步）。「完整 JS + Java 互操作」在鸿蒙只能做到「完整 ES 引擎 + 白名单化 Java 兼容层」，因为平台没有 JVM。见[已知问题](KNOWN-ISSUES.md)的「书源脚本运行时」。
+_避免_：把「引擎包里带 QuickJS」说成「本地已经是完整 JS 引擎」——包里有，兼容书源的脚本没走它；也不要把 ArkWeb 的异步执行说成 Rhino 那样的同步执行。
+
 **发现（探索）**：书源里 `exploreUrl` 定义的分类入口，形如多个「分类名::URL」用 `&&` 或换行分隔（也支持 JSON 数组与脚本）。`pages/DiscoverPage.ets` 按源与分类抓取书单并翻页。
 _避免_：把发现页和搜索页混为一谈——搜索是用户输关键词跨源查，发现是书源预置的分类浏览
 

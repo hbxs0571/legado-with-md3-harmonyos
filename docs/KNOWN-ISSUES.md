@@ -2196,6 +2196,61 @@ libs/x86_64/libquickjs.so         1,439,008
 
 ---
 
+## 书源脚本运行时：白名单子集，完整 JS 引擎在包里但没接（r366 盘点）
+
+承上节。上节说「引擎能接、规则能跑」，本节说**脚本这一层能跑多少 JavaScript**，以及「能不能做成上游那样的完整 JS + Java 互操作」。
+
+### 一、本地引擎是哪来的
+
+- 包名 `@legado/sourceengine`，版本 1.0.0，作者李其健，仓 `https://github.com/wip3l/harmony-book-source-engine`，**GPL-3.0**（见 `sourceengine/oh-package.json5`）。
+- 从另一个鸿蒙阅读器**开源轻页（qingye-reader）**里拆出来的内核（`README.md` 第一句）；只提供规则解析、请求与脚本运行时，不含界面，不访问数据库。
+- 依赖的 `quickjs/` 是 `hhtczengjing/ohos_quickjs` 的**修改版**（MIT），加了执行时间与内存上限；README 明写「不能换成 ohpm 上的公开版本」。
+- 接入方式是**工程内模块**：根 `build-profile.json5` 注册 `sourceengine` / `quickjs`，`entry/oh-package.json5` 两份 `file:` 依赖；只靠 `file:` 依赖会缺 native 产物（两种失败模式见上节第二节）。
+- 本仓已接：`entry/src/main/ets/bookSource/` 18 个文件 2,914 行。`WebBookService.ets:4` 用 `AnalyzeRule`，`SourceHttp.ets:7` 用 `AnalyzeUrl` / `HttpClient` / `JsRuntime`，`BookSourceRuntime.ets:3` 用 `BookSourceScriptRunner`。
+
+### 二、上游那一侧：Rhino + 任意 Java 类
+
+- 上游 `data/entities/BaseSource.kt:333` 的 `evalJS` 注入五个绑定：`java`（= `this`）、`source`（= `this`）、`baseUrl`、`cookie`、`cache`，交给 Rhino。
+- Rhino 版本 `1.8.1`（`legado-with-MD3/gradle/libs.versions.toml:74`），且是上游自己 fork 的模块 `modules:rhino`（`app/build.gradle.kts:236` 的 `implementation(project(":modules:rhino"))`），不是 Maven 原版。
+- Rhino 自带 `Packages` / `importClass` / `Java.type`，脚本可直接 `new java.io.File(...)`、`Packages.io.legato…`、`java.lang.Thread.sleep(...)`——**「Java 互操作」指的就是这条通道**，而不是某种桥接 API。
+- `java` 绑定的成员函数在 `help/JsExtensions.kt`，`grep -c "    fun "` 实测 **100 个**；`source` 侧另见 `model/analyzeRule/AnalyzeRule.kt:834` 的 `bindings["java"] = this`。
+
+### 三、本地这一侧：三条路径，各管一段
+
+| 路径 | 落点 | 管什么 | 限制 |
+| --- | --- | --- | --- |
+| 手写解释器 | `sourceengine/src/main/ets/core/rule/ScriptEngine.ts`（1,433 行，`ArkTsJsRunner`） | 兼容书源脚本主路径：变量、`if` / `for`、用户函数、字符串方法、30 个 `java.*` | 只认它理解的语法；`requiresHostFallback`（`:127`）把 `java.ajax` / `Packages` / `Cipher` / `MessageDigest` 等转出去 |
+| QuickJS | `sourceengine/src/main/ets/core/script/QuickJsScriptRuntime.ts`（120 行） | 只算**纯表达式残渣**（如 `String(x).replace(/…/,'')`） | 长度 ≤ 4,096；禁 `;{}`、禁 `for` / `while` / `return` / `await` / `new` / `eval` / `Function`、禁 `java.` / `cookie.` / `cache.` / `chapter.` 调用；binding ≤ 64 个 / 128 KB；超时 10–250 ms；**不暴露网络、Cookie、文件系统、平台桥**（文件头原文） |
+| ArkWeb | `sourceengine/src/main/ets/core/book/BookSourceStageWebRuntime.ts`（`:890` / `:910` / `:919` 调 `webview.WebviewController.runJavaScript`） | 分阶段跑完整脚本：登录、网页验证、需要 DOM 的规则 | 真 V8 语法全覆盖，但**异步**、依赖 WebView 与 UI 上下文，不能在一个函数里「同步发请求→继续算」 |
+
+### 四、「完整 JS 引擎」已经在包里，缺的是接线
+
+- `quickjs/src/main/cpp/types/libquickjs/Index.d.ts`：`:82` `evaluateBounded(...)`；`:88` `engineSetHost(...)` 注释原文「Defines `__host(name, payload)` calling `callback` **synchronously on the creating thread**」；`:92-101` `scriptSessionCreate` / `scriptSessionEval` / `scriptSessionResolve`，注释「QuickJS on a **background thread with synchronous host calls**」。
+- 这套接口正是 Rhino `java.ajax` 的等价机制：脚本同步调 `__host`，宿主异步干活，完成后 resolve，脚本继续。**能力在包里，但引擎自己没用**：`grep -rn "scriptSessionCreate\|engineSetHost" sourceengine/src/main/ets` 实测 **0 命中**；QuickJS 只被 `QuickJsScriptRuntime` 当表达式兜底。
+- 所以「跑不了完整 JS」不是引擎缺能力，是**兼容书源脚本仍走手写解释器**这一处选择；复杂脚本由 `AnalyzeUrl` 的 `shouldRetryWithWebView` 回退给 ArkWeb。
+
+### 五、Java 互操作：等价 API 可补，等价机制不存在
+
+- 鸿蒙没有 JVM，`java.*` 类、反射、`Packages`、`importClass` 都没有对应物；`ScriptCompatibility.ts` 文件头写明文件系统、进程、反射、UI **有意不模拟**（原文见上节第九节）。
+- 能做的是**同名 API + 等价语义**：`java` 桥已实现 30 个（`ScriptEngine.ts:570-580`），另有 `BookSourceRuntimeRouter.ts:58-76` 的 `FULL_JAVA_METHODS` 64 个与 `BookSourceStageWebRuntime.ts` 的 90 个 `name:function`，三处去重合计 122 个名字；用 904 条真实书源统计覆盖 **92.5%**（上节第九节）。
+- 因此准确说法是：**能成为完整 ES 引擎 + 白名单化 Java 兼容层；不能成为「任意 Java 可达」**——平台没有 JVM，硬模拟文件、反射这类能力是安全风险，不是能力缺口。
+
+### 六、若要往「完整」推，四件事
+
+1. **接 QuickJS 会话**：把兼容书源脚本从 `ArkTsJsRunner` 切到 `scriptSessionCreate`（后台线程 + 同步宿主回调）；包里有接口、引擎内零使用，等于新写一层接线。
+2. **宿主同步桥**：`java.ajax` / `ajaxAll` / `cookie` / `cache` / `put` / `get` 全部实现为「收请求 → 异步执行 → resolve」，并带超时与取消（上游 `respondTime` 180 秒级，当前 QuickJS 超时 150 ms 量级）。
+3. **Rhino 语义兼容层**：Rhino 是 ES5 加私有扩展（`for each`、E4X、`importClass`），QuickJS 是 ES2020，两者不重合；存量书源的写法要逐个兼容或改写。
+4. **安全与配额**：任意脚本加网络需要白名单、域名与 localhost 拦截（上游有 `LocalNetworkBlockedNotifier`）、内存与时间上限。
+
+### 七、没验的（照标）
+
+- 没有实测 `scriptSessionCreate` 跑完整书源脚本（本仓零调用、探针未验）；没有验证 ArkWeb 里用同步 XHR 模拟 `java.ajax` 这条路。
+- 本轮只读代码与文档，未改源码、未上机。
+
+关联：上节第九节给 92.5% 的逐项缺失清单；[批次交付报告](booksource/BATCH-REPORT.md) 的 KI-BS4 是同一缺口在实现批的口径（32 个方法未支持、影响 107 源 11.8%）。
+
+---
+
 ## 替换规则：Repository 混装五类职责，上游两个浮层其实是死代码（r362 盘点）
 
 这一节回答「本地 `data/ReplaceRuleRepository.ets` 1,217 行是不是不正常、要不要按上游拆」。结论分两半：**混装是真债，但「缺两个浮层」是我上一轮的误判——那两个浮层在上游根本没有调用点。**
