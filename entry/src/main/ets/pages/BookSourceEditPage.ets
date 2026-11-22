@@ -821,7 +821,8 @@ export struct BookSourceEditPage {
           .maxLines(1).width('100%').textAlign(TextAlign.Center)
           .padding({ left: 56, right: 56 })
         Row() {
-          AppGlyph({ name: 'clearAll', glyphSize: 22, tint: this.themeColorAccent })
+          // 上游 AppLogSheet.kt:52 的 endAction 用 `Icons.Default.DeleteSweep`。
+          AppGlyph({ name: 'deleteSweep', glyphSize: 22, tint: this.themeColorAccent })
         }
         .width(40).height(40)
         .borderRadius(20)
