@@ -499,10 +499,11 @@ export struct SourceLoginSheet {
         })
       } else if (item.type === 'select') {
         // 上游 SelectTypeItem：文字是「标题 当前值」，点击弹 RoundDropdownMenu 选项。
+        // 尾部图标对齐上游 ExploreKindMultiTypeItem.kt:384-393 的 Icons.Default.UnfoldMore。
         LoginKindItem({
           label: item.viewName + ' ' + (item.value.length > 0 ? item.value :
             (item.chars.length > 0 ? item.chars[0] : '')),
-          glyphName: 'profileExpandMore',
+          glyphName: 'unfoldMore',
           alignEnd: item.justify === 'right',
           itemEnabled: !this.submitting,
           options: item.chars,
