@@ -20,7 +20,7 @@ import { BookSourceRepository } from '../../data/BookSourceRepository';
 import {
   BookSourceLoginCoordinator, LoginPrepare, LoginSubmitResult
 } from '../../bookSource/BookSourceLoginCoordinator';
-import { BODY_MEDIUM, BODY_SMALL, LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
+import { BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
 import { UiMenuItem, UiMenuPanel } from '../UiMenu';
 import { AppGlyph, AppGlyphName } from '../AppGlyph';
 import { MarkdownIntro } from '../MarkdownIntro';
@@ -162,11 +162,13 @@ struct LoginKindItem {
 @Component
 export struct SourceLoginSheet {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#FDFBFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorOnPrimary') themeColorOnPrimary: string = '#FFFFFF';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
 
   /** 显隐由调用方（Index）持有，与上游 modalOverlay 的进出一一对应。 */
@@ -200,6 +202,14 @@ export struct SourceLoginSheet {
   @State private logLines: string[] = [];
   /** 点某条日志弹出的详情文本（上游 LogDetailSheet 的 showDetail；空串表示不显示）。 */
   @State private logDetail: string = '';
+  /**
+   * 日志详情的对话框 id：上游 LogDetailSheet.kt:23-43 用 AppAlertDialog（**居中对话框**，
+   * 不是底部半模态），ArkUI 的 bindSheet 只能做半模态，形态对不上，
+   * 所以改用 openCustomDialog 承载一个 M3 AlertDialog 形态的 builder。
+   */
+  private logDetailDialogId: number = -1;
+  /** openCustomDialog 的 builder 需要存成成员（@Builder 方法不能直接传给 SDK）。 */
+  private logDetailBuilder: (() => void) | undefined = undefined;
   /**
    * 主动收起主弹层去显示登录头时置 true：此时主弹层的 onDisappear 不能回调 onClose()，
    * 否则 Index 会把 loginSourceUrl 清空、整个组件被卸载，登录头也跟着消失。
@@ -844,35 +854,77 @@ export struct SourceLoginSheet {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(16)
-    .onClick(() => { this.logDetail = line; })
+    .onClick(() => { this.openLogDetailDialog(line); })
   }
 
-  /** 日志详情：上游 LogDetailSheet.kt:23-43（AppAlertDialog，标题 Log，正文 bodySmall，最高 400dp 可滚动）。 */
+  /**
+   * 日志详情：上游 LogDetailSheet.kt:23-43 是 **AppAlertDialog**（居中对话框），不是底部半模态：
+   * `AppAlertDialog(show, onDismissRequest, title = "Log", content = { SelectionContainer {
+   *   Column(heightIn(max = 400.dp).verticalScroll(...)) { AppText(content, bodySmall) } } },
+   *   confirmText = stringResource(android.R.string.ok), onConfirm = onDismissRequest)`。
+   * AppAlertDialog 的 M3 分支（AppAlertDialog.kt:100-151）= Material3 AlertDialog：
+   * containerColor=surfaceContainer、titleContentColor=onSurface、textContentColor=onSurfaceVariant、
+   * 确认按钮 PrimaryButton(filled, labelLarge)。
+   * 用 openCustomDialog 承载，容器/标题/按钮重排成 M3 Dialog 形态。
+   */
   @Builder LogDetailSheet() {
     Column() {
+      // M3 AlertDialog 标题：headlineSmall 档，左对齐。
       Text('Log')
-        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
-        .fontColor(this.themeColorTextPrimary)
-        .maxLines(1).width('100%').textAlign(TextAlign.Center)
-        .padding({ left: 56, right: 56, bottom: 16 })
+        .fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).width('100%').textAlign(TextAlign.Start)
+      // M3 AlertDialog 的 text 区：verticalScroll + textContentColor=onSurfaceVariant；
+      // 上游正文用 bodySmall，最高 400dp 可滚动（LogDetailSheet.kt:29-37）。
       Scroll() {
         Text(this.logDetail)
-          .fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
           .width('100%').copyOption(CopyOptions.LocalDevice)
       }
       .width('100%').constraintSize({ maxHeight: 400 }).scrollBar(BarState.Auto)
+      .margin({ top: 16 })
+      // 确认按钮：M3 AlertDialog 的 confirmButton = PrimaryButton（filled，文字 labelLarge）。
       Row() {
-        Text('确定')
-          .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
-          .fontColor(this.themeColorAccent)
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          .onClick(() => { this.logDetail = ''; })
+        Button('确定')
+          .type(ButtonType.Normal)
+          .height(40)
+          .fontSize(LABEL_LARGE)
+          .fontColor(this.themeColorOnPrimary)
+          .backgroundColor(this.themeColorAccent)
+          .borderRadius(20)
+          .onClick(() => { this.closeLogDetailDialog(); })
       }
-      .width('100%').justifyContent(FlexAlign.End).margin({ top: 8 })
+      .width('100%').justifyContent(FlexAlign.End).margin({ top: 24 })
     }
-    .width('100%')
-    .padding({ left: 16, right: 16, bottom: 16 })
-    .backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
+    // M3 AlertDialog：minWidth 280vp、padding 24、圆角 28、底色 surfaceContainer。
+    .width(312)
+    .padding(24)
+    .backgroundColor(this.themeColorSurfaceTertiary)
+    .borderRadius(28)
+  }
+
+  /** 打开日志详情对话框（居中，对齐上游 AppAlertDialog）。 */
+  private openLogDetailDialog(line: string): void {
+    this.logDetail = line;
+    this.logDetailBuilder = (): void => { this.LogDetailSheet(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.logDetailBuilder,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => { this.logDetailDialogId = -1; this.logDetail = ''; }
+    }).then((dialogId: number) => {
+      this.logDetailDialogId = dialogId;
+    }).catch((error: Error) => {
+      console.warn('打开日志详情对话框失败:', error);
+    });
+  }
+
+  /** 关闭日志详情对话框；重复关闭是安全调用。 */
+  private closeLogDetailDialog(): void {
+    if (this.logDetailDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.logDetailDialogId);
+      this.logDetailDialogId = -1;
+    }
+    this.logDetail = '';
   }
 
   build() {
@@ -945,18 +997,8 @@ export struct SourceLoginSheet {
           if (this.mode === 'form') { this.visible = true; }
         }
       })
-      // 日志详情弹层（上游 LogDetailSheet.kt:23-43 的 AppAlertDialog）。
-      Stack() {
-      }
-      .width(1).height(1)
-      .bindSheet(this.logDetail.length > 0, this.LogDetailSheet(), {
-        height: SheetSize.FIT_CONTENT,
-        dragBar: true,
-        showClose: false,
-        enableOutsideInteractive: false,
-        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
-        onDisappear: () => { this.logDetail = ''; }
-      })
+      // 日志详情不再是半模态：上游 LogDetailSheet.kt:23 是 AppAlertDialog（居中对话框），
+      // 已改由 openCustomDialog 承载（见 openLogDetailDialog）。
     }
     .width(0).height(0)
   }
