@@ -18,6 +18,8 @@ import {
 import { AppFab } from '../components/booksource/AppFab';
 import { AppGlyph } from '../components/AppGlyph';
 import { MarkdownIntro } from '../components/MarkdownIntro';
+// fadingEdge 的渐变宽度用 LengthMetrics.vp(16) 传，对齐上游 gradientWidth = 16.dp。
+import { LengthMetrics } from '@kit.ArkUI';
 
 /** 示例项（具名接口，ArkTS 禁匿名对象字面量）。 */
 interface DebugExample {
@@ -431,6 +433,8 @@ export struct BookSourceDebugPage {
                   }, (t: DebugTarget): string => t)
                 }
               }.scrollBar(BarState.Off).width('100%')
+              // 上游 :209-216 DebugChipRow 的 fadingEdge(gradientWidth = 16.dp)：横向滚动时两端渐变淡出。
+              .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(16) })
 
               // 上游 :183-190 AppTextField(label=target.hint, maxLines=4, Loading 时禁用)；
               // 底色取 AppTextField 默认的 surfaceContainerHigh，比卡片壳高一档。
@@ -456,6 +460,8 @@ export struct BookSourceDebugPage {
                     }, (ex: DebugExample): string => ex.title)
                   }
                 }.scrollBar(BarState.Off).width('100%')
+                // 同上：示例 chip 行也对齐上游 DebugChipRow 的渐变边缘。
+                .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(16) })
               }
             }
             // 上游 :159-163 GlassCard{ Column(padding 12, spacedBy 8) }。
@@ -478,6 +484,8 @@ export struct BookSourceDebugPage {
                 }, (f: DebugFilter): string => f)
               }
             }.scrollBar(BarState.Off).width('100%')
+            // 过滤 chip 行同样对齐上游 DebugChipRow 的渐变边缘。
+            .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(16) })
           }
 
           if (this.visibleEntries().length === 0) {
