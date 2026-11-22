@@ -565,6 +565,23 @@ export struct BookSourceManagePage {
       return copy;
     });
     await this.commitSources(next);
+    this.pruneGroupManageSelection();
+  }
+
+  /**
+   * 分组集合变化后收缩选择集：上游 GroupManageBottomSheet.kt:74-81 在 groups 变化时做
+   * `selectedGroups.intersect(groups.toSet())`，收缩后为空就退出选择态。改完分组名或删掉
+   * 分组后，原先选中的名字可能已经不存在，不收缩会让「删除所选 (N)」计数与实际不符。
+   */
+  private pruneGroupManageSelection(): void {
+    if (this.groupManageSelected.size === 0) { return; }
+    const alive = new Set<string>(this.allGroupNames());
+    const next = new Set<string>();
+    this.groupManageSelected.forEach((name: string) => {
+      if (alive.has(name)) { next.add(name); }
+    });
+    this.groupManageSelected = next;
+    if (next.size === 0) { this.groupManageSelectionMode = false; }
   }
 
   /**
@@ -583,6 +600,7 @@ export struct BookSourceManagePage {
       return copy;
     });
     await this.commitSources(next);
+    this.pruneGroupManageSelection();
   }
 
   /**
