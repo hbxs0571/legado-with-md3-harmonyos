@@ -172,6 +172,14 @@ export struct BookSourceManagePage {
   @State @Watch('onListInputChanged') searchQuery: string = '';
   @State showGroupFilter: boolean = false;
   @State groupFilterQuery: string = '';
+  /** 分组管理弹层（上游 GroupManageBottomSheet）。 */
+  @State private groupManageVisible: boolean = false;
+  /** 分组管理选择态：标题变「已选 N 个」、行首换选择框、底部出全选/删除两钮。 */
+  @State private groupManageSelectionMode: boolean = false;
+  @State private groupManageSelected: Set<string> = new Set<string>();
+  /** 非空表示该分组行处于行内重命名展开态（上游 GroupItem 的 expanded）。 */
+  @State private groupManageEditing: string = '';
+  @State private groupManageEditText: string = '';
   @State @Watch('onListInputChanged') groupByDomain: boolean = false;
   @State @Watch('onListInputChanged') sortMode: string = '手动排序';
   @State @Watch('onListInputChanged') sortDescending: boolean = false;
@@ -526,6 +534,48 @@ export struct BookSourceManagePage {
     await this.commitSources(next);
   }
 
+  /**
+   * 重命名分组：对齐上游 BookSourceViewModel.kt:388-396 updateGroup ——
+   * 逐条把 bookSourceGroup 拆成集合，删掉旧名、非空则加新名，再用 "," 拼回。
+   */
+  private async renameGroup(oldName: string, newName: string): Promise<void> {
+    const target = newName.trim();
+    if (target.length === 0) {
+      this.onUnavailableAction('分组名称不能为空');
+      return;
+    }
+    if (target === oldName) { return; }
+    const next = this.allSources.map((item: BookSource) => {
+      const groups = (item.bookSourceGroup ?? '')
+        .split(/[,;，；]/).map((part: string) => part.trim()).filter((part: string) => part.length > 0);
+      if (!groups.includes(oldName)) { return item; }
+      const result = groups.filter((group: string) => group !== oldName);
+      if (!result.includes(target)) { result.push(target); }
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.bookSourceGroup = result.join(',');
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
+  /**
+   * 删除若干分组：对齐上游 BookSourceViewModel.kt:398-413 deleteGroups ——
+   * 一次把多个分组名从每条书源的分组集合里全部移除后写回。
+   */
+  private async deleteGroups(names: string[]): Promise<void> {
+    if (names.length === 0) { return; }
+    const toRemove = new Set<string>(names);
+    const next = this.allSources.map((item: BookSource) => {
+      const groups = (item.bookSourceGroup ?? '')
+        .split(/[,;，；]/).map((part: string) => part.trim()).filter((part: string) => part.length > 0);
+      if (groups.every((group: string) => !toRemove.has(group))) { return item; }
+      const copy = BookSourceManagePage.cloneSource(item);
+      copy.bookSourceGroup = groups.filter((group: string) => !toRemove.has(group)).join(',');
+      return copy;
+    });
+    await this.commitSources(next);
+  }
+
   private static parseJson(json: string): Record<string, Object> {
     try {
       return JSON.parse(json) as Record<string, Object>;
@@ -849,7 +899,11 @@ export struct BookSourceManagePage {
     if (key === 'divider') {
       return;
     } else if (key === 'groups') {
-      this.onUnavailableAction('书源分组管理尚未迁移，未修改分组');
+      // 上游 BookSourceScreen.kt:529-531：分组管理打开 GroupManageBottomSheet。
+      this.groupManageSelected = new Set<string>();
+      this.groupManageSelectionMode = false;
+      this.groupManageEditing = '';
+      this.groupManageVisible = true;
     } else if (key === 'import_local') {
       this.importFromLocalFile();
     } else if (key === 'import_qrcode') {
@@ -888,9 +942,216 @@ export struct BookSourceManagePage {
       this.ImportDialog()
     } else if (this.showGroupFilter) {
       this.GroupFilterSheet()
+    } else if (this.groupManageVisible) {
+      this.GroupManageSheet()
     }
     // 批量菜单改挂 SelectionBottomBar 的 MoreVert bindPopup（见 build 里的浮动工具栏），不再占这个 bindSheet。
     // 自定义源分组对话框改用系统 openCustomDialog（见 PromptDialogContent），也不占这个 bindSheet。
+  }
+
+  /**
+   * 分组管理弹层：照上游 GroupManageBottomSheet.kt:52-251。
+   * 标题在「分组管理」与「已选 N 个」之间切换；选择态左侧换 Close、右侧换全选；
+   * 非选择态右侧是 Checklist 图标（进入选择态）。每行是 GlassCard 形态的可展开项：
+   * 尾部编辑/删除两个图标，点编辑展开行内输入框 + 确认按钮。
+   */
+  @Builder
+  private GroupManageSheet() {
+    Column() {
+      // 头部：左 action（选择态才有 Close）+ 居中标题 + 右 action（Checklist / SelectAll）。
+      Row() {
+        if (this.groupManageSelectionMode) {
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }.width(56).height(40)
+            .accessibilityText('取消')
+            .onClick(() => {
+              this.groupManageSelectionMode = false;
+              this.groupManageSelected = new Set<string>();
+            })
+        } else {
+          Blank().width(56)
+        }
+        Text(this.groupManageSelectionMode ? `已选 ${this.groupManageSelected.size} 个` : '分组管理')
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary)
+          .textAlign(TextAlign.Center).layoutWeight(1).maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        if (this.groupManageSelectionMode) {
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'selectAll', glyphSize: 20, tint: this.themeColorAccent })
+          }.width(56).height(40)
+            .accessibilityText(this.groupManageSelected.size === this.allGroupNames().length && this.allGroupNames().length > 0 ? '全不选' : '全选')
+            .onClick(() => {
+              const all = this.allGroupNames();
+              this.groupManageSelected = this.groupManageSelected.size === all.length
+                ? new Set<string>() : new Set<string>(all);
+            })
+        } else if (this.allGroupNames().length > 0) {
+          Stack({ alignContent: Alignment.Center }) {
+            AppGlyph({ name: 'list', glyphSize: 20, tint: this.themeColorAccent })
+          }.width(56).height(40)
+            .accessibilityText('选择模式')
+            .onClick(() => { this.groupManageSelectionMode = true; })
+        } else {
+          Blank().width(56)
+        }
+      }.width('100%').padding({ top: 20, bottom: 16 })
+      Scroll() {
+        Column() {
+          ForEach(this.allGroupNames(), (group: string) => {
+            Column() {
+              Row() {
+                if (this.groupManageSelectionMode) {
+                  // 选择态行首是 M3 Checkbox（上游 AppCheckbox），行尾不再出编辑/删除。
+                  Row().width(20).height(20).borderRadius(2)
+                    .border({ width: this.groupManageSelected.has(group) ? 0 : 2, color: this.themeColorTextSecondary })
+                    .backgroundColor(this.groupManageSelected.has(group) ? this.themeColorAccent : Color.Transparent)
+                    .margin({ right: 12 })
+                  if (this.groupManageSelected.has(group)) {
+                    AppGlyph({ name: 'profileCheck', glyphSize: 14, tint: this.themeColorOnPrimary })
+                      .margin({ right: -26, left: 3 })
+                  }
+                }
+                Text(group).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                if (!this.groupManageSelectionMode) {
+                  AppGlyph({ name: 'edit', glyphSize: 18, tint: this.themeColorTextSecondary })
+                    .margin({ left: 8 })
+                    .accessibilityText('编辑')
+                    .onClick(() => {
+                      if (this.groupManageEditing === group) {
+                        this.groupManageEditing = '';
+                        this.groupManageEditText = '';
+                      } else {
+                        this.groupManageEditing = group;
+                        this.groupManageEditText = group;
+                      }
+                    })
+                  AppGlyph({ name: 'delete', glyphSize: 18, tint: this.themeColorTextSecondary })
+                    .margin({ left: 12 })
+                    .accessibilityText('删除')
+                    .onClick(() => this.confirmDeleteGroup(group))
+                }
+              }.width('100%').alignItems(VerticalAlign.Center)
+              if (!this.groupManageSelectionMode && this.groupManageEditing === group) {
+                TextInput({ text: this.groupManageEditText, placeholder: '编辑' })
+                  .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .placeholderColor(this.themeColorTextTertiary)
+                  .height(48).width('100%').margin({ top: 8 })
+                  .backgroundColor(this.themeColorSurfacePrimary).borderRadius(4)
+                  .padding({ left: 12, right: 12 })
+                  .onChange((value: string) => { this.groupManageEditText = value; })
+                Row() {
+                  Blank().layoutWeight(1)
+                  Row() {
+                    AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorAccent })
+                    Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).margin({ left: 4 })
+                  }.padding({ left: 8, right: 8, top: 6, bottom: 6 })
+                    .onClick(async () => {
+                      await this.renameGroup(group, this.groupManageEditText);
+                      this.groupManageEditing = '';
+                      this.groupManageEditText = '';
+                    })
+                }.width('100%').margin({ top: 4 })
+              }
+            }.width('100%').alignItems(HorizontalAlign.Start)
+              .padding({ left: 16, right: 16, top: 13, bottom: 13 })
+              .backgroundColor(this.groupManageSelectionMode && this.groupManageSelected.has(group)
+                ? this.themeColorSecondaryContainer : this.themeColorSurfacePrimary)
+              .borderRadius(12).margin({ bottom: 8 })
+              .accessibilityText(this.groupManageSelectionMode
+                ? group + (this.groupManageSelected.has(group) ? '，已选择' : '，未选择') : group)
+              .onClick(() => {
+                if (!this.groupManageSelectionMode) { return; }
+                const next = new Set<string>(this.groupManageSelected);
+                if (next.has(group)) { next.delete(group); } else { next.add(group); }
+                this.groupManageSelected = next;
+              })
+              .gesture(LongPressGesture().onAction(() => {
+                if (!this.groupManageSelectionMode) {
+                  this.groupManageSelectionMode = true;
+                  this.groupManageSelected = new Set<string>([group]);
+                }
+              }))
+          }, (group: string) => group)
+          // 选择态底部：全选/全不选 + 删除所选（上游 GroupManageBottomSheet.kt:209-249）。
+          if (this.groupManageSelectionMode) {
+            Row({ space: 8 }) {
+              Row() {
+                AppGlyph({ name: 'selectAll', glyphSize: 18, tint: this.themeColorAccent })
+                Text(this.groupManageSelected.size === this.allGroupNames().length && this.allGroupNames().length > 0 ? '全不选' : '全选')
+                  .fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).margin({ left: 4 })
+              }.layoutWeight(1).height(40).justifyContent(FlexAlign.Center)
+                .border({ width: 1, color: this.themeColorOutlineVariant }).borderRadius(20)
+                .onClick(() => {
+                  const all = this.allGroupNames();
+                  this.groupManageSelected = this.groupManageSelected.size === all.length
+                    ? new Set<string>() : new Set<string>(all);
+                })
+              Row() {
+                AppGlyph({ name: 'delete', glyphSize: 18, tint: this.groupManageSelected.size > 0 ? this.themeColorOnSecondaryContainer : this.themeColorTextTertiary })
+                Text(this.groupManageSelected.size > 0 ? `删除所选 (${this.groupManageSelected.size})` : '删除所选')
+                  .fontSize(LABEL_LARGE)
+                  .fontColor(this.groupManageSelected.size > 0 ? this.themeColorOnSecondaryContainer : this.themeColorTextTertiary)
+                  .margin({ left: 4 })
+              }.layoutWeight(1).height(40).justifyContent(FlexAlign.Center)
+                .backgroundColor(this.groupManageSelected.size > 0 ? this.themeColorSecondaryContainer : Color.Transparent)
+                .borderRadius(20)
+                .onClick(() => {
+                  if (this.groupManageSelected.size === 0) { return; }
+                  this.confirmDeleteGroups();
+                })
+            }.width('100%').margin({ top: 8 })
+          }
+        }.width('100%').padding({ bottom: 8 })
+      }.constraintSize({ maxHeight: 640 }).scrollBar(BarState.Auto)
+    }.width('100%').padding({ left: 16, right: 16 })
+  }
+
+  /** 单个分组删除确认（上游 GroupManageBottomSheet.kt:88-100）。 */
+  private confirmDeleteGroup(group: string): void {
+    this.getUIContext().showAlertDialog({
+      title: '删除',
+      message: '是否确认删除?',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认',
+        action: async () => {
+          await this.deleteGroups([group]);
+          this.groupManageEditing = '';
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        fontColor: this.themeColorTextTertiary,
+        action: () => {}
+      }
+    });
+  }
+
+  /** 批量删除确认（上游 GroupManageBottomSheet.kt:102-121）。 */
+  private confirmDeleteGroups(): void {
+    const names: string[] = [];
+    this.groupManageSelected.forEach((name: string) => names.push(name));
+    this.getUIContext().showAlertDialog({
+      title: '删除',
+      message: '是否确认删除?',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认',
+        action: async () => {
+          await this.deleteGroups(names);
+          this.groupManageSelected = new Set<string>();
+          this.groupManageSelectionMode = false;
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        fontColor: this.themeColorTextTertiary,
+        action: () => {}
+      }
+    });
   }
 
   /**
@@ -1346,6 +1607,25 @@ export struct BookSourceManagePage {
       })
   }
 
+  /**
+   * 从全量书源聚合出分组清单，对齐上游 BookSourceDao.kt:386-406 的 dealGroups：
+   * 每条的 bookSourceGroup 按 AppPattern.splitGroupRegex（`[,;，；]`）拆开、去空、去重，
+   * 最后按中文排序。上游是 DAO 的 flow 里聚合，本地数据层没有分组表，故在页面里算。
+   */
+  private allGroupNames(): string[] {
+    const set = new Set<string>();
+    this.allSources.forEach((source: BookSource) => {
+      (source.bookSourceGroup ?? '')
+        .split(/[,;，；]/)
+        .map((part: string) => part.trim())
+        .filter((part: string) => part.length > 0)
+        .forEach((part: string) => set.add(part));
+    });
+    const list: string[] = [];
+    set.forEach((name: string) => list.push(name));
+    return list.sort((a: string, b: string) => a.localeCompare(b, 'zh-Hans-CN'));
+  }
+
   /** 上游 :923-931 defaultOptions 的七项固定筛选。 */
   private defaultFilterOptions(): string[] {
     const all: string[] = ['全部', '启用', '禁用', '需要登录', '未分组', '发现已启用', '发现未启用'];
@@ -1356,9 +1636,10 @@ export struct BookSourceManagePage {
 
   /** 上游 :932-934 otherOptions = 书源自带的各分组。 */
   private otherFilterOptions(): string[] {
+    const groups = this.allGroupNames();
     const query = this.groupFilterQuery.trim().toLowerCase();
-    if (query.length === 0) { return this.groups; }
-    return this.groups.filter((group: string) => group.toLowerCase().includes(query));
+    if (query.length === 0) { return groups; }
+    return groups.filter((group: string) => group.toLowerCase().includes(query));
   }
 
   build() {
@@ -1548,7 +1829,7 @@ export struct BookSourceManagePage {
       // 一个组件只能挂一个 bindSheet（本项目已踩坑），分组筛选与导入合并按状态切换内容。
       // 批量菜单走 SelectionBottomBar 的 MoreVert bindPopup（对齐上游 RoundDropdownMenu），不占这个 bindSheet；
       // 自定义源分组对话框走系统 openCustomDialog，也不占这个 bindSheet。
-      .bindSheet(this.showGroupFilter || this.importVisible,
+      .bindSheet(this.showGroupFilter || this.importVisible || this.groupManageVisible,
         this.SourceSheetContent(), {
           // 上游 AppModalBottomSheet.kt:155-168 是 heightIn(max = 容器高 * 0.8) + animateContentSize：
           // 内容少时 sheet 只占内容高度，最多 80%。本地原先分组筛选固定 SheetSize.LARGE（全屏），
@@ -1563,6 +1844,7 @@ export struct BookSourceManagePage {
             this.showGroupFilter = false;
             this.batchPanelVisible = false;
             this.importVisible = false;
+            this.groupManageVisible = false;
           }
         })
   }

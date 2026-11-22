@@ -34,10 +34,31 @@ class FormItem {
   defaultValue: string = '';
   chars: string[] = [];
   value: string = '';
+  /** 上游 LoginRowLayoutUi 三项 + justify，取自源 loginUi 每项的 style（见 ExploreKindLayout.kt）。 */
+  flexGrow: number = 0;
+  basisPercent: number = -1;
+  wrapBefore: boolean = false;
+  justify: string = 'auto';
+  /** 由 calculateFlexRows 填：这一行里该控件占的列数（1..6），用于 layoutWeight。 */
+  span: number = 2;
   constructor(name: string, type: string, viewName: string, def: string, action: string, chars: string[]) {
     this.name = name; this.type = type; this.viewName = viewName;
     this.defaultValue = def; this.value = def; this.action = action; this.chars = chars;
   }
+}
+
+/** 一行表单项（上游 calculateFlexRows 返回 List<List<Pair<T, Int>>> 的本地形态）。 */
+class FormRow {
+  items: FormItem[] = [];
+  constructor(items: FormItem[]) { this.items = items; }
+}
+
+/** loginUi 每项 style 里的布局参数（上游 LoginRowLayoutUi，见 SourceLoginContract.kt:23-28）。 */
+class FormItemStyle {
+  flexGrow: number = 0;
+  basisPercent: number = -1;
+  wrapBefore: boolean = false;
+  justify: string = 'auto';
 }
 
 @Component
@@ -66,6 +87,8 @@ export struct SourceLoginSheet {
   @State private sheetLoading: boolean = true;
   @State private sourceName: string = '';
   @State private items: FormItem[] = [];
+  /** 按上游 calculateFlexRows 排好的行（每行内各控件用 span/6 做 layoutWeight）。 */
+  @State private rows: FormRow[] = [];
   @State private entryUrl: string = '';
   @State private resultMessage: string = '';
   @State private submitting: boolean = false;
@@ -132,18 +155,149 @@ export struct SourceLoginSheet {
     this.sourceName = info.sourceName;
     this.entryUrl = info.entryUrl;
     this.resultMessage = info.message;
+    const styles = this.readItemStyles();
     const formItems: FormItem[] = [];
     for (const item of info.items) {
-      formItems.push(new FormItem(item.name, item.type,
+      const formItem = new FormItem(item.name, item.type,
         item.viewName.length > 0 ? item.viewName : item.name,
         item.defaultValue.length > 0 ? item.defaultValue : item.value,
-        item.action, item.chars.slice()));
+        item.action, item.chars.slice());
+      const style = styles.get(item.name);
+      if (style !== undefined) {
+        formItem.flexGrow = style.flexGrow;
+        formItem.basisPercent = style.basisPercent;
+        formItem.wrapBefore = style.wrapBefore;
+        formItem.justify = style.justify;
+      }
+      formItems.push(formItem);
     }
     this.items = formItems;
+    this.rows = this.calculateFlexRows(formItems);
     this.mode = info.mode;
     if (info.mode === 'error') { this.resultMessage = info.message || '无法登录'; }
     // prepare 完成即退出 loading 态（上游 state.loading 为准备中）。
     this.sheetLoading = false;
+  }
+
+  /**
+   * 从源 JSON 的 loginUi 里按 name 取每项的 style（layout_flexGrow / layout_flexBasisPercent /
+   * layout_wrapBefore / layout_justifySelf）。引擎的 BookSourceLoginItem 不投影 style，
+   * 而上游排版完全依赖这三个值（SourceLoginViewModel.kt:339-342），所以这里单独读一次原始 JSON。
+   */
+  private readItemStyles(): Map<string, FormItemStyle> {
+    const result = new Map<string, FormItemStyle>();
+    const all = BookSourceRepository.getAll();
+    let raw = '';
+    for (const source of all) {
+      if (source.bookSourceUrl === this.sourceUrl && source.sourceJson.length > 0) {
+        raw = source.sourceJson;
+        break;
+      }
+    }
+    if (raw.length === 0) { return result; }
+    let loginUi = '';
+    try {
+      const root = JSON.parse(raw) as Record<string, Object>;
+      const value = root['loginUi'];
+      loginUi = typeof value === 'string' ? value.trim() : '';
+    } catch (_) {
+      return result;
+    }
+    if (loginUi.length === 0 || loginUi[0] !== '[') { return result; }
+    let parsed: Object;
+    try {
+      parsed = JSON.parse(loginUi) as Object;
+    } catch (_) {
+      return result;
+    }
+    if (!Array.isArray(parsed)) { return result; }
+    for (const entry of parsed as Object[]) {
+      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) { continue; }
+      const record = entry as Record<string, Object>;
+      const name = typeof record['name'] === 'string' ? (record['name'] as string).trim() : '';
+      if (name.length === 0) { continue; }
+      const styleValue = record['style'];
+      if (styleValue === null || typeof styleValue !== 'object' || Array.isArray(styleValue)) { continue; }
+      const styleRecord = styleValue as Record<string, Object>;
+      const style = new FormItemStyle();
+      const grow = styleRecord['layout_flexGrow'];
+      if (typeof grow === 'number') { style.flexGrow = grow as number; }
+      const basis = styleRecord['layout_flexBasisPercent'];
+      if (typeof basis === 'number') { style.basisPercent = basis as number; }
+      const wrap = styleRecord['layout_wrapBefore'];
+      if (typeof wrap === 'boolean') { style.wrapBefore = wrap as boolean; }
+      const justify = styleRecord['layout_justifySelf'];
+      if (typeof justify === 'string') { style.justify = (justify as string).trim(); }
+      result.set(name, style);
+    }
+    return result;
+  }
+
+  /**
+   * 逐字照搬上游 ExploreKindLayout.kt:28-91 的 calculateFlexRows（maxSpan=6）：
+   * Text 行恒占满一行；有 basisPercent 的按比例取列数；只给 flexGrow 的占 3 列；都没有占 2 列。
+   * 每行末尾把剩余列数均摊补齐，保证一行内各控件 layoutWeight 之和恒为 6。
+   */
+  private calculateFlexRows(items: FormItem[]): FormRow[] {
+    const maxSpan = 6;
+    const rows: FormRow[] = [];
+    let current: FormItem[] = [];
+    let currentSpan = 0;
+    const fillTail = () => {
+      if (current.length === 0) { return; }
+      const remain = maxSpan - currentSpan;
+      if (remain <= 0) { return; }
+      const spans: number[] = current.map((item: FormItem) => item.span);
+      const allSame = spans.every((span: number) => span === spans[0]);
+      if (allSame && current.length > 1) {
+        const addEach = Math.floor(remain / current.length);
+        let extra = remain % current.length;
+        for (let index = 0; index < current.length; index++) {
+          let add = addEach;
+          if (extra > 0) { extra -= 1; add += 1; }
+          current[index].span = current[index].span + add;
+        }
+      } else {
+        current[current.length - 1].span = current[current.length - 1].span + remain;
+      }
+      currentSpan += remain;
+    };
+    for (const item of items) {
+      let span = 2;
+      if (item.type === 'button' || item.type === 'select' || item.type === 'toggle') {
+        if (item.wrapBefore || item.basisPercent >= 1.0) {
+          span = maxSpan;
+        } else if (item.basisPercent > 0) {
+          span = Math.round(maxSpan * item.basisPercent);
+          span = Math.min(Math.max(span, 1), maxSpan);
+        } else if (item.flexGrow > 0) {
+          span = 3;
+        }
+      } else {
+        // 文本行（text / password）上游恒 basisPercent=1 + wrapBefore=true，独占一行。
+        span = maxSpan;
+      }
+      item.span = span;
+      const wrap = (item.wrapBefore && current.length > 0) || (currentSpan + span > maxSpan);
+      if (wrap) {
+        fillTail();
+        rows.push(new FormRow(current));
+        current = [];
+        currentSpan = 0;
+      }
+      current.push(item);
+      currentSpan += span;
+      if (currentSpan >= maxSpan) {
+        rows.push(new FormRow(current));
+        current = [];
+        currentSpan = 0;
+      }
+    }
+    if (current.length > 0) {
+      fillTail();
+      rows.push(new FormRow(current));
+    }
+    return rows;
   }
 
   private async submit(): Promise<void> {
@@ -207,7 +361,8 @@ export struct SourceLoginSheet {
           .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
           .fontColor(this.themeColorTextPrimary)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(TextAlign.Center).width('100%')
+          .textAlign(item.justify === 'right' ? TextAlign.End : TextAlign.Center)
+          .width('100%')
           .constraintSize({ minHeight: 44 })
           .padding({ left: 12, right: 12, top: 8, bottom: 8 })
           .backgroundColor(this.themeColorSurfacePrimary)
@@ -228,15 +383,42 @@ export struct SourceLoginSheet {
             .onChange((on: boolean) => { this.items[index].value = on ? 'true' : 'false'; })
         }
       } else {
-        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
-          .width('100%').margin({ bottom: 4 })
-        TextInput({ placeholder: item.viewName, text: item.value })
+        // 上游 LoginRowUi.Text → AppTextField(label=row.title, singleLine)，是 M3 filled 文本框
+        // （顶部圆角 + 底部指示线 + 浮动 label），不是「上方说明文字 + 下方输入框」。
+        TextInput({ text: item.value })
           .type(item.type === 'password' ? InputType.Password : InputType.Normal)
+          .placeholderColor(this.themeColorTextTertiary)
           .fontColor(this.themeColorTextPrimary)
-          .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
+          .backgroundColor(this.themeColorSurfaceTertiary)
+          .borderRadius({ topLeft: 4, topRight: 4 })
+          .border({ width: { bottom: 1 }, color: this.themeColorTextTertiary })
           .onChange((value: string) => { this.items[index].value = value; })
+        Text(item.viewName).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').margin({ top: 4 })
       }
-    }.width('100%').margin({ bottom: 8 })
+    }.width('100%')
+  }
+
+  /**
+   * 一行表单项：照上游 SourceLoginSheets.kt:152-170 的 Row(fillMaxWidth, spacedBy 8) +
+   * 每项 weight = span/maxSpan。span 由 calculateFlexRows 算出（和恒为 6）。
+   */
+  @Builder FormRowView(row: FormRow) {
+    Row({ space: 8 }) {
+      ForEach(row.items, (item: FormItem) => {
+        Column() {
+          this.ControlView(item, this.indexOfItem(item))
+        }.layoutWeight(item.span)
+      }, (item: FormItem): string => item.name)
+    }.width('100%').alignItems(VerticalAlign.Top)
+  }
+
+  /** ControlView 里改值时按下标写回 this.items，所以要能反查。 */
+  private indexOfItem(item: FormItem): number {
+    for (let index = 0; index < this.items.length; index++) {
+      if (this.items[index].name === item.name) { return index; }
+    }
+    return 0;
   }
 
   /**
@@ -356,12 +538,13 @@ export struct SourceLoginSheet {
             }
           })
       } else {
-        // 上游 :145-190 SourceLoginFormSheet 内容：verticalScroll + bottom 24 + spacedBy 8。
+        // 上游 :145-190 SourceLoginFormSheet 内容：verticalScroll + bottom 24 + spacedBy 8，
+        // 行内按 calculateFlexRows 的 span 分列（SourceLoginSheets.kt:147-170）。
         Scroll() {
-          Column() {
-            ForEach(this.items, (item: FormItem, index: number) => {
-              this.ControlView(item, index)
-            }, (item: FormItem): string => item.name)
+          Column({ space: 8 }) {
+            ForEach(this.rows, (row: FormRow) => {
+              this.FormRowView(row)
+            }, (row: FormRow): string => row.items.map((item: FormItem) => item.name).join('|'))
             if (this.resultMessage.length > 0) {
               Text(this.resultMessage).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
                 .margin({ top: 12 }).width('100%')
