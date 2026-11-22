@@ -39,6 +39,8 @@ import { TxtTocRuleRepository } from '../data/TxtTocRuleRepository';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { SourceCheckSheet, SourceCheckOptions } from '../components/booksource/SourceCheckSheet';
 import { SourceCheckRunSheet } from '../components/booksource/SourceCheckRunSheet';
+// 列表页 FAB 对齐上游 AppFloatingActionButton（56vp 圆角方形纯图标 + tooltip），与编辑页/调试页共用。
+import { AppFab } from '../components/booksource/AppFab';
 import {
   BookSourceCheckCoordinator, BookSourceCheckState, defaultCheckOptions
 } from '../bookSource/BookSourceCheckCoordinator';
@@ -672,6 +674,8 @@ export struct BookSourceManagePage {
     const next = new Set<string>(this.selectedUrls);
     this.visibleSourceRows.forEach((row: SourceRow) => next.add(row.source.bookSourceUrl));
     this.selectedUrls = next;
+    // 选择态由选中集合是否为空决定（上游 inSelectionMode = selectedIds.isNotEmpty()）。
+    this.selectionMode = next.size > 0;
   }
 
   /**
@@ -685,6 +689,7 @@ export struct BookSourceManagePage {
       if (!this.selectedUrls.has(url)) { next.add(url); }
     });
     this.selectedUrls = next;
+    this.selectionMode = next.size > 0;
   }
 
   /**
@@ -1212,6 +1217,12 @@ export struct BookSourceManagePage {
       .fontColor(this.themeColorAccent)
       .width('100%')
       .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      // 上游 BookSourceScreen.kt:600-603 是 `.semantics { heading() }`（读屏可跳转的标题节点）。
+      // ArkUI 的 AccessibilityRoleType（common.d.ts:1961 起）没有 HEADING 项，accessibilityRole
+      // 无法表达 heading 语义；这里只能用「整块作为一个可读节点 + 强制可见」尽量接近，
+      // 读屏不会把它当标题跳转。属平台能力差距，已记入报告。
+      .accessibilityGroup(true)
+      .accessibilityLevel('yes')
       .accessibilityText(domain)
   }
 
@@ -1260,6 +1271,8 @@ export struct BookSourceManagePage {
             if (next.has(row.source.bookSourceUrl)) { next.delete(row.source.bookSourceUrl); }
             else { next.add(row.source.bookSourceUrl); }
             this.selectedUrls = next;
+            // 上游 inSelectionMode = selectedIds.isNotEmpty()：取消最后一个选中项即退出选择态。
+            this.selectionMode = next.size > 0;
           })
       }
       Column() {
@@ -1335,12 +1348,18 @@ export struct BookSourceManagePage {
         : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
       .borderRadius(12)
       .accessibilityText(this.rowAccessibilitySummary(row))
-      .gesture(LongPressGesture().onAction(() => {
-        if (!this.selectionMode) { this.selectionMode = true; }
+      // 上游 SelectionItemCard.kt:93-94 `GlassCard(onClick = onToggleSelection)`：
+      // **点一下卡片就切换选中**，选择态由 `inSelectionMode = selectedIds.isNotEmpty()` 决定
+      // （BookSourceScreen.kt:688 / BaseRuleViewModel.kt:156-158 toggleSelection 是 Set 增删）。
+      // 长按在上游只用于拖拽排序（SelectionItemCard.kt:356-367 longPressDraggableHandle），
+      // 本地此前把长按当作「进入多选」的入口，与上游交互不符。
+      .onClick(() => {
         const next = new Set<string>(this.selectedUrls);
-        next.add(row.source.bookSourceUrl);
+        if (next.has(row.source.bookSourceUrl)) { next.delete(row.source.bookSourceUrl); }
+        else { next.add(row.source.bookSourceUrl); }
         this.selectedUrls = next;
-      }))
+        this.selectionMode = next.size > 0;
+      })
   }
 
   /**
@@ -1771,7 +1790,10 @@ export struct BookSourceManagePage {
       }
 
       // 上游 ListScaffold.kt 无空态分支（列表为空就是空白）；本地原有的 ModuleEmpty 空态属自加，已移除。
-      Stack({ alignContent: Alignment.BottomEnd }) {
+      // 上游 ListScaffold.kt:128-145：选择底栏 align(BottomCenter) 居中，FAB 是 Alignment.BottomEnd。
+      // Stack 只有一个 alignContent，取底部居中（ArkUI 的 Alignment.Bottom 即水平居中+贴底）；
+      // FAB 用一层撑满宽的 Row + FlexAlign.End 靠右。
+      Stack({ alignContent: Alignment.Bottom }) {
         List({ space: 8, scroller: this.sourceScroller }) {
           LazyForEach(this.sourceDataSource, (item: BookSourceListItem, index: number) => {
             if (isDomainHeader(item)) {
@@ -1792,21 +1814,28 @@ export struct BookSourceManagePage {
           // onMove 挂在 ForEach/LazyForEach 上，仅手动排序非分组时可拖。
           .onMove(this.canReorder() ? (from: number, to: number) => this.onSourceMove(from, to) : undefined)
         }.layoutWeight(1).width('100%')
+          // 上游 adaptiveContentPadding（AdaptivePadding.kt:61-73）M3 分支 start/end = 16.dp，
+          // 卡片左右各留 16 才不贴屏幕边；本地此前 List 无水平内边距，卡片撑满整屏。
+          .padding({ left: 16, right: 16 })
           // 上游 BookSourceScreen.kt:582-620 contentPadding bottom = 底部内边距 + 120.dp，
           // 给 FAB / 浮动工具栏留出空间，最后一行不会被盖住。
           .contentEndOffset(120)
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).scrollBar(BarState.Off)
 
-        // 上游 ListScaffold.kt:70-148：FAB 用 animateFloatingActionButton(visible = selectedIds.isEmpty())，
-        // 选择态下 FAB 整个隐藏；底部改为 SelectionBottomBar（见下方浮动工具栏）。
+        // 上游 ListScaffold.kt:70-81：FAB 是 AppFloatingActionButton(icon = Icons.Default.Add,
+        // tooltipText = R.string.add「添加」)，M3 FloatingActionButton = 56dp 圆角方形纯图标按钮
+        // （本地此前是「＋ 添加书源」文字胶囊，形态不对）；animateFloatingActionButton 让它
+        // 在选择态隐藏（本地由 if (!selectionMode) 承担）。
+        // Stack 是底部居中，FAB 需要 BottomEnd，用一层撑满宽的 Row 靠右。
         if (!this.selectionMode) {
           Row() {
-            Image($r('app.media.app_add')).width(18).height(18).fillColor(this.themeColorTextPrimary)
-            Text('添加书源').fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).margin({ left: 7 })
-          }.justifyContent(FlexAlign.Center).padding({ left: 20, right: 20, top: 13, bottom: 13 })
-            .backgroundColor(this.themeColorAccent).borderRadius(28)
-            .margin({ right: 20, bottom: 18 + this.appBottomInset })
-            .onClick(() => this.onOpenSourceEdit(''))
+            AppFab({
+              icon: 'add',
+              fabAccessibilityText: '添加',
+              onFabClick: () => this.onOpenSourceEdit('')
+            })
+          }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16 })
+            .margin({ bottom: 16 + this.appBottomInset })
         }
 
         // 上游 SelectionBottomBar.kt:170-247 M3 分支 = HorizontalFloatingToolbar：
