@@ -278,7 +278,11 @@ export struct BookSourceManagePage {
     }
     if (targets.length === 0) return;
     this.onUnavailableAction('开始校验 ' + targets.length + ' 个书源');
-    await BookSourceCheckCoordinator.check(this.checkTargetUrls, keyword, this.checkOptions);
+    // 校验结束后要把失效分组 / 错误注释 / respondTime 写回库，Repository 需要 Context。
+    const context = this.getUIContext().getHostContext();
+    await BookSourceCheckCoordinator.check(this.checkTargetUrls, keyword, this.checkOptions, context);
+    // 写回发生在 check() 内部收尾，这里再读一次库，让分组筛选与行上副标题立刻反映新标记。
+    await this.reloadSources();
   }
 
   /** 从仓储读全量书源，重建可见列表。 */
