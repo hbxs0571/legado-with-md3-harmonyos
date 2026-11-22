@@ -883,6 +883,18 @@ export class ReaderCanvasItemBox {
   lineTop: number = 0;
   /** 行内拉伸叠进 letterSpacing 的附加间距（px）。 */
   extraSpacingPx: number = 0;
+  /**
+   * 排版期已建好的段落（#1010）。
+   *
+   * 版面几何是绘制时顺带产出的，段落也在那时建好了；早前没挂回 box，于是
+   * 背景带 / 字形 / 下划线 / 背景图四条绘制路径每帧都要重新拼一次段落 key
+   * 再查 Map（一页二十行、每行一个中文长串，一帧拼四遍）。挂回来之后同一帧
+   * 内直接复用，`paragraphCache` 仍保留作跨页复用的兜底。
+   *
+   * 只有走 `layoutPage` 的路径会填它；`drawPage` 传进来的 cachedGeometry 与
+   * 占位页不重新排版，所以绘制侧必须保留回落分支。
+   */
+  paragraph: ReaderCanvasParagraph | undefined = undefined;
 }
 
 /** 一行在版面上的位置。 */
@@ -2183,6 +2195,8 @@ export class ReaderCanvasRenderer {
           box.widthPx = Math.max(1, item.width * vp + extraSpacingPx * Math.max(0, item.value.length - 1));
           const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
             extraSpacingPx, this.itemStyleRanges(request, item));
+          // 建好的段落挂回 box，绘制四条路径直接复用（#1010）。
+          box.paragraph = built;
           const builtHeight = built !== undefined ? built.heightPx : line.height * vp;
           box.top = top + Math.max(0, (line.height * vp - builtHeight) / 2);
           box.heightPx = builtHeight;
@@ -2238,14 +2252,30 @@ export class ReaderCanvasRenderer {
    * 上游把这批底色整页铺完再画正文（`textBackgroundBands` → `halfHighlights` → 正文），
    * 逐框画也没问题——它们本来就都落在字形下缘以下。
    */
+  /**
+   * 取元素段落：优先用排版期挂在 box 上的那份（#1010）。
+   *
+   * 回落分支必须留：`drawPage` 拿到 cachedGeometry 时不会重新 `layoutPage`，
+   * 而 `scrollDrawGeometry` 里的几何也可能是上一帧留下的（box.paragraph 有值，
+   * 但样式已变时它会被 `scrollGeometryKey` 整体清掉，不会读到旧样式）。
+   * 占位页走 `drawMessagePage`，根本不进这里。
+   */
+  private boxParagraph(box: ReaderCanvasItemBox, request: ReaderCanvasDrawRequest,
+    item: LocalReaderLineItem): ReaderCanvasParagraph | undefined {
+    if (box.paragraph !== undefined) {
+      return box.paragraph;
+    }
+    return this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
+      box.extraSpacingPx, this.itemStyleRanges(request, item));
+  }
+
   private drawTextBoxBackground(canvas: drawing.Canvas, box: ReaderCanvasItemBox,
     request: ReaderCanvasDrawRequest): void {
     const item = box.item;
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
-      box.extraSpacingPx, this.itemStyleRanges(request, item));
+    const built = this.boxParagraph(box, request, item);
     if (built === undefined) {
       return;
     }
@@ -2260,8 +2290,7 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
-      box.extraSpacingPx, this.itemStyleRanges(request, item));
+    const built = this.boxParagraph(box, request, item);
     if (built === undefined) {
       return;
     }
@@ -2283,8 +2312,7 @@ export class ReaderCanvasRenderer {
     if (item === undefined) {
       return;
     }
-    const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
-      box.extraSpacingPx, this.itemStyleRanges(request, item));
+    const built = this.boxParagraph(box, request, item);
     if (built === undefined) {
       return;
     }
@@ -2368,8 +2396,7 @@ export class ReaderCanvasRenderer {
       if (ranges.length === 0) {
         continue;
       }
-      const built = this.getParagraph(item.value, this.itemTextStyle(request, item), box.widthPx,
-        box.extraSpacingPx, ranges);
+      const built = this.boxParagraph(box, request, item);
       if (built === undefined) {
         continue;
       }
