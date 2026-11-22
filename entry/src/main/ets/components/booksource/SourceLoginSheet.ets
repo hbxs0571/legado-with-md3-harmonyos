@@ -247,6 +247,21 @@ export struct SourceLoginSheet {
     this.resultMessage = await BookSourceLoginCoordinator.removeLoginHeader(context, this.sourceUrl);
   }
 
+  /**
+   * 上游 SourceLoginViewModel.kt:238-244 resolveTitle：viewName 为空用 name；
+   * 长度 3..19 且首尾都是单引号时去掉引号（源里写成 `'标题'` 的 JS 字面量）；
+   * 其余情况照用（上游还会 eval，本地不求值，保留原文）。
+   */
+  private resolveTitle(item: BookSourceLoginItem): string {
+    const viewName = item.viewName;
+    if (viewName.length === 0) { return item.name; }
+    if (viewName.length >= 3 && viewName.length <= 19
+      && viewName.charAt(0) === "'" && viewName.charAt(viewName.length - 1) === "'") {
+      return viewName.substring(1, viewName.length - 1);
+    }
+    return viewName;
+  }
+
   private prepare(): void {
     const info: LoginPrepare = BookSourceLoginCoordinator.prepare(this.sourceUrl);
     this.sourceName = info.sourceName;
@@ -255,10 +270,15 @@ export struct SourceLoginSheet {
     const styles = this.readItemStyles();
     const formItems: FormItem[] = [];
     for (const item of info.items) {
+      // 上游 SourceLoginViewModel.kt:220-232：select/toggle 型在 loginInfo 无值时取
+      // `row.default ?: options.firstOrNull()` 作为初值；其余类型沿用 default/value。
+      let initial = item.defaultValue.length > 0 ? item.defaultValue : item.value;
+      if (initial.length === 0 && (item.type === 'select' || item.type === 'toggle')
+        && item.chars.length > 0) {
+        initial = item.chars[0];
+      }
       const formItem = new FormItem(item.name, item.type,
-        item.viewName.length > 0 ? item.viewName : item.name,
-        item.defaultValue.length > 0 ? item.defaultValue : item.value,
-        item.action, item.chars.slice());
+        this.resolveTitle(item), initial, item.action, item.chars.slice());
       const style = styles.get(item.name);
       if (style !== undefined) {
         formItem.flexGrow = style.flexGrow;
