@@ -24,7 +24,7 @@
 
 今天在设备上能走通的完整链路：
 
-- **导入本地书**：系统文件选择器列出六种格式与压缩包七项（`data/BookRepository.ets:534`-`:542` 的 `fileSuffixFilters`：`.txt` / `.epub` / `.pdf` / `.mobi` / `.azw3` / `.umd` / `.zip,.cbz`）。同一本书再导入走「更新目录」分支，不新增第二条记录（`pages/Index.ets` 的 `importLocalBook`，判重键是 `bookUrl`）。
+- **导入本地书**：系统文件选择器列出六种格式与压缩包七项（`data/BookRepository.ets:749`-`:758` 的 `fileSuffixFilters`：`.txt` / `.epub` / `.pdf` / `.mobi` / `.azw3` / `.umd` / `.zip,.cbz`，`maxSelectNumber = 500` 在 `:759`）。同一本书再导入走「更新目录」分支，不新增第二条记录（`pages/Index.ets:6982` 的 `importLocalBook`，判重键是 `bookUrl`）。导入页本身是「多选之后的确认页」（`pages/LocalBookImportPage.ets`）；上游那种浏览文件夹 + 智能扫描没有，平台能选目录但列不出目录内容，详见 [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「智能扫描本地文件」一节。
 - **书架展示**：分组页签 / 隐藏页签 / 文件夹三种样式（`pages/BookshelfPage.ets:2215`、`:2198`、`:2189`），竖屏与横屏各有列表/网格两档，卡片可显示简介、最新章节、章节角标与阅读进度。
 - **分组页签的类型**：上游有 13 个「伴生分组」（全部 / 本地 / 小说 / 漫画 / 音频 / 在读 / 未读 / 已读 / 连载已读 / 完本已读 / 网络未分组 / 本地未分组 / 更新失败），除「全部」外默认隐藏，其余要用户自行打开；本地只补了「本地未分组」一行（`data/BookGroupRepository.ets:495`-`:508`），书架页签为「全部」+ 自定义分组 +「本地未分组」（`pages/BookshelfPage.ets:405`-`:409`），没有在读 / 未读 / 已读这类状态页签。读状态判据本身已在书籍详情页（`pages/BookInfoPage.ets:620`-`:627` 的 `readStateLabel()`），缺的是把它做成页签。详见 [KNOWN-ISSUES](KNOWN-ISSUES.md) 的「智能伴生分组」。
 - **排序**：六个排序档加正逆序（`model/BookGroup.ets:39` 的 `BOOK_SORT_OPTIONS`，比较逻辑在 `data/BookshelfSort.ets:11`）；分组自己设了排序档时覆盖书架全局，与上游 `sortBooks()` 取值优先级一致（`BookshelfPage.ets:619`-`:622` 的 `getVisibleBooks()` 先按分组档再回落全局）。

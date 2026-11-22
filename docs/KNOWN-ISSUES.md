@@ -2857,6 +2857,81 @@ README 只提了已读/未读，实际有五个阅读状态组（在读 / 未读
 
 ---
 
+## 智能扫描本地文件：上游递归扫整棵目录，本地是选择器多选后的确认页（r369 盘点）
+
+**KI-IMPORT1 「智能扫描」未接，不是少一个按钮，而是本地没有「目录浏览」这一层** —— 状态：**未接**。平台也不是完全无能：应用能选一个目录，但选完列不出目录里的内容（证据见第五节）。
+
+### 一、这个词从哪来
+
+- 上游字符串资源 `app/src/main/res/values-zh-rCN/strings.xml:1111` 的 `scan_folder` 值为「智能扫描」。
+- 全仓唯一的调用点：`ui/book/import/local/ImportBookScreen.kt:164`，导入本地文件页溢出菜单里的一项。所以「智能扫描」是**那个页面里的一个动作**，不是一种独立功能。
+- 本地 `README.md:47` 早已登记「智能扫描本地文件 | 未接 | 导入走系统文件选择器，未做目录扫描」，但没写清上游到底扫什么、本地为什么真做不了。
+
+### 二、上游这个页面的两个模式
+
+同一个导入页用状态位 `sourceMode` 切两种列表：
+
+| 模式 | 行为 | 落点 |
+| --- | --- | --- |
+| `CURRENT_DIR`（默认） | 只列当前一层，可点进子目录；底部面包屑是「根目录名 + 各级子目录」 | `ImportBookViewModel.kt:731 loadDoc`、`:762 listCurrentDocDocs` |
+| `SCAN_RECURSIVE` | 递归扫整棵目录，结果平铺成一张列表，面包屑失效 | `:686 scanCurrentDoc`、`:824 scanDoc` |
+
+三个触发点：溢出菜单（intent 定义在 `ImportBookViewModel.kt:87` 的 `data object ScanFolder`，派发在 `:167`）、下拉刷新（`ImportBookScreen.kt:205` 的 `AppPullToRefresh`，`:210 onRefresh = onScanFolder`，拉起的是同一个扫描）、以及扫描模式下的自动同步（`syncSourceDocs` 的 `SCAN_RECURSIVE` 分支 `:810`，只在发现某文件已不存在时才重扫——避免每 1.5 秒重扫大目录）。
+
+### 三、「智能」在哪：四条规则，都在代码里
+
+1. **扩展名白名单**：`constant/AppPattern.kt:46` 的 `bookFileRegex` 认 `txt` / `epub` / `umd` / `pdf` / `mobi` / `azw3` / `azw`，`:48` 的 `archiveFileRegex` 认 `zip` / `cbz` / `rar` / `7z`，两者都忽略大小写。扫描时直接拿这两个正则过滤。
+2. **跳过隐藏项**：`listCurrentDocDocs` 里有一条 `item.name.startsWith(".") -> false`（`:762`）；扫描复用同一个 `list`，所以这条对递归也生效。
+3. **边扫边收、16 路并发**：`scanDoc`（`:824`）用 `Channel(UNLIMITED)` 做生产者-消费者，`mapParallel(16)` 展开目录，子目录回塞 channel、文件直接进结果，计数归零即 `takeWhile { n > 0 }` 结束。所以大目录是渐进出结果，不是等扫完才显示。
+4. **扫完标已上架、不可勾选**：扫描结果与书架里的本地书按 `originName` 比对，命中者 `isOnBookShelf = true`，`checkableIds` 只收未上架的（uiState 映射在 `ImportBookViewModel.kt:198`-`:203`）。另有名称搜索与名称/大小/时间三档排序。
+
+自动同步（`:779 startAutoSync`、`:789 syncSourceDocs`）每 1500ms 轮一次：`CURRENT_DIR` 模式比对文件 id 集合，变了就整表替换并保留仍存在的勾选。
+
+### 四、它靠什么平台能力
+
+- 系统目录树选择器 `ActivityResultContracts.OpenDocumentTree()`（`ImportBookScreen.kt:259`）拿一枚目录树的 content URI，再由 `FolderPicked` 交给 ViewModel。
+- 列目录：`utils/FileDocExtensions.kt:203` 的 `FileDoc.list` 对 content scheme 走 `:159` 的 `treeChildren`，用 `DocumentsContract.buildChildDocumentsUriUsingTree` 直接查 `contentResolver`（源码注释原文：「DocumentFile 的 listFiles() 非常的慢,所以这里直接从数据库查询」）。
+- 所以上游的递归扫描，本质是「对一棵已授权的 SAF 目录树反复查询子文档」。
+
+### 五、本地现状与平台边界
+
+本地没有目录浏览，也没有递归扫描。`pages/LocalBookImportPage.ets`（239 行，挂在 `pages/Index.ets:10569`）是「系统选择器多选之后的确认页」：`ImportCandidate` 五个字段（`uri` / `fileName` / `sizeLabel` / `onShelf` / `selected`），可取消勾选、标出已上架；压缩包还能切到「包内条目」模式（`@Prop archiveUri` + `onImportArchiveEntries`）。入口链是 `pages/Index.ets:6982` 的 `importLocalBook` → `data/BookRepository.ets:747` 的 `pickLocalBookUris`（六组 `fileSuffixFilters` 在 `:749`-`:758`，`maxSelectNumber = 500` 在 `:759`）。
+
+`LocalBookImportPage.ets:18` 那句注释写「鸿蒙的 DocumentViewPicker 只回 uri 列表，没有『目录枚举』能力」——结论对，但把两件事说成了一件事。本次在 SDK 声明里把它拆成三层：
+
+| 需要的能力 | 能不能 | 依据 |
+| --- | --- | --- |
+| 让用户选一个目录 | 能 | `@ohos.file.picker.d.ts` 的 `DocumentSelectOptions.selectMode`，枚举 `FILE = 0` / `FOLDER = 1` / `MIXED = 2`，`@since 11`，syscap `SystemCapability.FileManagement.UserFileService.FolderSelection` |
+| 列出目录里的文件 | 不能 | `@ohos.file.fs.d.ts` 里 `opendir` / `readdir` / `Dir` 全部零命中；唯一的列举 API `listFile(path, options?)` 的 JSDoc 写的是「Application sandbox path of the directory」——只认沙箱路径，不认选择器给的 URI |
+| 遍历用户授权的目录树 | 不能 | `@ohos.file.fileAccess.d.ts`（枚举用户目录的框架）文件头 NOTE 写明「目前这些 API 只能由 FilePicker 和 FileManager 调用」，且已 `@deprecated since 23`、`@useinstead @ohos.file.fs:fileIo`；命名空间里也没有任何可用成员 |
+
+另有一条容易误判的：`fs.open` 的 JSDoc 确实支持传 URI，但打开目录句柄后没有读目录项的 API，拿不到子项。所以「能打开目录」不等于「能列目录」。
+
+### 六、判断：能补到什么程度
+
+- 现在这种「多选 + 确认页」的形态，**功能目的已经达成**：导入前就知道哪本已上架，可勾选，可批量导入。
+- 上游那种「进目录 → 逐层浏览 → 一键递归扫描 → 平铺列表」**做不到**，卡点在「列目录」这一条，不是缺一个开关。
+- 可做的近似有两条：①选目录用 `selectMode: FOLDER`，拿到目录 URI 后回填进下一次 `DocumentSelectOptions.defaultFilePathUri`（`@since 10`），让系统选择器停在该目录继续浏览，应用始终不自己枚举；②把上次导入目录持久化，下次直接弹在该目录。两条都只能做「浏览感」，做不了「一次扫完整棵树」。
+- 压缩包覆盖也不同：上游白名单认 `zip` / `cbz` / `rar` / `7z`（`AppPattern.kt:48`），本地选择器只放 `.zip,.cbz`（`BookRepository.ets:757`）。
+
+### 七、顺带发现（本轮只记，未改源码）
+
+- `data/BookRepository.ets:734` 注释写「写 500 在基线 12 上安全，在 API 21+ 等价于不限」，而 SDK 里 `maxSelectNumber` 的 JSDoc 原文是「In API version 23 and later versions, the maximum number of files that can be selected at a time is not limited.」——是 **23**，不是 21+。口径差一档，功能无影响。
+- `data/BookRepository.ets:736` 仍是旧账：「TXT / EPUB 走现有解析器；PDF / MOBI / AZW3 / UMD / 压缩包的解析器后续批次接入，当前导入给出明确的不支持提示；rar / 7z 暂不支持（平台无能力）」。实测 `importSingleUri` 早已分流：`:793` 的 `pdf` → `PdfRepository.importFromUri`，`:810`/`:812` 的 `mobi` → `MobiRepository.importFromUri`，`:817` 的 `umd`；格式判定 `formatFromFileName` 在 `:1333`。→ 除 rar / 7z 那句，其余描述已过时。
+- `pages/LocalBookImportPage.ets:18` 的注释把「能选目录」与「列不出目录」混成一句，将来改代码时建议顺手改成「能选目录（`selectMode: FOLDER`），但列不出目录内容（`fs.listFile` 只吃沙箱路径）」。本轮按「只写文档」的指示没动源码。
+- `docs/FEATURES.md` 第一章「导入本地书」原写 `data/BookRepository.ets:534`-`:542` 的 `fileSuffixFilters`，实测已漂到 `:749`-`:758`，本轮随这次改动一并订正。
+
+### 八、没验
+
+- `selectMode: FOLDER` 没在本机设备上试过，`canIUse` 也没跑——能不能弹目录选择器，目前只有 SDK 声明作依据；
+- `defaultFilePathUri` 回填没试过；
+- 递归扫描本地根本没实现，没有实现代价的实测；
+- 上游这些结论也只来自源码，没在 Android 端实际跑一遍确认。
+
+关联：[`docs/FEATURES.md`](FEATURES.md) 第一章 1.1、本地 `README.md:47` 的对齐表、本文件「智能伴生分组」一节（同一份对齐表里的相邻条目）。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
