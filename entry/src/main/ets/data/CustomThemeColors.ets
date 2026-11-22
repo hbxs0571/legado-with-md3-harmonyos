@@ -222,7 +222,12 @@ export function buildCustomPaletteColors(
     onTertiaryContainer: fallback.onTertiaryContainer,
     onErrorContainer: fallback.onErrorContainer,
     secondary: secondary,
-    tertiary: secondary
+    tertiary: secondary,
+    // 批 4 新增的 4 个色位没有手选输入，沿用 fallback 真值。
+    background: fallback.background,
+    surfaceVariant: fallback.surfaceVariant,
+    inverseSurface: fallback.inverseSurface,
+    inverseOnSurface: fallback.inverseOnSurface
   };
 }
 
@@ -273,6 +278,11 @@ export function resolveCustomPaletteColors(
     onTertiaryContainer: fallback.onTertiaryContainer,
     onErrorContainer: fallback.onErrorContainer,
     secondary: fallback.secondary,
-    tertiary: fallback.tertiary
+    tertiary: fallback.tertiary,
+    // 批 4 新增的 4 个色位同样没有手选输入，沿用 fallback 真值。
+    background: fallback.background,
+    surfaceVariant: fallback.surfaceVariant,
+    inverseSurface: fallback.inverseSurface,
+    inverseOnSurface: fallback.inverseOnSurface
   };
 }

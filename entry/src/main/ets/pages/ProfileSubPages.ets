@@ -5419,6 +5419,9 @@ export struct ReadRecordsPage {
    * 上游 `isTargetGranted(null, groupMask)` 传的也是 null，同一处限制。
    */
   @StorageProp('privateGrantedGroupIds') privateGrantedGroupIds: number[] = [];
+  /** 热力图两档切换的选中态配色。上游 `MediumToggleButton.kt:43-44` 用反色面 + 反色面文字。 */
+  @StorageProp('themeColorInverseSurface') themeColorInverseSurface: string = '#2F312A';
+  @StorageProp('themeColorInverseOnSurface') themeColorInverseOnSurface: string = '#F1F2E6';
   /** 列表首个可见项与滚动偏移：悬浮日期条只在滚过一定距离后出现（对齐上游 floatingDate）。 */
   @State listFirstVisibleIndex: number = 0;
   @State listFirstVisibleScrollOffset: number = 0;
@@ -6712,16 +6715,18 @@ export struct ReadRecordsPage {
       Row() {
         Text('阅读热力图').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         // 两档切换：次数 / 时长。上游 MediumToggleButton 换图标，本地换图标+文案语义等价。
+        // 选中态配色对齐上游 `MediumToggleButton.kt:43-44`：
+        // `selectedContainerColor = inverseSurface`、`selectedContentColor = inverseOnSurface`。
         Row() {
           AppGlyph({
             name: this.heatmapMode === 1 ? 'accessTime' : 'list',
             glyphSize: 18,
-            tint: this.themeColorAccent
+            tint: this.themeColorInverseOnSurface
           })
-          Text(this.heatmapMode === 1 ? '按时长' : '按次数').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).margin({ left: 4 })
+          Text(this.heatmapMode === 1 ? '按时长' : '按次数').fontSize(LABEL_MEDIUM).fontColor(this.themeColorInverseOnSurface).margin({ left: 4 })
         }
         .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .backgroundColor(this.themeColorSurfaceTertiary)
+        .backgroundColor(this.themeColorInverseSurface)
         .borderRadius(16)
         .onClick(() => { this.heatmapMode = this.heatmapMode === 1 ? 0 : 1; })
         Text('关闭').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ left: 12 })

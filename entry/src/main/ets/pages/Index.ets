@@ -240,6 +240,11 @@ const EMPTY_BOOK: Book = {
 struct Index {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  /**
+   * 页面底色。上游 `AppScaffold.kt:75-79` 的 `containerColor` 在没有背景图时取 `colorScheme.background`
+   * （`ui/theme/ThemeComponents.kt:294` 的 `customBgColor` 同源），不是 `surface`。
+   */
+  @StorageProp('themeColorBackground') themeColorBackground: string = '#F9FAEF';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
@@ -13339,7 +13344,7 @@ private canWriteInto(dir: string): boolean {
       }
     }.width('100%').height('100%').backgroundColor(this.appBackgroundSource().length > 0 ? Color.Transparent
       : (this.themePureBlackActive ? '#000000'
-      : (this.themeColorsReady ? this.themeColorSurfacePrimary
+      : (this.themeColorsReady ? this.themeColorBackground
       : $r('app.color.start_window_background'))))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
       // 平板界面判据吃窗口尺寸：上游 AppAdaptiveNavigation.kt:33-53 直接用当前窗口宽高判定，

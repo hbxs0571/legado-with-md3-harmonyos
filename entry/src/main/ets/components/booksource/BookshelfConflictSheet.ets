@@ -71,7 +71,8 @@ export struct ConflictBookCard {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  /** 面板内卡片底色。上游 `onSheetContent` 派生自 `surface`（`ThemeColorSchemeOverride.kt:78`）。 */
+  @StorageProp('themeColorOnSheetContent') themeColorOnSheetContent: string = '#F5F6F8';
 
   @Prop summary: ConflictBookSummary = new ConflictBookSummary();
 
@@ -98,7 +99,7 @@ export struct ConflictBookCard {
         .width(52)
         .aspectRatio(5 / 7)
         .borderRadius(4)
-        .backgroundColor(this.themeColorSurfaceTertiary)
+        .backgroundColor(this.themeColorOnSheetContent)
         .justifyContent(FlexAlign.Center)
       }
       Column() {
@@ -137,7 +138,7 @@ export struct ConflictBookCard {
     }
     .width('100%')
     .padding(SPACE_12)
-    .backgroundColor(this.themeColorSurfaceTertiary)
+    .backgroundColor(this.themeColorOnSheetContent)
     .borderRadius(12)
     .onClick(() => { this.onOpenBook(this.summary); })
   }

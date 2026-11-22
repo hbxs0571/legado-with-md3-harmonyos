@@ -47,6 +47,8 @@ export struct BookInfoPage {
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   /** 分组容器色（上游 secondaryContainer）。详情页背景取色叠层的插值基色，见 `seedOverlayBaseColor()`。 */
   @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE7C8';
+  /** 详情页摘要「|」与已读状态文字。上游 `BookInfoScreen.kt:1574/1583/1588` 用 `colorScheme.secondary`。 */
+  @StorageProp('themeColorSecondary') themeColorSecondary: string = '#586249';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -1441,9 +1443,9 @@ export struct BookInfoPage {
             Row() {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
                 .fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
-              Text('  |  ').fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
+              Text('  |  ').fontSize(TITLE_SMALL).fontColor(this.themeColorSecondary)
               Text(this.readStateLabel())
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorSecondary)
             }.margin({ top: 4 })
           }.width('100%').alignItems(HorizontalAlign.Start)
             // 上游 `BookInfoSummary`（BookInfoScreen.kt:1544-1550）是

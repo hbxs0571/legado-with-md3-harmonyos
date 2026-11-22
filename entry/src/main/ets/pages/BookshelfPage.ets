@@ -117,6 +117,10 @@ export struct BookshelfPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  /** 书架卡片底色兜底。上游 `BookItem.kt:186` / `:583` 在用户没设卡片色时用 `cardContainer`。 */
+  @StorageProp('themeColorCardContainer') themeColorCardContainer: string = '#FFFFFF';
+  /** 卡片色输入框未设置时的初始色。上游 `BookshelfConfigSheet.kt:677` 用 `surfaceVariant`。 */
+  @StorageProp('themeColorSurfaceVariant') themeColorSurfaceVariant: string = '#E1E4D5';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -1826,11 +1830,14 @@ export struct BookshelfPage {
     return this.layout.bookshelfTitleSmallFont ? 11 : 13;
   }
 
-  /** 卡片底色：日夜各一套，0 时透明（沿用主题背景）。 */
+  /** 卡片底色：日夜各一套；0 表示用户没自定义，回落 `cardContainer`。
+   *  上游 `BookItem.kt:186` / `:583` 是 `if (cardColor != 0) Color(cardColor) else colorScheme.cardContainer`，
+   *  不是透明 —— 透明会让卡片和页面底色糊成一片，看不出格子边界。
+   */
   private cardBackgroundColor(): ResourceColor {
     const color = this.readerNightMode
       ? this.layout.bookshelfCardColorDark : this.layout.bookshelfCardColor;
-    return color === 0 ? Color.Transparent : bookshelfCardIntToHex(color);
+    return color === 0 ? this.themeColorCardContainer : bookshelfCardIntToHex(color);
   }
 
   /** 紧凑样式下封面内标题的渐变黑底，对齐上游 BookItem.kt:123-131 的垂直渐变。 */
@@ -1838,11 +1845,17 @@ export struct BookshelfPage {
     return { angle: 180, colors: [['#00000000', 0.0], ['#B3000000', 1.0]] };
   }
 
-  /** 打开布局面板：从已生效设置复制一份草稿，面板内改动只落到草稿。 */
+  /** 打开布局面板：从已生效设置复制一份草稿，面板内改动只落到草稿。
+   *  卡片色输入框的初始值：用户没设过（0）时回落 `surfaceVariant`，
+   *  对齐上游 `BookshelfConfigSheet.kt:677` 的
+   *  `if (settings.bookshelfCardColor != 0) settings.bookshelfCardColor else colorScheme.surfaceVariant.toArgb()`。
+   */
   private openLayoutSheet(): void {
     this.layoutDraft = copyBookshelfLayout(this.layout);
-    this.dayCardColorHex = bookshelfCardIntToHex(this.layoutDraft.bookshelfCardColor);
-    this.nightCardColorHex = bookshelfCardIntToHex(this.layoutDraft.bookshelfCardColorDark);
+    this.dayCardColorHex = this.layoutDraft.bookshelfCardColor === 0
+      ? this.themeColorSurfaceVariant : bookshelfCardIntToHex(this.layoutDraft.bookshelfCardColor);
+    this.nightCardColorHex = this.layoutDraft.bookshelfCardColorDark === 0
+      ? this.themeColorSurfaceVariant : bookshelfCardIntToHex(this.layoutDraft.bookshelfCardColorDark);
     this.showLayoutSheet = true;
   }
 

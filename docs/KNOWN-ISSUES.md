@@ -1129,121 +1129,127 @@ B 块唯一的 `未接` 行（页眉/页脚独立字体）已于 2026-10-31 复�
 
 ## M3 色位缺口（r352 盘点，未修）
 
-**KI-THEME2 上游 34 个在用色位本地只落 9 个，容器色与错误色一律降级或写死** —— 状态：**部分修**（r354 补 11 色位广播、收口阅读域硬编码；余下见本节末「r354 本轮」）。r352 把缺口量化到行号级，代价也算清了，但没有排期（理由见本节末「判断」）。
+**KI-THEME2 上游 33 个在用色位本地已全部承接（42 个广播键），容器色与错误色的降级点仍待逐处收口** —— 状态：**基本修**（外观体系批 4 把 53 行映射建全、按表补到 42 键、9 个新键各接一处真实消费点；余下见本节末「外观体系批 4 本轮」）。r352 把缺口量化到行号级，r354 补了 11 色位广播，批 4 补齐最后 10 个。
 
 ### 上游真实用量
 
-上游 `ui/theme/LegadoTheme.kt` 的 `data class LegadoColorScheme` 共 **53 个字段**，全仓 `colorScheme.xxx` 引用 **1,531 处**。按字段逐个数，**34 个有引用、19 个零引用**。
+上游 `ui/theme/LegadoTheme.kt` 的 `data class LegadoColorScheme` 共 **53 个字段**。复算口径：`git grep -oE "\bcolorScheme\.<位>\b" HEAD -- app/src/main/java/io/legado/app/ui` 得 all，减去同一命令加 `MiuixTheme\.` 前缀的命中得 legado 口径，**legado 口径合计 1,455 处，33 个有引用、20 个零引用**（旧记的「34 个 / 1,531 处」把 `MiuixTheme.colorScheme.onBackground`（`ui/about/MiuixAboutScreen.kt:309`）算进了 Legado 口径，批 4 复算已订正）。
+
+下表 33 行按 legado 口径重排，「本地是否已广播」一列是外观体系批 4 之后的实际状态：
 
 | 色位 | 引用 | 本地是否已广播 |
 | --- | ---: | --- |
-| `onSurfaceVariant` | 343 | 是（themeColorTextSecondary） |
-| `primary` | 171 | 是（themeColorAccent） |
-| `onSurface` | 139 | 是（themeColorTextPrimary） |
-| `surface` | 137 | 是（themeColorSurfacePrimary） |
-| `surfaceContainerLow` | 117 | 是（themeColorSurfaceSecondary） |
-| `onSheetContent` | 83 | 否，可派生 = surface |
-| `error` | 63 | 否 |
-| `surfaceContainer` | 63 | 是（themeColorSurfaceTertiary） |
-| `secondaryContainer` | 62 | 否 |
-| `outlineVariant` | 53 | 否 |
-| `surfaceContainerHigh` | 48 | 是（themeColorSurfaceElevated） |
-| `outline` | 35 | 是（themeColorTextTertiary） |
-| `primaryContainer` | 28 | 否 |
-| `onSecondaryContainer` | 26 | 否 |
-| `onPrimaryContainer` | 20 | 否 |
-| `secondary` | 20 | 否（仅色块预览用） |
-| `surfaceVariant` | 16 | 否 |
-| `surfaceContainerHighest` | 15 | 是（themeColorSurfaceHighest） |
-| `surfaceInput` | 15 | 否，上游由 bookInfoInputColor 取色 |
-| `cardContainer` | 7 | 否，可派生 = surfaceContainerLow |
-| `background` | 6 | 否 |
-| `onCardContainer` | 6 | 否，可派生 = primary |
-| `onPrimary` | 4 | 否 |
-| `onTertiaryContainer` | 4 | 否 |
-| `inverseSurface` | 4 | 否 |
-| `errorContainer` | 4 | 否 |
-| `scrim` | 4 | 否 |
-| `surfaceBright` | 4 | 否 |
-| `tertiaryContainer` | 3 | 否 |
-| `onErrorContainer` | 3 | 否 |
-| `tertiary` | 2 | 否（仅色块预览用） |
-| `inverseOnSurface` | 2 | 否 |
-| `onBackground` | 1 | 否，可派生 = onSurface |
-| `onError` | 1 | 否 |
+| `onSurfaceVariant` | 339 | 是（`themeColorTextSecondary` 别名 / `themeColorOnSurfaceVariant`） |
+| `primary` | 168 | 是（`themeColorAccent` 别名 / `themeColorPrimary`） |
+| `onSurface` | 132 | 是（`themeColorTextPrimary` 别名 / `themeColorOnSurface`） |
+| `surface` | 119 | 是（`themeColorSurfacePrimary` 别名 / `themeColorSurface`） |
+| `surfaceContainerLow` | 117 | 是（`themeColorSurfaceSecondary` 别名 / `themeColorSurfaceContainerLow`） |
+| `onSheetContent` | 79 | 是，派生 = surface（`themeColorOnSheetContent`） |
+| `error` | 63 | 是（`themeColorError`） |
+| `secondaryContainer` | 59 | 是（`themeColorSecondaryContainer`） |
+| `surfaceContainer` | 57 | 是（`themeColorSurfaceTertiary` 别名 / `themeColorSurfaceContainer`） |
+| `outlineVariant` | 53 | 是（`themeColorOutlineVariant`） |
+| `surfaceContainerHigh` | 45 | 是（`themeColorSurfaceElevated` 别名 / `themeColorSurfaceContainerHigh`） |
+| `outline` | 35 | 是（`themeColorTextTertiary` 别名 / `themeColorOutline`） |
+| `primaryContainer` | 27 | 是（`themeColorPrimaryContainer`） |
+| `onSecondaryContainer` | 25 | 是（`themeColorOnSecondaryContainer`） |
+| `onPrimaryContainer` | 20 | 是（`themeColorOnPrimaryContainer`） |
+| `secondary` | 18 | 是（`themeColorSecondary`，批 4 起进广播） |
+| `surfaceVariant` | 16 | 是（`themeColorSurfaceVariant`，批 4 起） |
+| `surfaceContainerHighest` | 15 | 是（`themeColorSurfaceHighest` 别名 / `themeColorSurfaceContainerHighest`） |
+| `surfaceInput` | 15 | 是，回落 = surfaceContainerHighest（`themeColorSurfaceInput`） |
+| `cardContainer` | 7 | 是，派生 = surfaceContainerLow（`themeColorCardContainer`） |
+| `onCardContainer` | 6 | 是，派生 = primary（`themeColorOnCardContainer`） |
+| `background` | 5 | 是（`themeColorBackground`，批 4 起） |
+| `onPrimary` | 4 | 是（`themeColorOnPrimary`） |
+| `onTertiaryContainer` | 4 | 是（`themeColorOnTertiaryContainer`） |
+| `inverseSurface` | 4 | 是（`themeColorInverseSurface`，批 4 起） |
+| `errorContainer` | 4 | 是（`themeColorErrorContainer`） |
+| `scrim` | 4 | 是（`themeColorScrim`） |
+| `surfaceBright` | 4 | 是（`themeColorSurfaceBright`） |
+| `tertiaryContainer` | 3 | 是（`themeColorTertiaryContainer`） |
+| `onErrorContainer` | 3 | 是（`themeColorOnErrorContainer`） |
+| `tertiary` | 2 | 是（`themeColorTertiary`，批 4 起进广播） |
+| `inverseOnSurface` | 2 | 是（`themeColorInverseOnSurface`，批 4 起） |
+| `onError` | 1 | 是（`themeColorOnError`） |
 
-**19 个零引用字段**（上游自己一次都没用，抄过来纯占地方，不必补）：
+**20 个零引用字段**（上游 Legado 口径一次都没用，抄过来纯占地方，不必补）：
 
-`inversePrimary` / `onSecondary` / `onTertiary` / `surfaceTint` / `surfaceDim` / `surfaceContainerLowest` / `primaryFixed` / `primaryFixedDim` / `onPrimaryFixed` / `onPrimaryFixedVariant` / `secondaryFixed` / `secondaryFixedDim` / `onSecondaryFixed` / `onSecondaryFixedVariant` / `tertiaryFixed` / `tertiaryFixedDim` / `onTertiaryFixed` / `onTertiaryFixedVariant` / `cardPrimaryContainer`
+`inversePrimary` / `onSecondary` / `onTertiary` / `onBackground` / `surfaceTint` / `surfaceDim` / `surfaceContainerLowest` / `primaryFixed` / `primaryFixedDim` / `onPrimaryFixed` / `onPrimaryFixedVariant` / `secondaryFixed` / `secondaryFixedDim` / `onSecondaryFixed` / `onSecondaryFixedVariant` / `tertiaryFixed` / `tertiaryFixedDim` / `onTertiaryFixed` / `onTertiaryFixedVariant` / `cardPrimaryContainer`
 
-### 本地现状
+`onBackground` 在本轮之前被记成「1 处引用、可派生 = onSurface」，复算后 legado 口径是 **0** —— 那 1 处是 `MiuixTheme.colorScheme.onBackground`（`ui/about/MiuixAboutScreen.kt:309`），属 Miuix 引擎分支，不补。
 
-- `entry/src/main/ets/data/ThemePalette.ets`（580 行）：`interface ThemePaletteColors` **11 个字段**（`:32-44`）——9 个参与换肤，外加 `secondary` / `tertiary` 两个只给调色板色块预览用（接口注释明写「不参与全局换肤」）。
-- `publishPaletteColors(colors)`（`:544-554`）只广播 **9 个** `AppStorage` 键：`themeColorAccent` / `themeColorTextPrimary` / `themeColorTextSecondary` / `themeColorTextTertiary` / `themeColorSurfacePrimary` / `themeColorSurfaceSecondary` / `themeColorSurfaceTertiary` / `themeColorSurfaceElevated` / `themeColorSurfaceHighest`。
-- 消费面：`@StorageProp('themeColor*')` 共 **555 处**、涉及 **62 个 .ets 文件**（`themeColorTextSecondary` 96 / `themeColorTextPrimary` 85 / `themeColorTextTertiary` 85 / `themeColorAccent` 81 / `themeColorSurfacePrimary` 65 / `themeColorSurfaceElevated` 59 / `themeColorSurfaceSecondary` 45 / `themeColorSurfaceTertiary` 37 / `themeColorSurfaceHighest` 1）。
+### 本地现状（外观体系批 4 之后）
+
+- `entry/src/main/ets/data/ThemePalette.ets`（1204 行）：`interface ThemePaletteColors` **29 个字段**（原 25 个 + 批 4 新增 `background` / `surfaceVariant` / `inverseSurface` / `inverseOnSurface`）。`secondary` / `tertiary` 从批 4 起也进广播，注释已同步改掉「不参与全局换肤」的旧说法。
+- `publishPaletteColors(colors)` 广播 **42 个** `AppStorage` 键，分两步：第 1 步按上游 `LegadoColorScheme` 字段名广播 33 个（`themeColorPrimary` / `OnPrimary` / … / `themeColorSurfaceContainerLow`）+ 派生四位（`themeColorCardContainer` / `themeColorOnCardContainer` / `themeColorOnSheetContent` / `themeColorSurfaceInput`）；第 2 步把旧语义键作为别名重赋（`themeColorAccent` = primary、`themeColorTextPrimary` = onSurface、`themeColorTextSecondary` = onSurfaceVariant、`themeColorTextTertiary` = outline、`themeColorSurfacePrimary` = surface、`themeColorSurfaceSecondary` = surfaceContainerLow、`themeColorSurfaceTertiary` = surfaceContainer、`themeColorSurfaceElevated` = surfaceContainerHigh、`themeColorSurfaceHighest` = surfaceContainerHighest）。
+- 消费面（脚本 `tmp/_p4_consume.py` 实测）：`@StorageProp('themeColor*')` 共 **776 处**、键种类 **31 个**、涉及 **88 个 .ets 文件**。逐键：`themeColorTextPrimary` 117 / `themeColorAccent` 114 / `themeColorTextSecondary` 109 / `themeColorTextTertiary` 108 / `themeColorSurfaceElevated` 75 / `themeColorSurfacePrimary` 74 / `themeColorSurfaceTertiary` 62 / `themeColorSurfaceSecondary` 52 / `themeColorOutlineVariant` 10 / `themeColorSecondaryContainer` 8 / `themeColorOnPrimary` 7 / `themeColorPrimaryContainer` 6 / `themeColorSurfaceHighest` 4 / `themeColorOnPrimaryContainer` 4 / `themeColorError` 4 / `themeColorScrim` 3 / `themeColorErrorContainer` 3 / `themeColorOnSecondaryContainer` 2 / `themeColorSurfaceBright` 2，其余 12 个新键各 1 处。
+- **广播了但暂时无人 `@StorageProp` 消费的 11 个键**：`themeColorOnError` / `themeColorOnSurface` / `themeColorOnSurfaceVariant` / `themeColorOutline` / `themeColorPrimary` / `themeColorSurface` / `themeColorSurfaceContainer` / `themeColorSurfaceContainerHigh` / `themeColorSurfaceContainerHighest` / `themeColorSurfaceContainerLow` / `themeColorTertiary`。前 9 个是「上游名键 + 旧语义别名」双轨制的必然结果（别名在消费、规范名待收敛）；`themeColorTertiary` 的上游两个消费点一个在 `VoiceEffectScreen.kt:175`（本地无对应页）、一个在调色板预览（本地 `components/ThemeSelectors.ets` 直接读 `resolvePaletteColors()` 的数据层，不经 AppStorage）。
 - `resources/base|dark/element/color.json` 各只有 8 个 `theme_*` + `start_window_background`，`$r('app.color.theme_*')` 在 .ets 里只剩 **1 处**引用 —— 色资源这条路基本没在用，全靠 `AppStorage` 广播。
 
-### 缺口账（25 个要补，三种性质）
+### 缺口账（25 个，批 4 全部处理完）
 
-| 性质 | 个数 | 色位 |
-| --- | ---: | --- |
-| 值需新增 | 18 | `error` / `secondaryContainer` / `outlineVariant` / `primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` / `surfaceVariant` / `background` / `onPrimary` / `onTertiaryContainer` / `inverseSurface` / `errorContainer` / `scrim` / `surfaceBright` / `tertiaryContainer` / `onErrorContainer` / `inverseOnSurface` / `onError` |
-| 值已有、只缺广播键 | 2 | `secondary` / `tertiary`（色块预览已在用同一份值） |
-| 可派生、不新增值 | 5 | `onSheetContent`←`surface` / `cardContainer`←`surfaceContainerLow` / `onCardContainer`←`primary` / `onBackground`←`onSurface` / `surfaceInput`←`bookInfoInputColor`（上游 `ui/theme/ThemeColorSchemeOverride.kt:74-77`） |
+| 性质 | 个数 | 色位 | 批 4 处置 |
+| --- | ---: | --- | --- |
+| 值需新增 | 18 | `error` / `secondaryContainer` / `outlineVariant` / `primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` / `surfaceVariant` / `background` / `onPrimary` / `onTertiaryContainer` / `inverseSurface` / `errorContainer` / `scrim` / `surfaceBright` / `tertiaryContainer` / `onErrorContainer` / `inverseOnSurface` / `onError` | 其中 14 个 r354 已填值，批 4 补 `background` / `surfaceVariant` / `inverseSurface` / `inverseOnSurface` 四个（14 套配色 × 日夜真值，脚本 `tmp/_p4_inject.py` 注入 56 个值）；全部 18 个都已进广播 |
+| 值已有、只缺广播键 | 2 | `secondary` / `tertiary` | 批 4 补广播 |
+| 可派生、不新增值 | 5 | `onSheetContent`←`surface` / `cardContainer`←`surfaceContainerLow` / `onCardContainer`←`primary` / `onBackground`←`onSurface` / `surfaceInput`←`bookInfoInputColor`（上游 `ui/theme/ThemeColorSchemeOverride.kt:76-79`） | 补 4 个（`onSheetContent` / `cardContainer` / `onCardContainer` / `surfaceInput`）；`onBackground` 复算后 legado 口径 0 引用，**判「缺-无上游消费者（不补）」** |
 
-9（已广播）+ 25（缺口）= 34，与上游有引用的字段数正好对上。
+9（r354 前已广播）+ 25（缺口）= 34 —— 这个等式在批 4 复算后不成立：legado 口径有引用的是 **33** 个，`onBackground` 那 1 处属 Miuix 引擎分支。9 + 24（实补）= 33，对得上。
 
 ### error 色位：16 种红，没有统一来源
 
-本地全仓 `themeColorError` / `errorContainer` **零命中**，危险色全靠写死。去重后 16 种：`#FF0000`(1) `#E53935`(2) `#F44848`(1) `#FE4D55`(3) `#C62828`(1) `#E5484D`(1) `#FF6B6B`(7) `#DB4B4B`(1) `#CF3E40`(3) `#B3261E`(1) `#FF7417`(1) `#D95656`(2) `#FF8A80`(2) `#FF8C00`(2) `#E57373`(2) `#AD1457`(1)。其中 `#FFB4AB` 10 处全在 `pages/ReaderHighlightRuleSheet.ets`（`:589` / `:611` / `:615` / `:761` / `:783` / `:845` / `:855` / `:868` / `:888` 等）。同一个「红」散成六种色调，换主题时一个都不会跟着变。
+r354 起 `themeColorError` / `themeColorErrorContainer` 已有广播与 4 + 3 处消费点，但全仓仍散着 16 种写死的红：`#FF0000`(1) `#E53935`(2) `#F44848`(1) `#FE4D55`(3) `#C62828`(1) `#E5484D`(1) `#FF6B6B`(7) `#DB4B4B`(1) `#CF3E40`(3) `#B3261E`(1) `#FF7417`(1) `#D95656`(2) `#FF8A80`(2) `#FF8C00`(2) `#E57373`(2) `#AD1457`(1)。其中 `#FFB4AB` 10 处全在 `pages/ReaderHighlightRuleSheet.ets`（`:589` / `:611` / `:615` / `:761` / `:783` / `:845` / `:855` / `:868` / `:888` 等）。**批 4 没动这些**：任务书 10.2 第三步明写「只登记收敛计划，不批量改」。
 
-### 27 处降级点（11 个文件）
+### 27 处降级点（11 个文件）—— 复算后 20 处 / 12 文件
 
-全仓 `secondaryContainer` / `primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` 共 27 处，每处都在注释里写着「本地没有该色位，用 xxx 顶」：
+r354 之前的口径是「全仓 `secondaryContainer` / `primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` 共 27 处，每处注释写着『本地没有该色位，用 xxx 顶』」，分布 11 个文件。**批 4 复算（脚本 `tmp/_p4_degrade.py`，按四个容器色位的 `@StorageProp` 声明数统计）实际是 20 处 / 12 个文件**：
 
-| 文件 | 处数 | 代表位置 |
-| --- | ---: | --- |
-| `pages/BookInfoPage.ets` | 5 | `:37`（`themeColorSurfaceElevated` 注释顶替 secondaryContainer）、`:214-216`（`lerp(secondaryContainer, seedColor, 0.42f)` 封面主色）、`:1180` |
-| `pages/CatalogPage.ets` | 4 | `:279-280`（目录三档：多选 primaryContainer / 当前章 secondaryContainer / 其余 surfaceContainerLow）、`:702`、`:760` |
-| `pages/ThemeSettingsPage.ets` | 3 | `:305-306`、`:489` |
-| `pages/ReaderSearchPage.ets` | 3 | `:42`、`:339`（搜索结果高亮 = accent 前景 + primaryContainer 背景）、`:367` |
-| `pages/ReaderPage.ets` | 3 | `:1612`（选中走 secondaryContainer）、`:1623`、`:9137` |
-| `pages/ReaderSettingsPage.ets` | 2 | `:4296`、`:4319` |
-| `pages/Index.ets` | 2 | `:11350-11351`（`AppNavigationBar.kt:148-156` 用 secondaryContainer） |
-| `components/ThemeSelectors.ets` | 2 | `:17-18`；`:21-22` 是**刻意的设计取舍**（三档并排时整块强调色更能表达当前档位），改造时要保留原判断 |
-| `pages/TxtTocRulePreviewPage.ets` | 1 | `:219`（徽章 primaryContainer α0.85） |
-| `pages/ReaderAloudSettingsPage.ets` | 1 | `:244`（tonal 按钮近似） |
-| `pages/ReadAloudConfigPanel.ets` | 1 | `:89`（页签选中） |
+| 文件 | 处数 |
+| --- | ---: |
+| `pages/BookSourceDebugPage.ets` | 4 |
+| `pages/ProfileSubPages.ets` | 4 |
+| `components/booksource/ExploreKindItem.ets` | 2 |
+| `pages/ReaderSettingsPage.ets` | 2 |
+| `components/CoverBlurBackdrop.ets` | 1 |
+| `components/booksource/AppFab.ets` | 1 |
+| `components/settings/LauncherIconPickerSheet.ets` | 1 |
+| `pages/BookInfoPage.ets` | 1 |
+| `pages/ReaderMarkingEditor.ets` | 1 |
+| `pages/ReaderPage.ets` | 1 |
+| `pages/ReaderSearchPage.ets` | 1 |
+| `pages/ReaderTextProcessingSheet.ets` | 1 |
+
+与 r354 记的 11 个文件对照：`pages/CatalogPage.ets`（记 4 处）、`pages/ThemeSettingsPage.ets`（3）、`pages/Index.ets`（2）、`components/ThemeSelectors.ets`（2）、`pages/TxtTocRulePreviewPage.ets`（1）、`pages/ReaderAloudSettingsPage.ets`（1）、`pages/ReadAloudConfigPanel.ets`（1）这七个文件现在**一处 `@StorageProp` 都没有** —— r354 那轮把其中一批换成了 `themeColorSecondaryContainer` 等的真实订阅（`ProfileSubPages.ets` 4 处、`ExploreKindItem.ets` 2 处、`ReaderSettingsPage.ets` 2 处就是那时补的），所以旧表的「27 处」既不是现状也不是当时，**旧数字不再引用**。批 4 不批量改这 20 处（任务书 10.2 第三步）。
 
 ### 代价
 
-| 项 | 量 | 性质 |
-| --- | --- | --- |
-| 色值数据 | **432 个**（18 色位 × 日/夜 × 12 套内置配色） | 对着上游 `*ColorScheme.kt` 逐套抄，机械但易错 |
-| `publishPaletteColors` | 9 行 → 34 行 | 简单，但键名定了就改不动 |
-| `@StorageProp` 声明 | 预估 **+150–250 行** | 纯样板。Compose 靠 `CompositionLocal` 自动继承，ArkUI 必须在每个 `@Component` struct 单独声明一行 |
-| 降级点改造 | 27 处 / 11 文件 | 不是批量替换，部分要保留刻意取舍 |
-| `ThemePaletteColors` | 11 → 36 字段 | 牵动所有构造点 |
-| 备份兼容 | 无需改 | 本地自定义色按 6 个手选色存（`data/CustomThemeColors.ets`） |
-| **小计（不含 Monet）** | **约 700–900 行** | |
-| Monet / HCT 算法 | 约 1,500 行新代码 | 另立项。「动态取色」档要真做必须移植 Material Color Utilities 的 HCT 色彩空间 + 9 种 paletteStyle 生成算法 |
+| 项 | 量 | 性质 | 批 4 实际 |
+| --- | --- | --- | --- |
+| 色值数据 | 18 色位 × 日/夜 × 12 套内置配色 | 对着上游 `*ColorScheme.kt` 逐套抄，机械但易错 | r354 填了 14 个位（264 值），批 4 补 `background`/`surfaceVariant`/`inverseSurface`/`inverseOnSurface` 四位 × 14 套 × 日夜 = **112 个值**（脚本注入，`blocks found: 14` / `injected 14 blocks x 2 modes x 4 fields`） |
+| `publishPaletteColors` | 9 行 → 34 行 | 简单，但键名定了就改不动 | 实做 **42 键**（33 上游名 + 4 派生 + 9 旧别名） |
+| `@StorageProp` 声明 | 预估 +150–250 行 | 纯样板。Compose 靠 `CompositionLocal` 自动继承，ArkUI 必须在每个 `@Component` struct 单独声明一行 | 批 4 只给 9 个新键各加 1 处（9 行），没做全仓铺开 |
+| 降级点改造 | 复算后 20 处 / 12 文件 | 不是批量替换，部分要保留刻意取舍 | 未动（任务书 10.2 第三步：只登记收敛计划） |
+| `ThemePaletteColors` | 11 → 36 字段 | 牵动所有构造点 | 实做 25 → **29** 字段（r354 已到 25，批 4 只加 4 个） |
+| 备份兼容 | 无需改 | 本地自定义色按 6 个手选色存（`data/CustomThemeColors.ets`） | 两个构造点（`buildCustomPaletteColors`、种子色分支）各补 4 行取 fallback，编译才过 |
+| Monet / HCT 算法 | 约 1,500 行新代码 | 另立项。「动态取色」档要真做必须移植 Material Color Utilities 的 HCT 色彩空间 + 9 种 paletteStyle 生成算法 | 未动。**注**：外观体系批 2 的 A20 已移植 `QuantizerCelebi` / `QuantizerWu` / `QuantizerWsmeans` / `Score`（封面取色），但那不是 HCT 生成，不能替代 Monet |
 
 ### 一处文档失真（本节点出，已改）
 
-`docs/parity/ZIP-THEME.md` 的 A2 行原写「上游 45 个 Material 色位本地只落 8 个（其余色位全仓无引用）」，三处都错：上游 `LegadoColorScheme` 是 **53** 个字段不是 45；本地广播 **9** 个不是 8；「其余色位全仓无引用」不成立（上游 34 个有引用）。已在本轮改成本节的数字。
+`docs/parity/ZIP-THEME.md` 的 A2 行原写「上游 45 个 Material 色位本地只落 8 个（其余色位全仓无引用）」，三处都错：上游 `LegadoColorScheme` 是 **53** 个字段不是 45；本地广播 **9** 个不是 8；「其余色位全仓无引用」不成立（上游 33 个有引用）。
 
-### 判断：值得做，但不排现在
+**批 4 又订正了一处**：本节点出的「34 个有引用」把 `MiuixTheme.colorScheme.onBackground`（`ui/about/MiuixAboutScreen.kt:309`）算进了 Legado 口径，实际 legado 口径是 **33 个**。
 
-支持做：这是结构性欠账而非缺功能。27 处降级点是 27 个「看起来差一点」的地方，累积成「UI 有点平」的整体观感；光补 `error` 一个色位就能收掉散落各处的六种红。
+### 判断：值得做，已做（外观体系批 4）
 
-暂缓：它不改任何能力，纯观感；本地还挂着私密脱敏、朗读两个死控件、阅读记录三视图等真功能缺口。且 Monet 不做的话「动态取色」档永远是假的（现在回落到内置默认配色），补 18 个色位只是让 11 套内置配色更准。
+支持做：这是结构性欠账而非缺功能。20 处降级点是 20 个「看起来差一点」的地方，累积成「UI 有点平」的整体观感；光补 `error` 一个色位就能收掉散落各处的六种红。
 
-排期建议（真要做时）：放在「功能缺口清完之后、Miuix 之前」，拆 4 批——
+批 4 已按原排期建议的四步走完前三步（地基 / 高频三色 / 容器族），第四步「收尾」的「改 20 处降级点」按任务书 10.2 第三步**只登记不改**，留给下一批：
 
-1. **地基**：`ThemePaletteColors` 扩字段 + 432 个色值 + `publishPaletteColors` 扩键。改完界面无可见变化（新键没人读），但这是所有后续的地基。
-2. **高频三色**：`error`(63) / `secondaryContainer`(62) / `outlineVariant`(53)。补上后删除按钮、选中态、分隔线立刻变对。
-3. **容器族**：`primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` / `surfaceVariant` / `surfaceInput` + 改 27 处降级点。
-4. **收尾**：剩余 10 个小用量色位 + `outlineVariant` 分隔线全局归位 + 文档订正。
+1. **地基**（已做）：`ThemePaletteColors` 25 → 29 字段 + 112 个新色值 + `publishPaletteColors` 42 键。
+2. **高频三色**（已做）：`error` / `secondaryContainer` / `outlineVariant` 的广播与消费点 r354 起就在。
+3. **容器族**（已做）：`primaryContainer` / `onSecondaryContainer` / `onPrimaryContainer` / `surfaceVariant` / `surfaceInput` 全部进广播，其中 `surfaceInput` 接了 `BookInfoEditPage.ets` 的 `inputSurface()`。
+4. **收尾**（未做，挂号）：20 处降级点逐个换成真色位 + `outlineVariant` 分隔线全局归位 + 全仓 16 种写死的红收敛到 `themeColorError`。
 
 关联：[`docs/parity/ZIP-THEME.md`](parity/ZIP-THEME.md) 的 A2/A3/A7 行、[`docs/FEATURES.md`](FEATURES.md) 5.2 第五点、KI-REL5（浅色配色未打磨，与本条同源）。
 

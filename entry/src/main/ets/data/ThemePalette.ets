@@ -70,6 +70,14 @@ export interface ThemePaletteColors {
   secondary: string;
   /** 仅用于调色板色块预览（上游 `ThemeColorButton` 的下半圆），不参与全局换肤。 */
   tertiary: string;
+  /** 页面底色。上游 `background`，`AppScaffold` 顶栏背景基色与场景策略取它，ui 内引用 4 处。 */
+  background: string;
+  /** 次级表面变体。上游 `surfaceVariant`，书架卡片色兜底与图表底色用它，ui 内引用 16 处。 */
+  surfaceVariant: string;
+  /** 反色表面。上游 `inverseSurface`，中/小号 Toggle 按钮选中态容器色，ui 内引用 4 处。 */
+  inverseSurface: string;
+  /** 反色表面上的文字。上游 `inverseOnSurface`，同上选中态文字，ui 内引用 2 处。 */
+  inverseOnSurface: string;
 }
 
 /** 一套配色 = 序号 + 中文名 + 日间色值 + 夜间色值。 */
@@ -113,6 +121,10 @@ const DEFAULT_LIGHT: ThemePaletteColors = {
   tertiary: '#4A5FA8',
   tertiaryContainer: '#BCECE7',
   onTertiaryContainer: '#1F4E4B',
+  background: '#F9FAEF',
+  surfaceVariant: '#E1E4D5',
+  inverseSurface: '#2F312A',
+  inverseOnSurface: '#F1F2E6',
 };
 
 const DEFAULT_DARK: ThemePaletteColors = {
@@ -141,6 +153,10 @@ const DEFAULT_DARK: ThemePaletteColors = {
   tertiary: '#8A9BD8',
   tertiaryContainer: '#1F4E4B',
   onTertiaryContainer: '#BCECE7',
+  background: '#12140E',
+  surfaceVariant: '#44483D',
+  inverseSurface: '#E2E3D8',
+  inverseOnSurface: '#2F312A',
 };
 
 /** 14 套配色，序号即上游 `appTheme` 取值。 */
@@ -174,6 +190,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#4A5FA8',
       tertiaryContainer: '#BCECE7',
       onTertiaryContainer: '#1F4E4B',
+      background: '#F9FAEF',
+      surfaceVariant: '#E1E4D5',
+      inverseSurface: '#2F312A',
+      inverseOnSurface: '#F1F2E6',
     },
     dark: {
       primary: '#AFC2FF',
@@ -201,6 +221,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#8A9BD8',
       tertiaryContainer: '#1F4E4B',
       onTertiaryContainer: '#BCECE7',
+      background: '#12140E',
+      surfaceVariant: '#44483D',
+      inverseSurface: '#E2E3D8',
+      inverseOnSurface: '#2F312A',
     }
   },
   {
@@ -232,6 +256,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#386663',
       tertiaryContainer: '#BCECE7',
       onTertiaryContainer: '#1F4E4B',
+      background: '#F9FAEF',
+      surfaceVariant: '#E1E4D5',
+      inverseSurface: '#2F312A',
+      inverseOnSurface: '#F1F2E6',
     },
     dark: {
       primary: '#B1D18A',
@@ -259,6 +287,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#A0D0CB',
       tertiaryContainer: '#1F4E4B',
       onTertiaryContainer: '#BCECE7',
+      background: '#12140E',
+      surfaceVariant: '#44483D',
+      inverseSurface: '#E2E3D8',
+      inverseOnSurface: '#2F312A',
     }
   },
   {
@@ -290,6 +322,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#43664E',
       tertiaryContainer: '#C5ECCE',
       onTertiaryContainer: '#2C4E38',
+      background: '#FFF9EE',
+      surfaceVariant: '#EAE2D0',
+      inverseSurface: '#333027',
+      inverseOnSurface: '#F7F0E2',
     },
     dark: {
       primary: '#DBC66E',
@@ -317,6 +353,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#A9D0B3',
       tertiaryContainer: '#2C4E38',
       onTertiaryContainer: '#C5ECCE',
+      background: '#15130B',
+      surfaceVariant: '#4B4739',
+      inverseSurface: '#E8E2D4',
+      inverseOnSurface: '#333027',
     }
   },
   {
@@ -348,6 +388,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#5E5B5D',
       tertiaryContainer: '#777375',
       onTertiaryContainer: '#FFFBFF',
+      background: '#FAFAFA',
+      surfaceVariant: '#E0E3E3',
+      inverseSurface: '#313030',
+      inverseOnSurface: '#F4F0EF',
     },
     dark: {
       primary: '#C7C6C6',
@@ -375,6 +419,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#CBC5C7',
       tertiaryContainer: '#948F91',
       onTertiaryContainer: '#060506',
+      background: '#141313',
+      surfaceVariant: '#444748',
+      inverseSurface: '#E5E2E1',
+      inverseOnSurface: '#313030',
     }
   },
   {
@@ -406,6 +454,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#000000',
       tertiaryContainer: '#000000',
       onTertiaryContainer: '#FFFFFF',
+      background: '#FFFFFF',
+      surfaceVariant: '#FFFFFF',
+      inverseSurface: '#313030',
+      inverseOnSurface: '#FFFFFF',
     },
     dark: {
       primary: '#FFFFFF',
@@ -433,6 +485,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#FFFFFF',
       tertiaryContainer: '#FFFFFF',
       onTertiaryContainer: '#000000',
+      background: '#000000',
+      surfaceVariant: '#444846',
+      inverseSurface: '#E5E2E1',
+      inverseOnSurface: '#313030',
     }
   },
   {
@@ -464,6 +520,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#6D5677',
       tertiaryContainer: '#F6D9FF',
       onTertiaryContainer: '#543F5E',
+      background: '#F8F9FF',
+      surfaceVariant: '#DFE2EB',
+      inverseSurface: '#2E3035',
+      inverseOnSurface: '#F0F0F7',
     },
     dark: {
       primary: '#A5C9FE',
@@ -491,6 +551,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#D9BDE3',
       tertiaryContainer: '#543F5E',
       onTertiaryContainer: '#F6D9FF',
+      background: '#111318',
+      surfaceVariant: '#43474E',
+      inverseSurface: '#E1E2E9',
+      inverseOnSurface: '#2E3035',
     }
   },
   {
@@ -522,6 +586,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#6B5D2F',
       tertiaryContainer: '#F5E1A7',
       onTertiaryContainer: '#524619',
+      background: '#FFF8F6',
+      surfaceVariant: '#F5DED7',
+      inverseSurface: '#392E2B',
+      inverseOnSurface: '#FFEDE8',
     },
     dark: {
       primary: '#FFB59F',
@@ -549,6 +617,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#D8C68D',
       tertiaryContainer: '#524619',
       onTertiaryContainer: '#F5E1A7',
+      background: '#1A110F',
+      surfaceVariant: '#53433F',
+      inverseSurface: '#F1DFDA',
+      inverseOnSurface: '#392E2B',
     }
   },
   {
@@ -580,6 +652,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#7D5635',
       tertiaryContainer: '#FFDCC2',
       onTertiaryContainer: '#623F20',
+      background: '#FFF8F8',
+      surfaceVariant: '#F2DDE2',
+      inverseSurface: '#372E30',
+      inverseOnSurface: '#FDEDF0',
     },
     dark: {
       primary: '#FFB0CA',
@@ -607,6 +683,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#EFBC94',
       tertiaryContainer: '#623F20',
       onTertiaryContainer: '#FFDCC2',
+      background: '#191114',
+      surfaceVariant: '#514347',
+      inverseSurface: '#EFDFE2',
+      inverseOnSurface: '#372E30',
     }
   },
   {
@@ -638,6 +718,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#755A2F',
       tertiaryContainer: '#FFDDB0',
       onTertiaryContainer: '#291800',
+      background: '#FFF8F7',
+      surfaceVariant: '#F4DDDD',
+      inverseSurface: '#382E2E',
+      inverseOnSurface: '#FFEDEC',
     },
     dark: {
       primary: '#FFB3B4',
@@ -665,6 +749,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#E6C18D',
       tertiaryContainer: '#5B421A',
       onTertiaryContainer: '#FFDDB0',
+      background: '#1A1111',
+      surfaceVariant: '#524343',
+      inverseSurface: '#F0DEDE',
+      inverseOnSurface: '#382E2E',
     }
   },
   {
@@ -696,6 +784,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#78536B',
       tertiaryContainer: '#FFD8EE',
       onTertiaryContainer: '#5E3C52',
+      background: '#FBF8FF',
+      surfaceVariant: '#E4E1EC',
+      inverseSurface: '#303036',
+      inverseOnSurface: '#F2EFF7',
     },
     dark: {
       primary: '#BFC2FF',
@@ -723,6 +815,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#E8B9D5',
       tertiaryContainer: '#5E3C52',
       onTertiaryContainer: '#FFD8EE',
+      background: '#131318',
+      surfaceVariant: '#46464F',
+      inverseSurface: '#E4E1E9',
+      inverseOnSurface: '#303036',
     }
   },
   {
@@ -754,6 +850,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#01677D',
       tertiaryContainer: '#B3EBFF',
       onTertiaryContainer: '#004E5F',
+      background: '#FFF9EC',
+      surfaceVariant: '#E9E2D0',
+      inverseSurface: '#333027',
+      inverseOnSurface: '#F6F0E2',
     },
     dark: {
       primary: '#D9C76F',
@@ -781,6 +881,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#86D1EA',
       tertiaryContainer: '#004E5F',
       onTertiaryContainer: '#B3EBFF',
+      background: '#15130C',
+      surfaceVariant: '#4A4739',
+      inverseSurface: '#E8E2D4',
+      inverseOnSurface: '#333027',
     }
   },
   {
@@ -812,6 +916,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#4D5C92',
       tertiaryContainer: '#DCE1FF',
       onTertiaryContainer: '#354479',
+      background: '#FFF8F7',
+      surfaceVariant: '#F3DDE0',
+      inverseSurface: '#382E2F',
+      inverseOnSurface: '#FEEDEE',
     },
     dark: {
       primary: '#FFB1C0',
@@ -839,6 +947,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#B6C4FF',
       tertiaryContainer: '#354479',
       onTertiaryContainer: '#DCE1FF',
+      background: '#191113',
+      surfaceVariant: '#524345',
+      inverseSurface: '#EFDEE0',
+      inverseOnSurface: '#382E2F',
     }
   },
   {
@@ -870,6 +982,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#4A5FA8',
       tertiaryContainer: '#BCECE7',
       onTertiaryContainer: '#1F4E4B',
+      background: '#F9FAEF',
+      surfaceVariant: '#E1E4D5',
+      inverseSurface: '#2F312A',
+      inverseOnSurface: '#F1F2E6',
     },
     dark: {
       primary: '#AFC2FF',
@@ -897,6 +1013,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#8A9BD8',
       tertiaryContainer: '#1F4E4B',
       onTertiaryContainer: '#BCECE7',
+      background: '#12140E',
+      surfaceVariant: '#44483D',
+      inverseSurface: '#E2E3D8',
+      inverseOnSurface: '#2F312A',
     }
   },
   {
@@ -928,6 +1048,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#000000',
       tertiaryContainer: '#B0FFFFFF',
       onTertiaryContainer: '#000000',
+      background: '#FFFFFF',
+      surfaceVariant: '#000000',
+      inverseSurface: '#333027',
+      inverseOnSurface: '#F6F0E2',
     },
     dark: {
       primary: '#FFFFFF',
@@ -955,6 +1079,10 @@ export const THEME_PALETTES: ThemePaletteDefinition[] = [
       tertiary: '#FFFFFF',
       tertiaryContainer: '#40FFFFFF',
       onTertiaryContainer: '#000000',
+      background: '#000000',
+      surfaceVariant: '#FFFFFF',
+      inverseSurface: '#FFF9EC',
+      inverseOnSurface: '#1E1C13',
     }
   },
 ];
@@ -987,13 +1115,57 @@ export function resolvePaletteColors(index: number, isDark: boolean): ThemePalet
 /**
  * 把一套配色广播到 AppStorage，供各 struct 的 `@StorageProp` 订阅。
  *
- * 本函数广播 20 个键：原 9 个语义色位 + 批 1 新增的 11 个（error/onError/各种 Container 等）。
- * 键名必须与各 struct 里 `@StorageProp('themeColorXxx')` 的写法**逐字一致**：
- * 原 9 个键按 8 个 `theme_*` 颜色资源命名（`themeColorTextPrimary` 等），
- * 新增 11 个键按上游 `LegadoColorScheme` 字段名映射（`themeColorError` 等），
- * 所以这里按资源/字段映射改名，不能直接用 `primary`/`onSurface` 这些上游字段名。
+ * 分两步（批 4 起）：
+ * 1. 先按上游 `LegadoColorScheme`（`ui/theme/LegadoTheme.kt:26-83`）的字段名逐位广播，
+ *    键名 = `themeColor` + 上游字段名首字母大写。这样任何上游色位都能在本地按同名找到承接。
+ * 2. 再把本地早期那批语义键（`themeColorAccent` / `themeColorTextPrimary` 等）作为**别名**
+ *    重新赋一次值，取值一律从第 1 步的同名字段来。旧键一个都没删，既有引用不受影响；
+ *    将来收敛时只需把这些引用逐个换成上游名，别名键最后一起撤。
+ *
+ * 派生四位不在配色表里，按上游 `ui/theme/ThemeColorSchemeOverride.kt:76-79` 现算：
+ * `cardContainer = surfaceContainerLow`、`onCardContainer = primary`、`onSheetContent = surface`；
+ * `surfaceInput`（`:100-103`）在上游是 `bookInfoInputColor` 未配置时 `Color.Unspecified`，
+ * 此时 `AppTextField`（`ui/widget/components/AppTextField.kt:42`、`:98-103`）回落 M3 默认容器色，
+ * 即 `surfaceContainerHighest`，所以本地这里也取它。
  */
 export function publishPaletteColors(colors: ThemePaletteColors): void {
+  // ---------- 第 1 步：上游字段名 ----------
+  AppStorage.setOrCreate('themeColorPrimary', colors.primary);
+  AppStorage.setOrCreate('themeColorOnPrimary', colors.onPrimary);
+  AppStorage.setOrCreate('themeColorPrimaryContainer', colors.primaryContainer);
+  AppStorage.setOrCreate('themeColorOnPrimaryContainer', colors.onPrimaryContainer);
+  AppStorage.setOrCreate('themeColorSecondary', colors.secondary);
+  AppStorage.setOrCreate('themeColorSecondaryContainer', colors.secondaryContainer);
+  AppStorage.setOrCreate('themeColorOnSecondaryContainer', colors.onSecondaryContainer);
+  AppStorage.setOrCreate('themeColorTertiary', colors.tertiary);
+  AppStorage.setOrCreate('themeColorTertiaryContainer', colors.tertiaryContainer);
+  AppStorage.setOrCreate('themeColorOnTertiaryContainer', colors.onTertiaryContainer);
+  AppStorage.setOrCreate('themeColorBackground', colors.background);
+  AppStorage.setOrCreate('themeColorSurface', colors.surface);
+  AppStorage.setOrCreate('themeColorOnSurface', colors.onSurface);
+  AppStorage.setOrCreate('themeColorSurfaceVariant', colors.surfaceVariant);
+  AppStorage.setOrCreate('themeColorOnSurfaceVariant', colors.onSurfaceVariant);
+  AppStorage.setOrCreate('themeColorInverseSurface', colors.inverseSurface);
+  AppStorage.setOrCreate('themeColorInverseOnSurface', colors.inverseOnSurface);
+  AppStorage.setOrCreate('themeColorError', colors.error);
+  AppStorage.setOrCreate('themeColorOnError', colors.onError);
+  AppStorage.setOrCreate('themeColorErrorContainer', colors.errorContainer);
+  AppStorage.setOrCreate('themeColorOnErrorContainer', colors.onErrorContainer);
+  AppStorage.setOrCreate('themeColorOutline', colors.outline);
+  AppStorage.setOrCreate('themeColorOutlineVariant', colors.outlineVariant);
+  AppStorage.setOrCreate('themeColorScrim', colors.scrim);
+  AppStorage.setOrCreate('themeColorSurfaceBright', colors.surfaceBright);
+  AppStorage.setOrCreate('themeColorSurfaceContainer', colors.surfaceContainer);
+  AppStorage.setOrCreate('themeColorSurfaceContainerHigh', colors.surfaceContainerHigh);
+  AppStorage.setOrCreate('themeColorSurfaceContainerHighest', colors.surfaceContainerHighest);
+  AppStorage.setOrCreate('themeColorSurfaceContainerLow', colors.surfaceContainerLow);
+  // 派生四位（上游 `ThemeColorSchemeOverride.kt:76-79` 与 `:100-103`）。
+  AppStorage.setOrCreate('themeColorCardContainer', colors.surfaceContainerLow);
+  AppStorage.setOrCreate('themeColorOnCardContainer', colors.primary);
+  AppStorage.setOrCreate('themeColorOnSheetContent', colors.surface);
+  AppStorage.setOrCreate('themeColorSurfaceInput', colors.surfaceContainerHighest);
+
+  // ---------- 第 2 步：旧语义键 = 上游字段名的别名 ----------
   AppStorage.setOrCreate('themeColorAccent', colors.primary);
   AppStorage.setOrCreate('themeColorTextPrimary', colors.onSurface);
   AppStorage.setOrCreate('themeColorTextSecondary', colors.onSurfaceVariant);
@@ -1004,22 +1176,6 @@ export function publishPaletteColors(colors: ThemePaletteColors): void {
   AppStorage.setOrCreate('themeColorSurfaceElevated', colors.surfaceContainerHigh);
   // 键名沿用现有 themeColorSurface* 前缀（不写全名 Container，避免 30 多个使用点打错）。
   AppStorage.setOrCreate('themeColorSurfaceHighest', colors.surfaceContainerHighest);
-  AppStorage.setOrCreate('themeColorError', colors.error);
-  AppStorage.setOrCreate('themeColorOnError', colors.onError);
-  AppStorage.setOrCreate('themeColorErrorContainer', colors.errorContainer);
-  AppStorage.setOrCreate('themeColorSecondaryContainer', colors.secondaryContainer);
-  AppStorage.setOrCreate('themeColorOnSecondaryContainer', colors.onSecondaryContainer);
-  AppStorage.setOrCreate('themeColorPrimaryContainer', colors.primaryContainer);
-  AppStorage.setOrCreate('themeColorOnPrimaryContainer', colors.onPrimaryContainer);
-  AppStorage.setOrCreate('themeColorOnPrimary', colors.onPrimary);
-  AppStorage.setOrCreate('themeColorOutlineVariant', colors.outlineVariant);
-  AppStorage.setOrCreate('themeColorSurfaceBright', colors.surfaceBright);
-  AppStorage.setOrCreate('themeColorScrim', colors.scrim);
-  // 上游 tertiary 三兄弟与 onErrorContainer：调试页「完成/错误」条目用它们，此前本地缺这三个令牌，
-  // 只能拿 secondaryContainer/onSecondaryContainer/error 顶替，色值对不上。
-  AppStorage.setOrCreate('themeColorTertiaryContainer', colors.tertiaryContainer);
-  AppStorage.setOrCreate('themeColorOnTertiaryContainer', colors.onTertiaryContainer);
-  AppStorage.setOrCreate('themeColorOnErrorContainer', colors.onErrorContainer);
 }
 
 /** 序号 + `themeMode` + 系统色模式 → 广播当前该用的配色。`themeMode` 三值口径见 `ThemeModeResolver`。 */

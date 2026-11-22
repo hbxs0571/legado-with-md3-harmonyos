@@ -48,6 +48,8 @@ export struct BookInfoEditPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  /** 输入框底色。上游 `surfaceInput`，见 `inputSurface()` 的注释。 */
+  @StorageProp('themeColorSurfaceInput') themeColorSurfaceInput: string = '#E2E3D8';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('appTopInset') appTopInset: number = 0;
@@ -123,9 +125,12 @@ export struct BookInfoEditPage {
     return this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary;
   }
 
-  /** 输入框底色：比页面底亮一档，对齐上游 `surfaceInput`。 */
+  /** 输入框底色：对齐上游 `surfaceInput`（`ui/book/info/edit/BookInfoEditScreen.kt:242` 起七处 `AppTextField`）。
+   *  上游该位在 `bookInfoInputColor` 未配置时是 `Color.Unspecified`，`AppTextField`
+   *  （`ui/widget/components/AppTextField.kt:98-103`）此时回落 M3 默认容器色，即 `surfaceContainerHighest`。
+   */
   private inputSurface(): ResourceColor {
-    return this.themePureBlack ? '#141414' : this.themeColorSurfaceSecondary;
+    return this.themePureBlack ? '#141414' : this.themeColorSurfaceInput;
   }
 
   private bookTypeLabel(type: BookMediaType): string {

@@ -103,14 +103,13 @@ function shelfGlyph(state: BookShelfState): string {
  * `GlassCard(containerColor = surfaceContainerHigh, cornerRadius = 4.dp)` 里一段
  * `labelSmallEmphasized`、字色 `onCardContainer`、内边距 4/2 的文字。
  *
- * 本地主题没有 `cardContainer` / `onCardContainer` 两档（`data/ThemePalette.ets:1001-1015`
- * 的广播键里没有），按 `components/BookCover.ets:37-39` 已确立的口径降级：
- * 容器 `themeColorSurfaceElevated`（= surfaceContainerHigh）、字色 `themeColorTextPrimary`（= onSurface）。
+ * 容器 `themeColorSurfaceElevated`（= surfaceContainerHigh）对齐上游默认值；
+ * 字色 `themeColorOnCardContainer`（派生自 primary，见 `data/ThemePalette.ets` 的 `publishPaletteColors`）。
  */
 @Component
 export struct SearchBookTagChip {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorOnCardContainer') themeColorOnCardContainer: string = '#4C662B';
   @Prop text: string = '';
 
   build() {
@@ -118,7 +117,7 @@ export struct SearchBookTagChip {
       .fontSize(LABEL_SMALL)
       .lineHeight(LABEL_SMALL_LINE_HEIGHT)
       .fontWeight(FontWeight.Medium)
-      .fontColor(this.themeColorTextPrimary)
+      .fontColor(this.themeColorOnCardContainer)
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .padding({ left: 4, right: 4, top: 2, bottom: 2 })
