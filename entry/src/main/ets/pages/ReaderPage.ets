@@ -29,6 +29,7 @@ import { UiSwitchControl } from '../components/UiSwitchControl';
 import { BookCover } from '../components/BookCover';
 import { ReaderTextProcessingSheet } from './ReaderTextProcessingSheet';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { ProgressiveBackdrop } from '../components/ProgressiveBackdrop';
 // 批5（:127）：划词「划线/笔记」改成贴选区的行内快速标记面板
 import { ReaderQuickMarkPanel } from '../components/ReaderQuickMarkPanel';
 import image from '@ohos.multimedia.image';
@@ -378,6 +379,8 @@ export struct ReaderPage {
   @Prop readMenuBottomBarBlurMode: number = 0;
   /** 底栏模糊样式；0 填充 / 1 渐变（`ReadSettings.kt:104`、`PreferKey.kt:504`）。 */
   @Prop readMenuBottomBarBlurStyle: number = 0;
+  /** 底栏内容实测高度（vp）；渐变模糊层按它定高，理由同 `readerTopBarHeightVp`。 */
+  @State readerBottomBarHeightVp: number = 0;
   /** 底栏按钮液态玻璃；上游 `readMenuBottomBarLiquidGlassButtons`（`ReadSettings.kt:101`）。 */
   @Prop readMenuBottomBarLiquidGlassButtons: boolean = false;
   /** 菜单不透明度 0-100；底栏与顶栏共用上游 `readMenuBlurAlpha`（`ReadSettings.kt:106`，默认 85）。 */
@@ -404,6 +407,11 @@ export struct ReaderPage {
   @Prop readMenuTopBarBlurMode: number = 0;
   /** 顶栏模糊样式 0 填充 / 1 渐变；上游 `readMenuTopBarBlurStyle`（`ReadSettings.kt:103`）。 */
   @Prop readMenuTopBarBlurStyle: number = 0;
+  /**
+   * 顶栏内容实测高度（vp）。渐变模糊层要用它来定自己的高度：ArkUI 里 `height('100%')`
+   * 相对 Stack 的父容器求值，写进 Stack 会把 Stack 撑成整屏高（设备实测底栏被挤出可视区）。
+   */
+  @State readerTopBarHeightVp: number = 0;
   /** 顶栏按钮液态玻璃；上游 `readMenuTopBarLiquidGlassButtons`（`ReadSettings.kt:98`）。 */
   @Prop readMenuTopBarLiquidGlassButtons: boolean = false;
   /** 顶栏按钮合并成一个胶囊组；上游 `readMenuTopBarMergeButtons`（`ReadSettings.kt:99`）。 */
@@ -1871,6 +1879,34 @@ export struct ReaderPage {
       : this.readerMenuBlurRadiusVp();
   }
 
+  /**
+   * 顶栏是否走渐变模糊。上游 `ReadBookMenuBarTitle.kt:1000-1007` 的
+   * `readMenuTopBarHazeEnabled` 只认 `mode == Haze`（顶栏不做液态玻璃降级），
+   * 再经 `ReaderMenuVisualState.kt:23-41` 的 `isProgressiveBlur = effect == Haze && isGradient`，
+   * 也就是「雾化档 + 渐变样式」两个条件同时成立才挂 `verticalGradient(1f, 0f)`。
+   */
+  private readerTopBarProgressive(): boolean {
+    return this.readMenuTopBarBlurMode === 2
+      && this.readMenuTopBarBlurStyle === 1
+      && this.readerTopBarBlurRadiusVp() > 0;
+  }
+
+  /**
+   * 底栏是否走渐变模糊。上游 `ReadBookMenuBar.kt:976-982` 的
+   * `readMenuBottomBarEffectiveBlurMode` 在非悬浮时把液态玻璃降级成雾化档，
+   * 所以判定用降级后的档位；渐变样式仍取 `readMenuBottomBarBlurStyle`。
+   * 方向与顶栏相反：`ReaderMenuEffects.kt:35-39` 底栏是 `verticalGradient(0f, 1f)`。
+   */
+  private readerBottomBarProgressive(): boolean {
+    const effective = (!this.readMenuFloatingBottomBar && this.readMenuBottomBarBlurMode === 1)
+      ? 2 : this.readMenuBottomBarBlurMode;
+    return effective === 2
+      && this.readMenuBottomBarBlurStyle === 1
+      && this.readerBottomBarBlurRadiusVp() > 0;
+  }
+
+  /** 顶栏的渐变模糊背景层。`background(CustomBuilder)` 与 backgroundColor 并存时本层在上。 */
+  /** 底栏的渐变模糊背景层。方向取反：上淡下浓。 */
   /** 把 `#RRGGBB` / `#AARRGGBB` 折成 6 位 RGB；解析不了时按当前日夜取黑白。 */
   private readerMenuRgb(color: string): string {
     const raw = color.trim().toUpperCase();
@@ -8690,69 +8726,94 @@ export struct ReaderPage {
               this.imageStyleMenuVisible = false;
             })
           Column() {
-            Column() {
-              Row() {
-                Stack({ alignContent: Alignment.Center }) {
-                  Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
-                }.width(this.readerTopBarButtonOuterSize()).height(this.readerTopBarButtonOuterSize()).onClick(() => this.onBack())
-                // 胶囊模式：书名 + 章节名压成一行两段，独占中间剩余宽度（上游 ReadBookMenuBarTitle.kt:198/492）。
-                if (this.readerTitleCapsuleVisible()) {
-                  this.readerTitleCapsule()
-                } else {
-                  // 非胶囊模式：仅 titleBarMode 为 "0"/"2" 时书名留在应用栏行内（:207）。
-                  if (this.readerTitleInlineVisible()) {
-                    // 上游 `ReadBookMenuBarTitle.kt:207-221`：非胶囊模式的书名同样 combinedClickable
-                    // 进书籍详情，不是纯展示文本。
-                    // 上游 `ReadBookMenuBarTitle.kt:213` 的书名是 `maxLines = 2`
-                    // （`maxLines(2)` + `Ellipsis` 正是上游的组合，不要删 textOverflow）。
-                    Text(this.book.title).fontSize(BODY_MEDIUM).fontColor(this.readerMenuForeground()).maxLines(2)
-                      .layoutWeight(1).padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .textShadow(this.readerMenuTextShadow())
-                      .onClick(() => this.onOpenBookInfo())
-                      .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
-                        this.onOpenBookInfo();
-                      }))
-                  }
-                  Blank().layoutWeight(1)
-                }
-                this.readerTopActionGroup()
-              // top 里叠上 appTopInset：原来写死 12，顶栏按钮压在状态栏图标上。
-              // 上游让位在面板层（`ReadBookMenuBarTitle.kt:167-171` 的 windowInsetsPadding），
-              // 本地面板只有这一行，加到行 padding 上等价。
-              }.width('100%').padding({ left: 16, right: 16, top: 12 + this.appTopInset, bottom: 4 })
-              // 模式 "1"：书名单独占一行（上游 :239）。
-              if (this.readerTitleOwnLineVisible()) {
-                // 上游 `ReadBookMenuBarTitle.kt:241`：独占一行的书名 `maxLines = 2`，同样可点进详情。
-                Text(this.book.title).fontSize(BODY_MEDIUM).fontColor(this.readerMenuForeground()).maxLines(2)
-                  .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .textShadow(this.readerMenuTextShadow())
-                  .onClick(() => this.onOpenBookInfo())
-                  .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
-                    this.onOpenBookInfo();
-                  }))
+            Stack() {
+              // 模糊层独立成一层、放在内容之下：ArkUI 的 backdropBlur 采样的是「组件背后」的已绘制内容，
+              // 只有作为正常子节点时才采得到正文。放进 `background(CustomBuilder)` 时该层位于组件内容之下、
+              // 采样源之上，采到的是空层（设备实测渐变档反而比整块档更清晰，见报告批 6 验收记录）。
+              // 渐变档底色是 Transparent，所以这里采到的仍是页面正文。
+              // `.position()` 不脱离布局流（ArkUI 的 position 只改绘制位置，仍占位），所以高度
+              // 改用实测值：内容 Column 通过 `onAreaChange` 回报高度，模糊层按同一高度铺。
+              // 若直接写 `height('100%')`，百分比相对 Stack 的父（整屏内容层）求值，会把 Stack
+              // 撑成整屏高、底栏被挤出可视区（设备实测）。
+              if (this.readerTopBarProgressive() && this.readerTopBarHeightVp > 0) {
+                ProgressiveBackdrop({ blurRadius: this.readerTopBarBlurRadiusVp(), reversed: false })
+                  .width('100%')
+                  .height(this.readerTopBarHeightVp)
               }
-              // 模式 "0"/"1"：章节名独占一行（上游 :259）。
-              if (this.readerChapterLineVisible()) {
+              Column() {
                 Row() {
-                  Text(this.displayChapterTitle).fontSize(BODY_SMALL).fontColor(this.readerMenuForeground()).maxLines(1)
-                    .textShadow(this.readerMenuTextShadow())
-                    .layoutWeight(1).padding({ left: 16, top: 4, bottom: 8 })
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  // 上游 `ReadBookMenuBarTitle.kt:288-311`：章名行右侧还有一个书源名，点开书源下拉。
-                  // 批10（:569）之前这里留空（注释写「书源引擎未接入」已过时，批8 起在线书能进阅读页）。
-                  // 有书源时显示源名文本 + 书源下拉入口；没有源（本地书 / 源已删）整段不画。
-                  if (this.bookSourceName.length > 0) {
-                    Row() {
-                      Text(this.bookSourceName).fontSize(BODY_SMALL).fontColor(this.readerMenuForegroundAlpha('B3'))
-                        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Stack({ alignContent: Alignment.Center }) {
+                    Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
+                  }.width(this.readerTopBarButtonOuterSize()).height(this.readerTopBarButtonOuterSize()).onClick(() => this.onBack())
+                  // 胶囊模式：书名 + 章节名压成一行两段，独占中间剩余宽度（上游 ReadBookMenuBarTitle.kt:198/492）。
+                  if (this.readerTitleCapsuleVisible()) {
+                    this.readerTitleCapsule()
+                  } else {
+                    // 非胶囊模式：仅 titleBarMode 为 "0"/"2" 时书名留在应用栏行内（:207）。
+                    if (this.readerTitleInlineVisible()) {
+                      // 上游 `ReadBookMenuBarTitle.kt:207-221`：非胶囊模式的书名同样 combinedClickable
+                      // 进书籍详情，不是纯展示文本。
+                      // 上游 `ReadBookMenuBarTitle.kt:213` 的书名是 `maxLines = 2`
+                      // （`maxLines(2)` + `Ellipsis` 正是上游的组合，不要删 textOverflow）。
+                      Text(this.book.title).fontSize(BODY_MEDIUM).fontColor(this.readerMenuForeground()).maxLines(2)
+                        .layoutWeight(1).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
                         .textShadow(this.readerMenuTextShadow())
-                    }.padding({ left: 8, right: 16, top: 4, bottom: 8 })
-                      .onClick(() => this.onOpenSourceMenu())
+                        .onClick(() => this.onOpenBookInfo())
+                        .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+                          this.onOpenBookInfo();
+                        }))
+                    }
+                    Blank().layoutWeight(1)
                   }
-                }.width('100%')
+                  this.readerTopActionGroup()
+                // top 里叠上 appTopInset：原来写死 12，顶栏按钮压在状态栏图标上。
+                // 上游让位在面板层（`ReadBookMenuBarTitle.kt:167-171` 的 windowInsetsPadding），
+                // 本地面板只有这一行，加到行 padding 上等价。
+                }.width('100%').padding({ left: 16, right: 16, top: 12 + this.appTopInset, bottom: 4 })
+                // 模式 "1"：书名单独占一行（上游 :239）。
+                if (this.readerTitleOwnLineVisible()) {
+                  // 上游 `ReadBookMenuBarTitle.kt:241`：独占一行的书名 `maxLines = 2`，同样可点进详情。
+                  Text(this.book.title).fontSize(BODY_MEDIUM).fontColor(this.readerMenuForeground()).maxLines(2)
+                    .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 4 })
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .textShadow(this.readerMenuTextShadow())
+                    .onClick(() => this.onOpenBookInfo())
+                    .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+                      this.onOpenBookInfo();
+                    }))
+                }
+                // 模式 "0"/"1"：章节名独占一行（上游 :259）。
+                if (this.readerChapterLineVisible()) {
+                  Row() {
+                    Text(this.displayChapterTitle).fontSize(BODY_SMALL).fontColor(this.readerMenuForeground()).maxLines(1)
+                      .textShadow(this.readerMenuTextShadow())
+                      .layoutWeight(1).padding({ left: 16, top: 4, bottom: 8 })
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    // 上游 `ReadBookMenuBarTitle.kt:288-311`：章名行右侧还有一个书源名，点开书源下拉。
+                    // 批10（:569）之前这里留空（注释写「书源引擎未接入」已过时，批8 起在线书能进阅读页）。
+                    // 有书源时显示源名文本 + 书源下拉入口；没有源（本地书 / 源已删）整段不画。
+                    if (this.bookSourceName.length > 0) {
+                      Row() {
+                        Text(this.bookSourceName).fontSize(BODY_SMALL).fontColor(this.readerMenuForegroundAlpha('B3'))
+                          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                          .textShadow(this.readerMenuTextShadow())
+                      }.padding({ left: 8, right: 16, top: 4, bottom: 8 })
+                        .onClick(() => this.onOpenSourceMenu())
+                    }
+                  }.width('100%')
+                }
               }
+              .width('100%')
+              // 高度实测挂在内层内容 Column 上：它自己就是内容的自然高度，不受 Stack 影响；
+              // 挂在 Stack 上会量到上一帧模糊层参与布局后的值（实测偏小约一半，模糊层盖不住书名行）。
+              .onAreaChange((_oldValue: Area, newValue: Area) => {
+                // Area.height 的单位是 px，不是 vp：直接当 vp 用会按屏幕密度放大（实测 3.5 倍）。
+                const height = px2vp(Number(newValue.height));
+                if (height > 0 && Math.abs(height - this.readerTopBarHeightVp) > 0.5) {
+                  this.readerTopBarHeightVp = height;
+                }
+              })
             }
             .width('100%')
             // 渐变档下透明端会露出 backgroundColor 的实色，方向一改就露馅，
@@ -8762,8 +8823,7 @@ export struct ReaderPage {
             // KI-E2：菜单栏边框（宽度同时是开关）与背景模糊半径，对齐上游
             // `ReadBookMenuBarTitle.kt:504-521`（描边）与 `:131`（`blurRadius = readMenuBlurRadius`）。
             .border(this.readerMenuBorderSettings())
-            // 模糊只在该档启用时才开：None 档靠底色/渐变显形，不该整片模糊。
-            .backdropBlur(this.readerTopBarBlurRadiusVp())
+            .backdropBlur(this.readerTopBarProgressive() ? 0 : this.readerTopBarBlurRadiusVp())
 
           // KI-E3：位置 0/1 的浮动图标行贴在顶栏下方（上游 ReadBookMenuBar.kt:172）。
           if (this.readerFloatingIconTopVisible()) {
@@ -8777,141 +8837,163 @@ export struct ReaderPage {
             this.readerFloatingIconRow(this.titleBarIconPosition)
           }
 
-          Column() {
-            // 横排亮度条贴在底栏里（上游 `ReadBookMenuBarBottom.kt:139`）；
-            // 竖排的是独立浮层，不跟底栏一起排版，见下面 `showBrightnessView === '2'` 的分支。
-            if (this.showBrightnessView === '1') {
-              this.ReaderBrightnessBar(false)
+          Stack() {
+            // 底栏同顶栏分两种铺法：模糊层必须作为 Stack 的第一个子节点才采得到正文，方向取反
+            // （上游 `ReaderMenuEffects.kt:35-39` 底栏是 `verticalGradient(0f, 1f)`，上淡下浓）。
+            // 外层 padding 挪到内层内容 Column，模糊层才能铺满整个底栏、与圆角边框对齐。
+            if (this.readerBottomBarProgressive() && this.readerBottomBarHeightVp > 0) {
+              ProgressiveBackdrop({ blurRadius: this.readerBottomBarBlurRadiusVp(), reversed: true })
+                .width('100%')
+                .height(this.readerBottomBarHeightVp)
             }
-            // 上游 `ReadBookMenuBarBottom.kt:161-196`：`AnimatedVisibility(readSliderMode != "1")`
-            // 只包住**中间那根 Slider**，两侧的上一章/下一章按钮在 `readSliderMode == "1"` 时仍然保留。
-            // 本地原先把整行一起藏掉，隐藏进度条后连换章按钮都没了。
-            Row() {
-              // 换章按钮尺寸跟随玻璃开关：上游 `ReadBookMenuBarBottom.kt:161-196` 用的是
-              // 与底栏按钮同一个 `BottomBarGlassIconButton`（`buttonGlassEnabled ? 48 : 40`）。
-              Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
-              }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
-                .onClick(() => this.turnReaderChapter(-1))
-              if (this.readSliderMode !== '1') {
-                // 上游 `ReadMenuSlider`（`ReadBookMenuBarTool.kt:67-113`）普通档走
-                // `AppSlider` → material3 `Slider` 默认外观，也就是 M3 的形态：
-                // 16dp 粗轨道 + 4dp×44dp 的竖条 handle + 轨道上的小圆点刻度。
-                // ArkUI 系统 Slider 的 DEFAULT 拇指只能是圆点、SHAPE 需要 RectAttribute 实例
-                // （组件构建器造不出来），所以这里拆成两层：系统 Slider 负责轨道/刻度/拖拽，
-                // 拇指改成自绘的竖条叠在上面，按同一百分比定位。
-                Stack({ alignContent: Alignment.Center }) {
-                  Slider({
-                    value: this.sliderProgressIndex,
-                    min: 0,
-                    max: Math.max(0, this.getProgressSliderMaximum()),
-                    step: 1,
-                    style: SliderStyle.InSet
-                  })
-                    .width('100%').height(52)
-                    .selectedColor(this.readerMenuAccentTint())
-                    .trackColor(this.readerMenuForegroundAlpha('33'))
-                    // 系统圆点拇指涂透明，位置让给下面的竖条。
-                    .blockColor(Color.Transparent)
-                    .blockBorderColor(Color.Transparent)
-                    .trackThickness(16)
-                    // 刻度是轨道上的小暗点，不是一排强调色亮点。
-                    .showSteps(true).stepColor(this.readerMenuForegroundAlpha('73')).stepSize(4)
-                    .enabled(Math.max(0, this.getProgressSliderMaximum()) > 0)
-                    .onAreaChange((_oldArea: Area, newArea: Area) => {
-                      const width = Number(newArea.width);
-                      if (!Number.isNaN(width) && width > 0) { this.sliderTrackWidth = width; }
-                    })                    // 无障碍文案：上游 `ReadBookMenuBarBottom.kt:84-95` 按 `progressBarBehavior`
-                    // 念「第 x / 共 y 页」或「第 x / 共 y 章」。本地没有读屏器自定义能力，
-                    // 用 `accessibilityText` 把同一句挂在滑块上。
-                    .accessibilityText(this.getProgressAccessibilityText())
-                    .onChange((value: number, mode: SliderChangeMode) => {
-                      const maximum = this.getProgressSliderMaximum();
-                      const index = Math.max(0, Math.min(maximum, Math.round(value)));
-                      // 松手/点击之后不再处于拖动过程，清掉预览页号，下一次拖动重新从 -1 起算。
-                      if (mode !== SliderChangeMode.Moving) {
-                        this.sliderDragPreviewPageIndex = -1;
-                      }
-                      this.sliderProgressIndex = index;
-                      if (this.isPageProgressMode()) {
-                        // 拖动过程中同一个整数值会被连续派发，已经停在这一页就不再重绘。
-                        if (mode === SliderChangeMode.Moving && index === this.sliderDragPreviewPageIndex) {
-                          return;
-                        }
-                        this.sliderDragPreviewPageIndex = index;
-                        this.seekToChapterPage(index);
-                      } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                        this.onSelectChapterIndex(index);
-                      }
-                    })
-                  // 自绘竖条拇指：M3 的 handle 是 4dp 宽、44dp 高的圆角竖条（上游
-                  // `ReadBookMenuBarTool.kt:320`），ArkUI 系统 Slider 的拇指只能是圆点
-                  // （SHAPE 档要 RectAttribute 实例，组件构建器造不出来），所以在轨道上
-                  // 按同一百分比叠一根竖条。竖条尺寸就地写字面量，只有这一处用。
-                  // Stack 是 Center 对齐，offset 从中心起算。
-                  Row()
-                    .width(4).height(44).borderRadius(2)
-                    .backgroundColor(this.readerMenuForeground())
-                    .offset({ x: this.sliderThumbOffset() })
-                    .hitTestBehavior(HitTestMode.None)
-                }.layoutWeight(1).height(52)
-                  // 内缩 18vp/侧，上游是三层叠加：`ReadBookMenuBarBottom.kt:165` 的 16dp
-                  // 行内边距已由外层 Row 承担，这里只补
-                  // `ReadBookMenuBarBottom.kt:194-196` 的 `padding(horizontal = 8.dp)`
-                  // + `ReadBookMenuBarTool.kt:104` 的 5dp + `ReaderMenuPrimitives.kt:121` 的 5dp
-                  // = 8+5+5 = 18vp。玻璃拇指档（`ReadMenuLiquidSlider`，
-                  // `ReadBookMenuBarTool.kt:81` 起）不叠那两层 5dp，是 13vp。
-                  .padding({ left: 18, right: 18 })
+            Column() {
+              // 横排亮度条贴在底栏里（上游 `ReadBookMenuBarBottom.kt:139`）；
+              // 竖排的是独立浮层，不跟底栏一起排版，见下面 `showBrightnessView === '2'` 的分支。
+              if (this.showBrightnessView === '1') {
+                this.ReaderBrightnessBar(false)
               }
-              Stack({ alignContent: Alignment.Center }) {
-                Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
-              }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
-                .onClick(() => this.turnReaderChapter(1))
-            }.width('100%').height(this.readerBottomActionOuterSize())
-              // 上游 `ReadBookMenuBarBottom.kt:162-169`：`padding(vertical = 4.dp).padding(horizontal = 16.dp)`。
-              .padding({ left: 16, right: 16, top: 4, bottom: 4 })
-            if (this.getBottomActionPages().length > 0) {
-            Swiper() {
-              ForEach(this.getBottomActionPages(), (rows: ReaderControlKind[][], _pageIndex: number) => {
-                Column() {
-                  ForEach(rows, (row: ReaderControlKind[], _rowIndex: number) => {
-                    Row() {
-                      ForEach(row, (kind: ReaderControlKind) => {
-                        ReaderBottomAction({
-                          kind: kind,
-                          label: this.getBottomActionLabel(kind),
-                          showLabel: this.showBottomActionText,
-                          badgeCount: this.getBottomActionBadgeCount(kind),
-                          active: (kind === 'autoPage' && this.autoPageActive) ||
-                            (kind === 'eye_protection' && this.eyeProtectionActive),
-                          iconStyle: this.bottomIconStyle,
-                          menuForeground: this.readerMenuForeground(),
-                          menuAccent: this.readerMenuAccentTint(),
-                          itemFill: this.readerMenuItemFill(false, this.bottomIconStyle),
-                          itemFillSelected: this.readerMenuSelectedFill(),
-                          menuForegroundAlpha: this.readerMenuForegroundAlpha('73'),
-                          outerSize: this.readerBottomActionOuterSize(),
-                          onSelect: () => this.selectBottomAction(kind),
-                          onLongSelect: () => this.longSelectBottomAction(kind)
-                        }).width(this.readerBottomActionOuterSize())
-                      }, (kind: ReaderControlKind) => kind)
-                    }.width('100%').justifyContent(FlexAlign.SpaceBetween)
-                  }, (_row: ReaderControlKind[], rowIndex: number) => `${_pageIndex}-${rowIndex}`)
-                }.width('100%').justifyContent(FlexAlign.Center)
-              }, (_rows: ReaderControlKind[][], pageIndex: number) => `${pageIndex}`)
-            }
-              .width('100%')
-              .index(this.getBottomActionPageIndex())
-              // 高度算式参数化：`+ 24` / `+ 8` 是从旧常量反推的（40+24=64、40+8=48），
-              // 40 档时结果与改前完全一致；玻璃档按钮变 48，两个档位各自跟上。
-              .height((this.showBottomActionText ? this.readerBottomActionOuterSize() + 24
-                : this.readerBottomActionOuterSize() + 8)
-                * Math.max(1, Math.min(2, this.bottomRowCount)) + ReaderPage.BOTTOM_ACTION_PADDING)
-              .loop(false)
-              .indicator(false)
-              .onChange((pageIndex: number) => this.currentBottomActionPage = pageIndex)
-              .padding({ left: 8, right: 8, top: 4, bottom: 17 })
-            }
+              // 上游 `ReadBookMenuBarBottom.kt:161-196`：`AnimatedVisibility(readSliderMode != "1")`
+              // 只包住**中间那根 Slider**，两侧的上一章/下一章按钮在 `readSliderMode == "1"` 时仍然保留。
+              // 本地原先把整行一起藏掉，隐藏进度条后连换章按钮都没了。
+              Row() {
+                // 换章按钮尺寸跟随玻璃开关：上游 `ReadBookMenuBarBottom.kt:161-196` 用的是
+                // 与底栏按钮同一个 `BottomBarGlassIconButton`（`buttonGlassEnabled ? 48 : 40`）。
+                Stack({ alignContent: Alignment.Center }) {
+                  Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
+                }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
+                  .onClick(() => this.turnReaderChapter(-1))
+                if (this.readSliderMode !== '1') {
+                  // 上游 `ReadMenuSlider`（`ReadBookMenuBarTool.kt:67-113`）普通档走
+                  // `AppSlider` → material3 `Slider` 默认外观，也就是 M3 的形态：
+                  // 16dp 粗轨道 + 4dp×44dp 的竖条 handle + 轨道上的小圆点刻度。
+                  // ArkUI 系统 Slider 的 DEFAULT 拇指只能是圆点、SHAPE 需要 RectAttribute 实例
+                  // （组件构建器造不出来），所以这里拆成两层：系统 Slider 负责轨道/刻度/拖拽，
+                  // 拇指改成自绘的竖条叠在上面，按同一百分比定位。
+                  Stack({ alignContent: Alignment.Center }) {
+                    Slider({
+                      value: this.sliderProgressIndex,
+                      min: 0,
+                      max: Math.max(0, this.getProgressSliderMaximum()),
+                      step: 1,
+                      style: SliderStyle.InSet
+                    })
+                      .width('100%').height(52)
+                      .selectedColor(this.readerMenuAccentTint())
+                      .trackColor(this.readerMenuForegroundAlpha('33'))
+                      // 系统圆点拇指涂透明，位置让给下面的竖条。
+                      .blockColor(Color.Transparent)
+                      .blockBorderColor(Color.Transparent)
+                      .trackThickness(16)
+                      // 刻度是轨道上的小暗点，不是一排强调色亮点。
+                      .showSteps(true).stepColor(this.readerMenuForegroundAlpha('73')).stepSize(4)
+                      .enabled(Math.max(0, this.getProgressSliderMaximum()) > 0)
+                      .onAreaChange((_oldArea: Area, newArea: Area) => {
+                        const width = Number(newArea.width);
+                        if (!Number.isNaN(width) && width > 0) { this.sliderTrackWidth = width; }
+                      })                    // 无障碍文案：上游 `ReadBookMenuBarBottom.kt:84-95` 按 `progressBarBehavior`
+                      // 念「第 x / 共 y 页」或「第 x / 共 y 章」。本地没有读屏器自定义能力，
+                      // 用 `accessibilityText` 把同一句挂在滑块上。
+                      .accessibilityText(this.getProgressAccessibilityText())
+                      .onChange((value: number, mode: SliderChangeMode) => {
+                        const maximum = this.getProgressSliderMaximum();
+                        const index = Math.max(0, Math.min(maximum, Math.round(value)));
+                        // 松手/点击之后不再处于拖动过程，清掉预览页号，下一次拖动重新从 -1 起算。
+                        if (mode !== SliderChangeMode.Moving) {
+                          this.sliderDragPreviewPageIndex = -1;
+                        }
+                        this.sliderProgressIndex = index;
+                        if (this.isPageProgressMode()) {
+                          // 拖动过程中同一个整数值会被连续派发，已经停在这一页就不再重绘。
+                          if (mode === SliderChangeMode.Moving && index === this.sliderDragPreviewPageIndex) {
+                            return;
+                          }
+                          this.sliderDragPreviewPageIndex = index;
+                          this.seekToChapterPage(index);
+                        } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                          this.onSelectChapterIndex(index);
+                        }
+                      })
+                    // 自绘竖条拇指：M3 的 handle 是 4dp 宽、44dp 高的圆角竖条（上游
+                    // `ReadBookMenuBarTool.kt:320`），ArkUI 系统 Slider 的拇指只能是圆点
+                    // （SHAPE 档要 RectAttribute 实例，组件构建器造不出来），所以在轨道上
+                    // 按同一百分比叠一根竖条。竖条尺寸就地写字面量，只有这一处用。
+                    // Stack 是 Center 对齐，offset 从中心起算。
+                    Row()
+                      .width(4).height(44).borderRadius(2)
+                      .backgroundColor(this.readerMenuForeground())
+                      .offset({ x: this.sliderThumbOffset() })
+                      .hitTestBehavior(HitTestMode.None)
+                  }.layoutWeight(1).height(52)
+                    // 内缩 18vp/侧，上游是三层叠加：`ReadBookMenuBarBottom.kt:165` 的 16dp
+                    // 行内边距已由外层 Row 承担，这里只补
+                    // `ReadBookMenuBarBottom.kt:194-196` 的 `padding(horizontal = 8.dp)`
+                    // + `ReadBookMenuBarTool.kt:104` 的 5dp + `ReaderMenuPrimitives.kt:121` 的 5dp
+                    // = 8+5+5 = 18vp。玻璃拇指档（`ReadMenuLiquidSlider`，
+                    // `ReadBookMenuBarTool.kt:81` 起）不叠那两层 5dp，是 13vp。
+                    .padding({ left: 18, right: 18 })
+                }
+                Stack({ alignContent: Alignment.Center }) {
+                  Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
+                }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
+                  .onClick(() => this.turnReaderChapter(1))
+              }.width('100%').height(this.readerBottomActionOuterSize())
+                // 上游 `ReadBookMenuBarBottom.kt:162-169`：`padding(vertical = 4.dp).padding(horizontal = 16.dp)`。
+                .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+              if (this.getBottomActionPages().length > 0) {
+              Swiper() {
+                ForEach(this.getBottomActionPages(), (rows: ReaderControlKind[][], _pageIndex: number) => {
+                  Column() {
+                    ForEach(rows, (row: ReaderControlKind[], _rowIndex: number) => {
+                      Row() {
+                        ForEach(row, (kind: ReaderControlKind) => {
+                          ReaderBottomAction({
+                            kind: kind,
+                            label: this.getBottomActionLabel(kind),
+                            showLabel: this.showBottomActionText,
+                            badgeCount: this.getBottomActionBadgeCount(kind),
+                            active: (kind === 'autoPage' && this.autoPageActive) ||
+                              (kind === 'eye_protection' && this.eyeProtectionActive),
+                            iconStyle: this.bottomIconStyle,
+                            menuForeground: this.readerMenuForeground(),
+                            menuAccent: this.readerMenuAccentTint(),
+                            itemFill: this.readerMenuItemFill(false, this.bottomIconStyle),
+                            itemFillSelected: this.readerMenuSelectedFill(),
+                            menuForegroundAlpha: this.readerMenuForegroundAlpha('73'),
+                            outerSize: this.readerBottomActionOuterSize(),
+                            onSelect: () => this.selectBottomAction(kind),
+                            onLongSelect: () => this.longSelectBottomAction(kind)
+                          }).width(this.readerBottomActionOuterSize())
+                        }, (kind: ReaderControlKind) => kind)
+                      }.width('100%').justifyContent(FlexAlign.SpaceBetween)
+                    }, (_row: ReaderControlKind[], rowIndex: number) => `${_pageIndex}-${rowIndex}`)
+                  }.width('100%').justifyContent(FlexAlign.Center)
+                }, (_rows: ReaderControlKind[][], pageIndex: number) => `${pageIndex}`)
+              }
+                .width('100%')
+                .index(this.getBottomActionPageIndex())
+                // 高度算式参数化：`+ 24` / `+ 8` 是从旧常量反推的（40+24=64、40+8=48），
+                // 40 档时结果与改前完全一致；玻璃档按钮变 48，两个档位各自跟上。
+                .height((this.showBottomActionText ? this.readerBottomActionOuterSize() + 24
+                  : this.readerBottomActionOuterSize() + 8)
+                  * Math.max(1, Math.min(2, this.bottomRowCount)) + ReaderPage.BOTTOM_ACTION_PADDING)
+                .loop(false)
+                .indicator(false)
+                .onChange((pageIndex: number) => this.currentBottomActionPage = pageIndex)
+                .padding({ left: 8, right: 8, top: 4, bottom: 17 })
+              }
+            }.width('100%').padding({
+              left: 8,
+              right: 8,
+              top: 12,
+              bottom: this.readMenuFloatingBottomBar ? 0 : this.appBottomInset
+            })
+              // 高度实测挂在内层内容 Column 上，理由同顶栏：它自身就是内容自然高度。
+              .onAreaChange((_oldValue: Area, newValue: Area) => {
+                const height = px2vp(Number(newValue.height));
+                if (height > 0 && Math.abs(height - this.readerBottomBarHeightVp) > 0.5) {
+                  this.readerBottomBarHeightVp = height;
+                }
+              })
           }
             // 底栏容器几何全部参数化，对齐上游 `ReadBookMenuBar.kt:416-440`：
             // 悬浮时左右留边、底部留 16vp 且四角同圆；非悬浮时铺满宽度、底部不留白，只圆上两个角。
@@ -8920,19 +9002,13 @@ export struct ReaderPage {
             // 非悬浮档在底部叠 appBottomInset：上游 `ReadBookMenuBar.kt:500-506` 非悬浮时
             // 底色一路铺到导航栏、`:629` 用 `bottomPadding = navBarHeight + 16.dp` 让内容避让，
             // 本地缺的就是这份内容让位。悬浮档靠下面的 margin bottom 16 已让开，不重复叠。
-            .padding({
-              left: 8,
-              right: 8,
-              top: 12,
-              bottom: this.readMenuFloatingBottomBar ? 0 : this.appBottomInset
-            })
             // 同顶栏：渐变档让底色给渐变，避免透明端露出实色。
             .backgroundColor(this.readMenuBottomBarBlurStyle === 1 ? Color.Transparent : this.readerBottomBarFillColor())
             .linearGradient(this.readerBottomBarGradient())
             // KI-E2：底栏同样吃边框与模糊半径，对齐上游 `ReadBookMenuBar.kt:450`（描边）
             // 与 `:1027`（`blurRadius = menuConfig.readMenuBlurRadius`）。
             .border(this.readerMenuBorderSettings())
-            .backdropBlur(this.readerBottomBarBlurRadiusVp())
+            .backdropBlur(this.readerBottomBarProgressive() ? 0 : this.readerBottomBarBlurRadiusVp())
             .borderRadius({
               topLeft: this.readMenuBottomCornerRadius,
               topRight: this.readMenuBottomCornerRadius,

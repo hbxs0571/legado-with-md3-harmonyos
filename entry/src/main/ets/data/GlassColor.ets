@@ -60,3 +60,53 @@ export function resolveGlassColor(baseColor: string, alpha: number): string {
 export function resolveGlassBlurRadius(radius: number): number {
   return isGlassBlurEnabled() ? radius : 0;
 }
+
+function toHexByte(value: number): string {
+  const text = Math.round(value).toString(16).toUpperCase();
+  return text.length < 2 ? `0${text}` : text;
+}
+
+/** 解析 `#RRGGBB` / `#AARRGGBB`，拿不到时按白色算（与上游 `Color.copy` 的兜底一致）。 */
+function parseRgb(color: string): number[] {
+  const text = color.trim();
+  if (text.length === 7) {
+    return [parseInt(text.substring(1, 3), 16), parseInt(text.substring(3, 5), 16), parseInt(text.substring(5, 7), 16)];
+  }
+  if (text.length === 9) {
+    return [parseInt(text.substring(3, 5), 16), parseInt(text.substring(5, 7), 16), parseInt(text.substring(7, 9), 16)];
+  }
+  return [255, 255, 255];
+}
+
+/**
+ * 玻璃栏（顶栏 / 底栏）底色：`glassColor()` 之后再叠一层 `opacity`。
+ *
+ * 上游是两段相乘，不是一段：
+ *   1. `GlassDefaults.glassColor(noBlurColor, blurAlpha)` —— 开模糊才把 alpha 压到 `blurAlpha`，
+ *      关模糊保持不透明（`ui/widget/components/GlassDefaults.kt:16-23`）；
+ *   2. 再乘 `topBarOpacity / 100`（`GlassTopAppBarDefaults.applyTopBarOpacity`，
+ *      `ui/widget/components/topbar/GlassMediumFlexibleTopAppBar.kt:268-271`）或
+ *      `bottomBarOpacity / 100`（`ui/widget/components/navigation/AppNavigationBar.kt:60`）。
+ *
+ * 所以开模糊时的有效 alpha 是 `blurAlpha × opacity`，关模糊时是 `opacity`。
+ * 结果 `>= 0.999` 时返回空串，表示「保持组件自己的资源色」，调用方据此不覆盖 backgroundColor。
+ *
+ * 这个方法原本在 `data/TopBottomBarSettings.ets` 里另写了一份（`resolveBarBackgroundColor`），
+ * 与这里的 `resolveGlassColor` 是同一条上游规则的两半。批 6 合并到本文件，全仓只剩这一处实现。
+ */
+export function resolveGlassBarColor(
+  baseColor: string,
+  opacityPercent: number,
+  blurAlphaPercent: number,
+  enableBlur: boolean
+): string {
+  const opacity = Math.max(0, Math.min(1, opacityPercent / 100));
+  const blurAlpha = Math.max(0, Math.min(1, blurAlphaPercent / 100));
+  const effective = enableBlur ? blurAlpha * opacity : opacity;
+  if (effective >= 0.999) {
+    return '';
+  }
+  const channels = parseRgb(baseColor);
+  const alpha = Math.round(effective * 255);
+  return `#${toHexByte(alpha)}${toHexByte(channels[0])}${toHexByte(channels[1])}${toHexByte(channels[2])}`;
+}

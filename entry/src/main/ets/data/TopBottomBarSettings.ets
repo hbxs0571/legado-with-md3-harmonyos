@@ -7,6 +7,8 @@
  * 未开模糊时直接用底色，开了模糊才把底色压到 `blurAlpha`。
  */
 
+import { resolveGlassBarColor } from './GlassColor';
+
 /** 顶栏按钮样式取值，对齐上游 `res/values/array_values.xml` 的 `top_bar_button_style_value`。 */
 export const TOP_BAR_BUTTON_STYLES: string[] = ['plain', 'tonal', 'outlined', 'glass', 'liquid'];
 
@@ -100,28 +102,12 @@ export function normalizeBottomBarLensRadius(value: number): number {
   return clampInt(value, BOTTOM_BAR_LENS_RADIUS_MIN, BOTTOM_BAR_LENS_RADIUS_MAX, BOTTOM_BAR_LENS_RADIUS_DEFAULT);
 }
 
-function toHex(value: number): string {
-  const text = Math.round(value).toString(16).toUpperCase();
-  return text.length < 2 ? `0${text}` : text;
-}
-
-function parseHex(color: string): number[] {
-  const text = color.trim();
-  if (text.length === 7) {
-    return [parseInt(text.substring(1, 3), 16), parseInt(text.substring(3, 5), 16), parseInt(text.substring(5, 7), 16)];
-  }
-  if (text.length === 9) {
-    return [parseInt(text.substring(3, 5), 16), parseInt(text.substring(5, 7), 16), parseInt(text.substring(7, 9), 16)];
-  }
-  return [255, 255, 255];
-}
-
 /**
  * 顶栏/底栏底色。
  *
- * 对齐上游 `GlassDefaults.glassColor()` + `AppNavigationBar.kt:60`：
- * 未开模糊时用不透明底色，开了模糊先把底色压到 `blurAlpha`，再乘 `opacity`。
- * 返回空串表示保持组件自己的资源色（不透明度 100 且未开模糊）。
+ * 实现已上收到 `data/GlassColor.ets` 的 `resolveGlassBarColor()`（批 6 合并）：
+ * 上游这条规则是 `GlassDefaults.glassColor()` 之后再乘一次 opacity，两半必须一起算，
+ * 分成两个文件各写一份会漂。这里只保留名字与参数顺序，供既有调用点继续用。
  */
 export function resolveBarBackgroundColor(
   baseColor: string,
@@ -129,13 +115,7 @@ export function resolveBarBackgroundColor(
   blurAlphaPercent: number,
   enableBlur: boolean
 ): string {
-  const opacity = clampInt(opacityPercent, TOP_BAR_OPACITY_MIN, TOP_BAR_OPACITY_MAX, TOP_BAR_OPACITY_DEFAULT) / 100;
-  const blurAlpha = clampInt(blurAlphaPercent, BAR_BLUR_ALPHA_MIN, BAR_BLUR_ALPHA_MAX, 0) / 100;
-  const effective = enableBlur ? blurAlpha * opacity : opacity;
-  if (effective >= 0.999) { return ''; }
-  const channels = parseHex(baseColor);
-  const alpha = Math.round(effective * 255);
-  return `#${toHex(alpha)}${toHex(channels[0])}${toHex(channels[1])}${toHex(channels[2])}`;
+  return resolveGlassBarColor(baseColor, opacityPercent, blurAlphaPercent, enableBlur);
 }
 
 /** 顶栏底色（顶栏只在设置页出现，底色跟 `theme_surface_primary`）。 */

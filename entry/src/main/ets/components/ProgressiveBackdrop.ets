@@ -20,13 +20,22 @@ export struct ProgressiveBackdrop {
    * 8 条在 112vp 高的顶栏上每带 14vp，肉眼已看不出台阶。
    */
   @Prop bands: number = 8;
+  /**
+   * 渐变方向。
+   *
+   * 上游 `ui/widget/components/reader/ReaderMenuEffects.kt:35-39` 按菜单所在位置取反：
+   * 顶栏是 `verticalGradient(1f, 0f)`（上浓下淡），底栏是 `verticalGradient(0f, 1f)`（上淡下浓）。
+   * `false` = 顶端满值（顶栏用法），`true` = 底端满值（底栏用法）。
+   */
+  @Prop reversed: boolean = false;
 
-  /** 第 index 条带的半径：顶端满值，底端 0，线性递减。 */
+  /** 第 index 条带的半径：满值那一端按 `reversed` 决定，另一端为 0，线性过渡。 */
   private bandRadius(index: number): number {
     if (this.bands <= 1) {
       return this.blurRadius;
     }
-    const intensity = 1 - index / (this.bands - 1);
+    const position = index / (this.bands - 1);
+    const intensity = this.reversed ? position : 1 - position;
     return this.blurRadius * intensity;
   }
 
