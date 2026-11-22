@@ -2251,6 +2251,58 @@ libs/x86_64/libquickjs.so         1,439,008
 
 ---
 
+## 书源引擎能改造到什么程度：能补、该我们补、补不了（r366 补记）
+
+承上两节。上节说清「脚本这一层跑到哪」，本节回答「引擎这个包本身能不能改得更好、更贴上游」。结论：**能改，而且已经在改；但要按三层分开——引擎层能补的、该在我们这层做的、平台改不了的。**
+
+### 一、已经在改的三处
+
+- `third_party/harmony-book-source-engine/` 与作者原版逐文件比对，当前只有 `BookSourceScriptRunner.ts` 与 `Book.ts` 两处不同（`ef6e7c2`），内容是 `preUpdateJs` / `formatJs` / `isVolume` 三键接真。
+- `AnalyzeUrl.ts:511` 的 `cleanBaseUrl` 带本地 P0 修复与注释（先截 `##`、再截单个 `#`、再 trim），对应 P0-ter 的「改法 A」，60 条对照 +2 ok。
+- 所以 KI-BS2 的「十键全丢」是**旧口径**：已接 3 键，剩 7 键；该条目已补日期补记。
+
+### 二、引擎层能补的（按收益排序）
+
+| 补什么 | 现状证据 | 收益 | 代价 |
+| --- | --- | --- | --- |
+| KI-BS2 剩 7 键（`checkKeyWord` / `canReName` / `downloadUrls` / `relatedBooks` / `subContent` / `webJs` / `callBackJs`） | 已接 3/10 | 字段级补齐 | 小：模型加字段、执行器加分支 |
+| KI-BS3 的 `coverDecodeJs` / `exploreScreen` | 引擎把它们挪进原生书源定义 | 封面解码、发现页筛选 | 小到中 |
+| `java.*` 桥从 30 补到 122 个名字的等价语义（KI-BS4 的 32 个缺口） | 覆盖率 92.5% | **直接救 107 源（11.8%）** | 中：每个方法对照上游 `JsExtensions.kt` 语义 |
+| 接 QuickJS 会话（`scriptSessionCreate` + `engineSetHost`） | 接口在包里，引擎内 0 命中 | 唯一能让 A3/A4 脚本源起死回生 | **大**：新写宿主同步桥、超时与取消 |
+| `AnalyzeUrl` 行为对齐上游 | 已有 cookie / header / `enabledCookieJar` | 登录态与 header 更准 | 中：对照 `AnalyzeUrl.kt` 1,073 行逐项 |
+| KI-BS1 的 `ruleReview` 整块 | 引擎无 `ReviewRule` 类 | 段评与书评源 | 中：模型、执行、界面消费 |
+
+规则解析本身不弱：`AnalyzeRule.ts` 对 `##`（15 处）、`%%`（2）、`@js:`（14）、`{{}}`（10）、`@css:` / `@json:` / `@xpath:`、`<js>`、`&&` / `||` 都有实现；A1/A2 纯 URL 源 60% 通过率说明基本可用。**主要矛盾在脚本与字段映射，不在选择器求值。**
+
+### 三、不该在引擎里改的
+
+调度、校验、批量、缓存、登录态回写属于 `service/` 与 `ui/` 的职责，上游同样不在 `model/analyzeRule/`。本地对应物是 `entry/src/main/ets/bookSource/` 的 18 个文件（`SearchCoordinator` / `AutoChangeSource` / `BookSourceCheckCoordinator` 等）。KI-BS5（校验整块未做）属于这一层——改这里既贴合上游分工，也不用 fork 引擎。
+
+### 四、改不了的
+
+- Rhino 的 `Packages` / `importClass` / 任意 Java 类——无 JVM，做不了（理由见上节第五节）。
+- **引擎作者的路线与上游不同**：`docs/book-source-development.md:2355` 把「兼容书源」标为「已过时」，推荐「原生书源」。本工程走的恰是兼容路径，所以「让引擎贴上游」的实际含义是**让兼容路径追平上游的兼容路径**——可行，但是长期活。
+
+### 五、代价与风险
+
+- **fork 会脱钩**：作者（wip3l / 轻页）更新与本仓补丁会分叉。现在只 2 个文件 3 处改动，好追；一旦铺到 `AnalyzeRule.ts` / `AnalyzeUrl.ts`，每次发版都要重放补丁。建议每条改动带「对齐上游 `文件:行号`」注释。
+- **引擎没有自有测试套件**：`find *.test.ts` 零命中（只有 `quickjs/src/test`）。每改一处都要靠 904 源分层抽样重跑——隐性成本是重跑样本，不只是改代码。
+- **许可证**：GPL-3.0，可改；本仓同为 GPL-3.0，分发保留 `LICENSE` / `NOTICE`。
+
+### 六、推进顺序
+
+1. 先补字段映射（剩 7 键加 KI-BS3 两项）：成本最低，不碰脚本运行时。
+2. 再补 `java.*` 32 个方法：对应 107 源，用 904 源量化前后通过率。
+3. 最后做 QuickJS 会话：唯一能让白名单外脚本跑起来的路，但要连带宿主同步桥、超时取消、安全配额，且做完仍做不到 Rhino 的任意 Java。
+
+### 七、没验的
+
+- 收益排序基于 P0 三轮分布（p_all 44.6%、A1/A2 各 60%、A3/A4 接近 0），**没有**改完再跑 904 源量化；「补 32 个方法能救回多少源」只有上游侧口径（影响 107 源），本地无实测。
+- 与作者原版的 diff 是逐文件比对 `tmp/hbse_src` 副本得出；没联网核对作者仓库当前 HEAD。
+
+
+---
+
 ## 替换规则：Repository 混装五类职责，上游两个浮层其实是死代码（r362 盘点）
 
 这一节回答「本地 `data/ReplaceRuleRepository.ets` 1,217 行是不是不正常、要不要按上游拆」。结论分两半：**混装是真债，但「缺两个浮层」是我上一轮的误判——那两个浮层在上游根本没有调用点。**
@@ -2702,6 +2754,7 @@ DevEco 自带离线文档（`plugins/openharmony/ohos-info-center-view/static/ho
 - **现象**：`LegadoSourceMapper` 把书源 JSON 投影成引擎 `BookSource` 时，以下十个字段引擎模型无对应槽位、被静默跳过：`ruleSearch.checkKeyWord`、`ruleBookInfo.canReName` / `downloadUrls` / `relatedBooks`、`ruleToc.preUpdateJs` / `formatJs` / `isVolume`、`ruleContent.subContent` / `webJs` / `callBackJs`。
 - **影响**：用了这些字段的书源相应能力不生效（如目录预更新 JS、格式 JS、正文分段子规则、回调 JS）。原 `sourceJson` 始终完整保留，不丢用户数据，只是引擎侧不用。
 - **状态**：明确登记，不在本批补；补齐需先扩展引擎模型。
+- **2026-11-22 补记**：`preUpdateJs` / `formatJs` / `isVolume` 三键已在 `ef6e7c2` 接真（引擎 `model/data/Book.ts` 与 `core/book/BookSourceScriptRunner.ts`），剩 7 键未接；改造顺序见本文件前面的「书源引擎能改造到什么程度：能补、该我们补、补不了（r366 补记）」。
 
 **KI-BS3 coverDecodeJs 与 exploreScreen 缺**
 
