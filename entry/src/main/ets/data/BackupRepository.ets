@@ -2811,7 +2811,7 @@ export class BackupRepository {
           savedCharset !== book.charset) {
           try {
             // withCharset 会顺带重算目录，这里只要书本身，章节行在保存书目后统一重写。
-            bookWithCharset = BookRepository.withCharset(book, savedCharset).book;
+            bookWithCharset = (await BookRepository.withCharset(book, savedCharset)).book;
           } catch (error) {
             console.error(`[BackupRepository] 按保存的编码重算书目失败: ${error}`);
           }

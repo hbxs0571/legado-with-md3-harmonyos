@@ -7794,7 +7794,7 @@ private canWriteInto(dir: string): boolean {
       const refreshingKey = book.contentPath ?? book.androidOriginalPath ?? '';
       this.refreshingBookIds = [...this.refreshingBookIds, refreshingKey];
       try {
-        const result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
+        const result = await BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
         if (result.changed) {
           // 目录重算会重建整份章节行；books 行本来就在，先把 chapters 表覆盖掉。
           await BookRepository.saveChapters(context, result.book.contentPath ?? '', result.chapters);
@@ -7961,7 +7961,7 @@ private canWriteInto(dir: string): boolean {
     }
     let result: TocRefreshResult;
     try {
-      result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
+      result = await BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc);
     } catch (_) {
       this.showUnavailableAction('读取正文失败，目录未更新');
       return false;
@@ -8054,7 +8054,7 @@ private canWriteInto(dir: string): boolean {
     }
     let result: TocRefreshResult;
     try {
-      result = BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc, [], chapterRule);
+      result = await BookRepository.refreshToc(book, this.readerMaxLengthWithNoToc, [], chapterRule);
     } catch (_) {
       this.showUnavailableAction('读取正文失败，规则未应用');
       return;
@@ -8224,7 +8224,7 @@ private canWriteInto(dir: string): boolean {
           openedBook = refreshed;
         }
       } else {
-      const noTocRefresh = BookRepository.refreshNoTocBook(book, this.readerMaxLengthWithNoToc);
+      const noTocRefresh = await BookRepository.refreshNoTocBook(book, this.readerMaxLengthWithNoToc);
       openedBook = noTocRefresh.book;
       // 先把章节行读进缓存再取正文：readChapter 拿不到章节行时会退化成「整本重切一遍」，
       // 几 MB 的书要两秒以上，主线程会被 watchdog 判成 THREAD_BLOCK_6S。
@@ -9896,7 +9896,7 @@ private canWriteInto(dir: string): boolean {
     let content: string;
     let chapterTitle: string;
     try {
-      const converted = BookRepository.withCharset(this.selectedBook, charset, this.readerMaxLengthWithNoToc);
+      const converted = await BookRepository.withCharset(this.selectedBook, charset, this.readerMaxLengthWithNoToc);
       updatedBook = converted.book;
       updatedChapters = converted.chapters;
       const titles = BookRepository.cachedChapterTitles(updatedBook);

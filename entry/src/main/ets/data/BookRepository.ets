@@ -20,7 +20,7 @@ import { RdbStore } from './RdbStore';
 import { CacheSettingsRepository } from './CacheSettingsRepository';
 import { BookGroupRepository } from './BookGroupRepository';
 import { TxtTocRuleRepository } from './TxtTocRuleRepository';
-import { FileByteRangeSource, TxtChapterScanner } from './TxtChapterScanner';
+import { TxtChapterScanner, TxtScanRequest } from './TxtChapterScanner';
 import { OnlineBookProvider } from './OnlineBookProvider';
 
 /**
@@ -94,6 +94,17 @@ interface ChapterSplit {
   volumes: boolean[];
   /** 第一个标题前的正文（上游「前言」章的正文），没有则 undefined。 */
   intro?: string;
+  /**
+   * 流式扫描顺带算出的字节偏移与总长，只有走 `splitChaptersStreaming` 时才有。
+   *
+   * 有它就能跳过 `buildChapterRows` 里那次整本 `charOffsetsToByteOffsets`：
+   * 51MB / 1800 万字符的书在设备上要扫几百毫秒到数秒，是导入卡死的主因（E-028）。
+   */
+  byteOffsets?: number[];
+  charCount?: number;
+  byteCount?: number;
+  /** 去掉全书首尾空白后的字符数，等价 content.trim().length。 */
+  trimmedCharCount?: number;
 }
 
 /** 新导入一本书的结果：书目与它的章节行必须一起落库。 */
@@ -918,8 +929,8 @@ private static rememberEffectiveReplaceRules(bookId: string, chapterIndex: numbe
       if (error instanceof Error) { throw error; }
       throw new Error('读取 TXT 文件失败');
     }
-    return BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content, undefined,
-      maxLengthWithNoToc, parsedName.author);
+    return await BookRepository.createLocalBook(bookId, title, contentPath, 0, 0, content,
+      undefined, maxLengthWithNoToc, parsedName.author);
   }
 
 static discardImportedCopy(book: Book): void {
@@ -1549,8 +1560,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
             const savedOffsets = (fields[7] ?? '').split(',')
               .map((item: string) => Number(item))
               .filter((item: number) => Number.isInteger(item) && item >= 0);
-            const created = BookRepository.createLocalBook(id, title, path, chapterIndex, chapterProgress,
-              undefined, savedCharset.length > 0 ? savedCharset : undefined);
+            const created = await BookRepository.createLocalBook(id, title, path, chapterIndex,
+              chapterProgress, undefined, savedCharset.length > 0 ? savedCharset : undefined);
             const localBook = created.book;
             // 从 v5 起恢复 TXT 书目的作者、分类、分组和简介，避免冷启动回到导入默认值。
             if (fields.length > 5) {
@@ -2067,7 +2078,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
    * 换编码意味着整本书的字符边界和字节边界都可能变，所以章节行要一起重算，
    * 由调用方把返回的 chapters 落库。
    */
-  static withCharset(book: Book, charset: string, maxLengthWithNoToc: number = 3000): CreatedLocalBook {
+  static async withCharset(book: Book, charset: string,
+    maxLengthWithNoToc: number = 3000): Promise<CreatedLocalBook> {
     const normalizedCharset = charset.trim();
     if (book.contentPath === undefined || book.format !== 'txt') {
       const unchanged = BookRepository.copyBook(book);
@@ -2082,7 +2094,7 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     if (chapterRule.length > 0) {
       // 切章改流式（1007）：整本 content 仍要读，是因为后面还要算 totalWordCount 与无目录回落，
       // 但切章本身不再依赖 content.split('\n') 生成的全书行数组。
-      const split = BookRepository.splitChaptersStreaming(book.contentPath,
+      const split = await BookRepository.splitChaptersStreaming(book.contentPath,
         normalizedCharset.length > 0 ? normalizedCharset : undefined,
         chapterRule, book.splitLongChapter !== false);
       chapterTitles = split.titles;
@@ -2581,14 +2593,28 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
    * url 照抄上游 TextFile.kt：md5Encode16(originName + index + title)；
    * start/end 是字节偏移（上游 chapters.start/end 存的就是字节）；
    * tocLevel 照抄上游：卷标题自己为 0，卷内章节为 1。
+   *
+   * `precomputed` 是流式切章（1007）顺带算出的字节偏移：给了就直接用，
+   * 跳过整本 `charOffsetsToByteOffsets`。51MB / 1800 万字符的书那次扫描
+   * 在设备上要几秒，是导入卡死的主因（E-028）。字数仍按原口径逐章算，
+   * 保证两条路径产出的 wordCount 逐项相等。
    */
   private static buildChapterRows(bookUrl: string, titles: string[], offsets: number[],
     volumes: boolean[], content: string, encoding: string | undefined,
-    tocLevels?: number[], chapterMeta?: EpubChapterMeta[]): BookChapter[] {
+    tocLevels?: number[], chapterMeta?: EpubChapterMeta[],
+    precomputed?: ChapterSplit): BookChapter[] {
     const rows: BookChapter[] = [];
     if (titles.length === 0) { return rows; }
-    const byteOffsets = BookRepository.charOffsetsToByteOffsets(content, offsets, encoding);
-    const totalBytes = BookRepository.charOffsetsToByteOffsets(content, [content.length], encoding)[0] ?? 0;
+    const hasPrecomputed = precomputed !== undefined && precomputed.byteOffsets !== undefined
+      && precomputed.byteOffsets.length === titles.length;
+    const byteOffsets = hasPrecomputed
+      ? (precomputed?.byteOffsets ?? [])
+      : BookRepository.charOffsetsToByteOffsets(content, offsets, encoding);
+    const totalBytes = hasPrecomputed && precomputed?.byteCount !== undefined
+      ? precomputed.byteCount
+      : (BookRepository.charOffsetsToByteOffsets(content, [content.length], encoding)[0] ?? 0);
+    const totalChars = hasPrecomputed && precomputed?.charCount !== undefined
+      ? precomputed.charCount : content.length;
     const originName = BookRepository.getFileName(bookUrl);
     let tocLevel = 0;
     for (let index = 0; index < titles.length; index++) {
@@ -3030,8 +3056,8 @@ private static async applyChapterContentAsync(
   }
 
   /** 重新匹配当前启用的 TXT 目录规则，并把阅读位置映射到新章节。 */
-  static refreshToc(book: Book, maxLengthWithNoToc: number = 3000,
-    chapters: BookChapter[] = [], forcedRule: string = ''): TocRefreshResult {
+  static async refreshToc(book: Book, maxLengthWithNoToc: number = 3000,
+    chapters: BookChapter[] = [], forcedRule: string = ''): Promise<TocRefreshResult> {
     if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
       return { book: book, chapters: [], content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
@@ -3045,7 +3071,7 @@ private static async applyChapterContentAsync(
     let chapterVolumes: boolean[] = [];
     if (chapterRule.length > 0) {
       // 切章改流式（1007）；整本 content 仍要读，因为下面还要算位置映射与 totalWordCount。
-      const split = BookRepository.splitChaptersStreaming(book.contentPath, book.charset,
+      const split = await BookRepository.splitChaptersStreaming(book.contentPath, book.charset,
         chapterRule, book.splitLongChapter !== false);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
@@ -3122,8 +3148,8 @@ private static async applyChapterContentAsync(
       oldBodyOffsets: oldBodyOffsets, newBodyOffsets: newBodyOffsets };
   }
 
-static refreshNoTocBook(book: Book, maxLengthWithNoToc: number,
-    chapters: BookChapter[] = []): NoTocBookRefreshResult {
+  static async refreshNoTocBook(book: Book, maxLengthWithNoToc: number,
+    chapters: BookChapter[] = []): Promise<NoTocBookRefreshResult> {
     if (book.contentPath === undefined || book.format !== 'txt' || !book.isLocal) {
       return { book: book, chapters: [], content: '', changed: false, oldBodyOffsets: [], newBodyOffsets: [] };
     }
@@ -3149,8 +3175,9 @@ static refreshNoTocBook(book: Book, maxLengthWithNoToc: number,
     // 这里只要判「有没有目录标题」，命中第一个标题就该停（1007 的探测短路）：
     // 传 stopAfterFirstHit = true 后不再扫完整个文件，也不再生成全书行数组。
     const probeRule = BookRepository.resolveChapterRule(undefined, content);
-    if (BookRepository.splitChaptersStreaming(book.contentPath, book.charset, probeRule, false, true)
-      .offsets.length > 0) {
+    const probe = await BookRepository.splitChaptersStreaming(book.contentPath, book.charset,
+      probeRule, false, true);
+    if (probe.offsets.length > 0) {
       return { book: book, chapters: [], content: content, changed: false,
         oldBodyOffsets: [], newBodyOffsets: [] };
     }
@@ -3223,7 +3250,7 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     }
     return offsets;
   }
-  private static createLocalBook(
+  private static async createLocalBook(
     id: string,
     title: string,
     contentPath: string,
@@ -3234,7 +3261,7 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     maxLengthWithNoToc: number = 3000,
     parsedAuthor: string = '',
     splitLongChapter: boolean = true
-  ): CreatedLocalBook {
+  ): Promise<CreatedLocalBook> {
     let content: string = '';
     try {
       content = importedContent ?? BookRepository.readTextFile(contentPath, charset);
@@ -3245,15 +3272,23 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     let chapterTitles: string[] = [];
     let chapterOffsets: number[] = [];
     let chapterVolumes: boolean[] = [];
+    // 流式切章的结果留着，建行时复用它的字节偏移，省掉整本扫描（E-028）。
+    let streamedSplit: ChapterSplit | undefined = undefined;
     if (chapterRule.length > 0) {
-      // 切章改流式（1007）。只有「正文来自文件」时才走流式：调用方传了 importedContent
-      // 说明正文还在内存里、磁盘上的文件不一定已经写好，那种情况仍用整本口径切。
-      const split = importedContent === undefined
-        ? BookRepository.splitChaptersStreaming(contentPath, charset, chapterRule, splitLongChapter)
+      // 切章改流式（1007），并且整段扫描跑在 taskpool worker 里（E-028）。
+      // 判据是「文件在不在磁盘上」而不是「有没有传 importedContent」：
+      // importTxtFromUri 会先把源文件拷成 contentPath 再把正文读进内存一起传进来，
+      // 文件其实已经在盘上。早前按 importedContent 判，51MB 的书就走整本切章，
+      // 设备实测 4853ms，加上读文件与建行超过 6 秒 watchdog → THREAD_BLOCK_6S（E-028）。
+      const fileReady = fileIo.accessSync(contentPath);
+      const split = fileReady
+        ? await BookRepository.splitChaptersStreaming(contentPath, charset, chapterRule,
+          splitLongChapter)
         : BookRepository.splitChapters(content, chapterRule, splitLongChapter);
       chapterTitles = split.titles;
       chapterOffsets = split.offsets;
       chapterVolumes = split.volumes;
+      if (fileReady) { streamedSplit = split; }
     }
     if (chapterOffsets.length === 0 && content.length > 0) {
       const layout = BookRepository.buildNoTocChapterLayout(content, maxLengthWithNoToc, charset);
@@ -3266,6 +3301,7 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
     const overallProgress = chapterTitles.length > 0
       ? (safeChapterIndex + safeChapterProgress / 100) / chapterTitles.length * 100
       : 0;
+    const wordCount = BookRepository.totalWordCount(content);
     const book: Book = {
       id: id,
       title: title,
@@ -3290,13 +3326,13 @@ private static getNoTocBodyOffsets(content: string, starts: number[], count: num
       charset: charset,
       reSegment: false,
       isLocal: true,
-      wordCount: BookRepository.totalWordCount(content),
+      wordCount: wordCount,
       latestChapterTitle: chapterTitles.length > 0 ? chapterTitles[chapterTitles.length - 1] : undefined,
       lastCheckCount: 0
     };
     // 章节行随书一起返回，调用方写库时两表一起落。
     const chapters = BookRepository.buildChapterRows(contentPath, chapterTitles, chapterOffsets,
-      chapterVolumes, content, charset);
+      chapterVolumes, content, charset, undefined, undefined, streamedSplit);
     return { book: book, chapters: chapters };
   }
 
@@ -3770,24 +3806,33 @@ private static getTitle(fileName: string): string {
    *
    * @param stopAfterFirstHit 只判「有没有标题」时传 true：命中第一个标题就停，不再读后面的块。
    */
-  private static splitChaptersStreaming(path: string, encoding: string | undefined,
+  private static async splitChaptersStreaming(path: string, encoding: string | undefined,
     chapterRule: string, splitLongChapter: boolean,
-    stopAfterFirstHit: boolean = false): ChapterSplit {
+    stopAfterFirstHit: boolean = false): Promise<ChapterSplit> {
     const resolvedRule = chapterRule.trim().length > 0
       ? chapterRule : BookRepository.fallbackChapterRule;
-    const size = fileIo.statSync(path).size;
-    const source = new FileByteRangeSource(path, size);
-    const matcher = TxtTocRuleRepository.compileTitleMatcher(resolvedRule);
+    // 卷规则在 worker 里不能用（它依赖 TxtTocRuleRepository 的静态缓存），
+    // 所以这里先解析成正则源码随请求一起递进去，worker 内自己编译。
     const volumeRule = TxtTocRuleRepository.resolveVolumeRule(resolvedRule);
-    const scan = TxtChapterScanner.scan(source, encoding ?? 'utf-8', matcher,
-      splitLongChapter, (titles: string[]): boolean[] => {
-        return TxtTocRuleRepository.markVolumeTitles(titles, volumeRule);
-      }, stopAfterFirstHit, BookRepository.maxLengthWithToc);
+    const request: TxtScanRequest = {
+      path: path,
+      encoding: encoding ?? 'utf-8',
+      chapterRule: resolvedRule,
+      volumeRule: volumeRule,
+      splitLongChapter: splitLongChapter,
+      stopAfterFirstHit: stopAfterFirstHit,
+      maxLengthWithToc: BookRepository.maxLengthWithToc
+    };
+    const scan = await TxtChapterScanner.scan(request);
     return {
       titles: scan.titles,
       offsets: scan.offsets,
       volumes: scan.volumes,
-      intro: scan.intro
+      intro: scan.intro,
+      byteOffsets: scan.byteOffsets,
+      charCount: scan.charCount,
+      byteCount: scan.byteCount,
+      trimmedCharCount: scan.trimmedCharCount
     };
   }
 
