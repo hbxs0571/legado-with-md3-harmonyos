@@ -13,6 +13,7 @@ import { MarkdownIntro } from '../components/MarkdownIntro';
 import { UiMenuPanel, UiMenuItem } from '../components/UiMenu';
 import { BODY_LARGE, BODY_LARGE_LINE_HEIGHT, BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
+import { AppLog } from '../lib/AppLog';
 
 /** 一个字段槽：path 为点路径，label 为中文标签，multi 决定用 TextArea 还是 TextInput。 */
 interface FieldSpec {
@@ -174,6 +175,14 @@ export struct BookSourceEditPage {
   /** 帮助弹层：对齐上游 BookSourceEditSheet.Help(content) + MarkdownSheet(R.string.help)。 */
   @State private helpSheetVisible: boolean = false;
   @State private helpText: string = '';
+  /**
+   * 日志弹层：对齐上游 BookSourceEditScreen.kt:180-183 `AppLogSheet(show = activeSheet is Log)`，
+   * 由溢出菜单的 ShowLog（BookSourceEditViewModel.kt:96）打开——**不是**调试页；
+   * 调试页走顶栏 BugReport（SaveAndDebug）。
+   */
+  @State private logSheetVisible: boolean = false;
+  @State private logLines: string[] = [];
+  @State private logDetail: string = '';
   /** 顶栏随内容滚动折叠（动画不作为验收项，按 yOffset 阈值切换）。 */
   @State private collapsedHeader: boolean = false;
   /** 六个 tab 各自独立的 Scroller，供顶栏折叠判定读取 yOffset。 */
@@ -359,7 +368,10 @@ export struct BookSourceEditPage {
       this.variableDraft = this.readPath('variable');
       this.variablePanelVisible = true;
     } else if (key === 'log') {
-      this.onOpenSourceDebug(url);
+      // 上游 ShowLog 打开 AppLogSheet（BookSourceEditViewModel.kt:96 + EditScreen.kt:180-183），
+      // 调试页是顶栏 BugReport 的 SaveAndDebug，两者不是同一个入口。
+      this.logLines = AppLog.getAll();
+      this.logSheetVisible = true;
     } else if (key === 'help') {
       this.openHelp();
     }
@@ -383,6 +395,21 @@ export struct BookSourceEditPage {
     } catch (_) {
       this.onUnavailableAction('书源帮助读取失败');
     }
+  }
+
+  /**
+   * AppLog.put 存的是 `[HH:mm:ss] 正文`（lib/AppLog.ets:12），列表项要把时间与正文分开：
+   * 上游 AppLogSheet.kt:121-127 时间走 labelMedium/outline、正文走 bodyMedium/onSurface。
+   */
+  private logTimePart(line: string): string {
+    const end = line.indexOf(']');
+    return (line.startsWith('[') && end > 0) ? line.substring(0, end + 1) : '';
+  }
+
+  /** 见 logTimePart；没有时间前缀时整行都算正文。 */
+  private logMessagePart(line: string): string {
+    const end = line.indexOf(']');
+    return (line.startsWith('[') && end > 0) ? line.substring(end + 1).trim() : line;
   }
 
   /**
@@ -618,6 +645,27 @@ export struct BookSourceEditPage {
         if (this.variablePanelVisible) {
           this.VariablePanelBuilder()
         }
+
+        // 日志弹层与日志详情弹层的承载点：各用 1x1 占位 Stack，
+        // 避免与上面的 helpSheet、下面的 fieldSheet 挤在同一个组件上（一个组件只能绑一个半模态）。
+        Stack() {
+        }
+        .width(1).height(1)
+        .bindSheet($$this.logSheetVisible, this.LogSheetBuilder(), {
+          height: SheetSize.FIT_CONTENT,
+          // 上游 AppLogSheet 走 AppModalBottomSheet，M3 分支无右上关闭按钮。
+          showClose: false,
+          enableOutsideInteractive: true
+        })
+        Stack() {
+        }
+        .width(1).height(1)
+        .bindSheet(this.logDetail.length > 0, this.LogDetailBuilder(), {
+          height: SheetSize.FIT_CONTENT,
+          showClose: false,
+          enableOutsideInteractive: true,
+          onDisappear: () => { this.logDetail = ''; }
+        })
       }
       .layoutWeight(1)
       // ArkUI 一个组件只能绑定一个半模态：原先 fieldSheet 与 helpSheet 都挂在最外层 Column 上，
@@ -753,6 +801,100 @@ export struct BookSourceEditPage {
       .width('100%').constraintSize({ maxHeight: '80%' })
       .scrollBar(BarState.Off)
       .align(Alignment.TopStart)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor(this.themeColorSurfaceTertiary)
+    .borderRadius({ topLeft: 28, topRight: 28 })
+  }
+
+  /**
+   * 日志弹层：对齐上游 ui/widget/components/log/AppLogSheet.kt:47-76。
+   * 标题 log「日志」+ endAction MediumTonalButton(DeleteSweep, contentDescription=clear「清除」)；
+   * 空态 EmptyMessage(message=no_logs「暂无日志」)；列表项 = 时间(labelMedium/outline) + 内容(bodyMedium/onSurface, maxLines 2)。
+   */
+  @Builder LogSheetBuilder() {
+    Column() {
+      Stack() {
+        Text('日志')
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          .maxLines(1).width('100%').textAlign(TextAlign.Center)
+          .padding({ left: 56, right: 56 })
+        Row() {
+          AppGlyph({ name: 'clearAll', glyphSize: 22, tint: this.themeColorAccent })
+        }
+        .width(40).height(40)
+        .borderRadius(20)
+        .justifyContent(FlexAlign.Center)
+        .position({ x: '100%', y: 0 })
+        .markAnchor({ x: 40, y: 0 })
+        .accessibilityText('清除')
+        .onClick(() => {
+          AppLog.clear();
+          this.logLines = [];
+        })
+      }
+      .width('100%').height(40).margin({ bottom: 16 })
+      if (this.logLines.length === 0) {
+        // 上游 :62-63 EmptyMessage(fillMaxWidth, message=no_logs)。
+        Text('暂无日志')
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').textAlign(TextAlign.Center)
+          .padding({ top: 24, bottom: 24 })
+      } else {
+        List() {
+          ForEach(this.logLines, (line: string, index: number) => {
+            ListItem() {
+              Column() {
+                // AppLog.put 存的是 `[HH:mm:ss] 正文`，按首个 ']' 拆成时间行与内容行。
+                Text(this.logTimePart(line))
+                  .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+                  .maxLines(1).width('100%')
+                Text(this.logMessagePart(line))
+                  .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%').margin({ top: 4 })
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Start)
+              .padding(16)
+              .onClick(() => { this.logDetail = line; })
+            }
+          }, (line: string, index: number) => `${index}:${line.length}`)
+        }
+        .width('100%')
+        // 上游 LazyColumn contentPadding bottom 16。
+        .contentEndOffset(16)
+        .constraintSize({ maxHeight: '60%' })
+        .scrollBar(BarState.Auto)
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor(this.themeColorSurfaceTertiary)
+    .borderRadius({ topLeft: 28, topRight: 28 })
+  }
+
+  /** 日志详情：上游 LogDetailSheet.kt:23-43（AppAlertDialog，标题 Log，正文 bodySmall，最高 400dp 可滚动）。 */
+  @Builder LogDetailBuilder() {
+    Column() {
+      Text('Log')
+        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 56, right: 56, bottom: 16 })
+      Scroll() {
+        Text(this.logDetail)
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
+          .width('100%').copyOption(CopyOptions.LocalDevice)
+      }
+      .width('100%').constraintSize({ maxHeight: 400 }).scrollBar(BarState.Auto)
+      Row() {
+        Text('确定')
+          .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+          .onClick(() => { this.logDetail = ''; })
+      }
+      .width('100%').justifyContent(FlexAlign.End).margin({ top: 8 })
     }
     .width('100%')
     .padding({ left: 16, right: 16, bottom: 16 })

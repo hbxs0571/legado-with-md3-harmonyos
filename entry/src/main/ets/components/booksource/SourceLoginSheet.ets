@@ -20,10 +20,11 @@ import { BookSourceRepository } from '../../data/BookSourceRepository';
 import {
   BookSourceLoginCoordinator, LoginPrepare, LoginSubmitResult
 } from '../../bookSource/BookSourceLoginCoordinator';
-import { LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
+import { BODY_MEDIUM, BODY_SMALL, LABEL_MEDIUM, TITLE_MEDIUM } from '../typography/TypographyTokens';
 import { UiMenuItem, UiMenuPanel } from '../UiMenu';
 import { AppGlyph, AppGlyphName } from '../AppGlyph';
 import { MarkdownIntro } from '../MarkdownIntro';
+import { AppLog } from '../../lib/AppLog';
 
 /** 表单项的本地可变副本（引擎 BookSourceLoginItem 字段只读投影到 state）。 */
 class FormItem {
@@ -193,6 +194,12 @@ export struct SourceLoginSheet {
   @State private menuVisible: boolean = false;
   /** 登录头 MarkdownSheet（上游 :88-101，标题 login_header + endAction ContentCopy）。 */
   @State private headerSheetVisible: boolean = false;
+  /** 日志弹层（上游 :102-105 的 AppLogSheet：标题 log「日志」+ endAction 清除 + 空态 no_logs）。 */
+  @State private logSheetVisible: boolean = false;
+  /** 当前读到的日志行（打开弹层时从 AppLog.getAll() 取一次，清除后置空）。 */
+  @State private logLines: string[] = [];
+  /** 点某条日志弹出的详情文本（上游 LogDetailSheet 的 showDetail；空串表示不显示）。 */
+  @State private logDetail: string = '';
   /**
    * 主动收起主弹层去显示登录头时置 true：此时主弹层的 onDisappear 不能回调 onClose()，
    * 否则 Index 会把 loginSourceUrl 清空、整个组件被卸载，登录头也跟着消失。
@@ -209,6 +216,9 @@ export struct SourceLoginSheet {
     this.sheetLoading = true;
     this.menuVisible = false;
     this.headerSheetVisible = false;
+    this.logSheetVisible = false;
+    this.logDetail = '';
+    this.logLines = [];
     this.prepare();
   }
 
@@ -245,6 +255,21 @@ export struct SourceLoginSheet {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
     this.resultMessage = await BookSourceLoginCoordinator.removeLoginHeader(context, this.sourceUrl);
+  }
+
+  /**
+   * AppLog.put 存的是 `[HH:mm:ss] 正文`（lib/AppLog.ets:12），列表项要把时间与正文分开：
+   * 上游 AppLogSheet.kt:121-127 时间走 labelMedium/outline、正文走 bodyMedium/onSurface。
+   */
+  private logTimePart(line: string): string {
+    const end = line.indexOf(']');
+    return (line.startsWith('[') && end > 0) ? line.substring(0, end + 1) : '';
+  }
+
+  /** 见 logTimePart；没有时间前缀时整行都算正文。 */
+  private logMessagePart(line: string): string {
+    const end = line.indexOf(']');
+    return (line.startsWith('[') && end > 0) ? line.substring(end + 1).trim() : line;
   }
 
   /**
@@ -616,8 +641,12 @@ export struct SourceLoginSheet {
         } else if (key === 'del_header') {
           this.deleteLoginHeader();
         } else {
-          // 上游 :132-134 打开 AppLogSheet；本地没有 AppLog 等价载体（见交付说明）。
-          this.onUnavailableAction('本地未接入日志面板');
+          // 上游 :102-105 打开 AppLogSheet。本地 AppLog（lib/AppLog.ets）已有同一份内存日志，
+          // 这里同样先收起主弹层再开日志弹层——一个组件只能绑一个半模态（见 build() 注释）。
+          this.suppressClose = true;
+          this.visible = false;
+          this.logLines = AppLog.getAll();
+          this.logSheetVisible = true;
         }
       }
     })
@@ -744,6 +773,106 @@ export struct SourceLoginSheet {
     .backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
   }
 
+  /**
+   * 日志弹层：对齐上游 ui/widget/components/log/AppLogSheet.kt:47-76。
+   * 标题 log「日志」+ endAction MediumTonalButton(DeleteSweep, contentDescription=clear「清除」)；
+   * 空态 EmptyMessage(message=no_logs「暂无日志」)；否则列表项 = 时间(labelMedium/outline) + 内容(bodyMedium/onSurface, maxLines 2)。
+   */
+  @Builder LogSheet() {
+    Column() {
+      Stack() {
+        Text('日志')
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary)
+          .maxLines(1).width('100%').textAlign(TextAlign.Center)
+          .padding({ left: 56, right: 56 })
+        Row() {
+          AppGlyph({ name: 'clearAll', glyphSize: 22, tint: this.themeColorAccent })
+        }
+        .width(40).height(40)
+        .borderRadius(20)
+        .justifyContent(FlexAlign.Center)
+        .position({ x: '100%', y: 0 })
+        .markAnchor({ x: 40, y: 0 })
+        .accessibilityText('清除')
+        .onClick(() => {
+          AppLog.clear();
+          this.logLines = [];
+        })
+      }
+      .width('100%').height(40).margin({ bottom: 16 })
+      if (this.logLines.length === 0) {
+        // 上游 :62-63 EmptyMessage(fillMaxWidth, message=no_logs)。
+        Text('暂无日志')
+          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').textAlign(TextAlign.Center)
+          .padding({ top: 24, bottom: 24 })
+      } else {
+        List() {
+          ForEach(this.logLines, (line: string, index: number) => {
+            ListItem() {
+              this.LogItemView(line, index)
+            }
+          }, (line: string, index: number) => `${index}:${line.length}`)
+        }
+        .width('100%')
+        // 上游 LazyColumn contentPadding bottom 16。
+        .contentEndOffset(16)
+        .constraintSize({ maxHeight: '60%' })
+        .scrollBar(BarState.Auto)
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
+  }
+
+  /** 单条日志：上游 AppLogSheet.kt:110-136 LogItem（Column padding 16，时间在上、内容在下）。 */
+  @Builder LogItemView(line: string, index: number) {
+    Column() {
+      // AppLog.put 已把 `[HH:mm:ss]` 拼在消息前面，这里按首个 ']' 拆成时间行与内容行。
+      Text(this.logTimePart(line))
+        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+        .maxLines(1).width('100%')
+      Text(this.logMessagePart(line))
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%').margin({ top: 4 })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding(16)
+    .onClick(() => { this.logDetail = line; })
+  }
+
+  /** 日志详情：上游 LogDetailSheet.kt:23-43（AppAlertDialog，标题 Log，正文 bodySmall，最高 400dp 可滚动）。 */
+  @Builder LogDetailSheet() {
+    Column() {
+      Text('Log')
+        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary)
+        .maxLines(1).width('100%').textAlign(TextAlign.Center)
+        .padding({ left: 56, right: 56, bottom: 16 })
+      Scroll() {
+        Text(this.logDetail)
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextPrimary)
+          .width('100%').copyOption(CopyOptions.LocalDevice)
+      }
+      .width('100%').constraintSize({ maxHeight: 400 }).scrollBar(BarState.Auto)
+      Row() {
+        Text('确定')
+          .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorAccent)
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+          .onClick(() => { this.logDetail = ''; })
+      }
+      .width('100%').justifyContent(FlexAlign.End).margin({ top: 8 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor(this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated)
+  }
+
   build() {
     // ArkUI 一个组件只能绑定一个半模态：同一组件上后挂的会覆盖前一个、两个都弹不出来
     // （编辑页曾因同一写法导致点字段/帮助全无反应）。所以两个弹层各挂一个兄弟 Stack。
@@ -796,6 +925,35 @@ export struct SourceLoginSheet {
           this.headerSheetVisible = false;
           if (this.mode === 'form') { this.visible = true; }
         }
+      })
+      // 日志弹层（上游 :102-105 AppLogSheet）：同样与主弹层互斥，关掉后回主弹层。
+      Stack() {
+      }
+      .width(1).height(1)
+      .bindSheet($$this.logSheetVisible, this.LogSheet(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        // 上游 AppLogSheet 走 AppModalBottomSheet，M3 分支无右上关闭按钮。
+        showClose: false,
+        enableOutsideInteractive: false,
+        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        onDisappear: () => {
+          this.logSheetVisible = false;
+          // 上游 SourceLoginViewModel.kt:99-102 DismissSheet：form 模式回到表单。
+          if (this.mode === 'form') { this.visible = true; }
+        }
+      })
+      // 日志详情弹层（上游 LogDetailSheet.kt:23-43 的 AppAlertDialog）。
+      Stack() {
+      }
+      .width(1).height(1)
+      .bindSheet(this.logDetail.length > 0, this.LogDetailSheet(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        enableOutsideInteractive: false,
+        backgroundColor: this.themePureBlack ? '#17181E' : this.themeColorSurfaceElevated,
+        onDisappear: () => { this.logDetail = ''; }
       })
     }
     .width(0).height(0)
