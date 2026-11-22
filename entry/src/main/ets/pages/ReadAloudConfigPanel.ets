@@ -5,6 +5,7 @@ import {
 } from '../data/ReadAloudSettingsRepository';
 import { HttpTtsPlayer } from '../readaloud/HttpTtsPlayer';
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
+import { resolveGlassBlurRadius } from '../data/GlassColor';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
 import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, LABEL_SMALL_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
@@ -106,7 +107,7 @@ export struct ReadAloudConfigPanel {
     .backgroundColor(this.selectedTab === index
       ? glassColor(this.themeColorSurfaceElevated, 0.95)
       : glassColor(this.themeColorSurfaceSecondary, 0.45))
-    .backdropBlur(12)
+    .backdropBlur(resolveGlassBlurRadius(12))
     .borderRadius(12)
     .padding({ left: 8, right: 8 })
   }
@@ -118,7 +119,7 @@ export struct ReadAloudConfigPanel {
       scrimColor: '#66000000',
       panelColor: glassColor(this.themeColorSurfacePrimary, 0.82),
       panelHeight: '70%',
-      blurRadius: 30,
+      blurRadius: resolveGlassBlurRadius(30),
       onDismiss: () => this.onBack()
     }) {
         Row() {
@@ -264,7 +265,7 @@ struct ConfigGlassSwitch {
     .width('100%').constraintSize({ minHeight: 56 })
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
     .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55))
-    .backdropBlur(16)
+    .backdropBlur(resolveGlassBlurRadius(16))
     .borderRadius(12)
     .margin({ left: 12, right: 12, bottom: 6 })
     .onClick(() => this.onChange(!this.checked))
@@ -298,7 +299,7 @@ struct ConfigGlassRow {
     .width('100%').constraintSize({ minHeight: 56 })
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
     .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55))
-    .backdropBlur(16)
+    .backdropBlur(resolveGlassBlurRadius(16))
     .borderRadius(12)
     .margin({ left: 12, right: 12, bottom: 6 })
     .onClick(() => this.onNext())

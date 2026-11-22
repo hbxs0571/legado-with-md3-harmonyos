@@ -255,6 +255,14 @@ export struct ReaderPage {
   /** 底栏进度条轨道实测宽度（vp），由 Slider 的 `onAreaChange` 写入，自绘拇指按它定位。 */
   @State sliderTrackWidth: number = 0;
   @Prop @Watch('onStartAtChapterBeginningChanged') startAtChapterBeginning: boolean = false;
+  /**
+   * 共享元素键。非空时整块阅读面板登记为 `geometryTransition` 的入端。
+   *
+   * 对齐上游 `ui/main/ReaderSharedBounds.kt:40-70 readerSharedBounds`：共享元素挂在阅读页
+   * 最外层那块面上，不是挂在封面上——转场搬运的是「这块板子」，正文只被裁剪、不缩放。
+   * 键由书架格子用同一个 `bookCoverSharedElementKey` 算出来传进来，空串表示不参与。
+   */
+  @Prop sharedCoverKey: string = '';
   @Prop @Watch('onBookChanged') book: Book = {
     id: '', title: '', author: '', category: '', lastChapter: '', progress: 0, isLocal: true
   };
@@ -9714,6 +9722,9 @@ export struct ReaderPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.paperColor)
+    // 共享元素入端：整块阅读面板从书架封面那一格长到满屏。
+    // 空串按 `common.d.ts:21406` 的文档语义解除绑定，所以不需要 if 包裹。
+    .geometryTransition(this.sharedCoverKey)
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) { this.renewKeepLightTimeout(); }
     })

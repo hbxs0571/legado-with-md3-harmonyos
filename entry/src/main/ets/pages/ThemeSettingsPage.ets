@@ -8,6 +8,10 @@ import { UiSlider } from '../components/settings/UiSlider';
 import { AppGlyph } from '../components/AppGlyph';
 import { ThemeModeSelector, ThemeColorSelector } from '../components/ThemeSelectors';
 import { appFontDisplayName } from '../data/AppFontSettings';
+import { AppFontSheet } from '../components/settings/AppFontSheet';
+import { NavIconManageSheet } from '../components/settings/NavIconManageSheet';
+import { TopBottomBarSettingsSheet } from '../components/settings/TopBottomBarSettingsSheet';
+import { LauncherIconPickerSheet } from '../components/settings/LauncherIconPickerSheet';
 import { ThemeGroupColumn, ThemeGroupItem } from '../components/settings/ThemeGroupColumn';
 import { ThemeRefactorTipStore } from '../data/ThemeRefactorTipStore';
 import { resolvePaletteColors, ThemePaletteColors } from '../data/ThemePalette';
@@ -244,6 +248,14 @@ export struct ThemeSettingsPage {
   @Prop labelVisibilityMode: string = 'auto';
   onNavigationVisibilityChange: (route: string, visible: boolean) => void = () => {};
   onNavigationMove: (route: string, up: boolean) => void = () => {};
+  /**
+   * 拖拽重排回调：把第 `from` 项移到第 `to` 位。
+   * 对齐上游 `MainNavigationSettingsSheet.kt:38-46` 的 `navigationItems.move(from.index, to.index)`，
+   * 落盘走 `data/MainNavigationSettings.ets` 的 `moveNavigationTo`。
+   */
+  onNavigationReorder: (from: number, to: number) => void = () => {};
+  /** 正在拖动的主导航线条目 route；`onItemDragStart` 记下，`onItemDrop` 用完清空。 */
+  @State draggingRoute: string = '';
   onDefaultHomePageChange: (route: string) => void = () => {};
   onLabelVisibilityModeChange: (value: string) => void = () => {};
   /**
@@ -291,10 +303,37 @@ export struct ThemeSettingsPage {
   @Prop appFontPath: string = '';
   onPickAppFont: () => void = () => {};
   onClearAppFont: () => void = () => {};
-  /** 「字体设置」组是否展开；上游是一个 sheet（`FontSelectSheet`），本地用可展开组承接。 */
-  @State appFontExpanded: boolean = false;
-  /** 「顶栏与底栏」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
-  @State topBottomBarExpanded: boolean = false;
+  /** 用户自选的字体文件夹；空串表示未配置。上游 `ReadSettings.fontFolder`。 */
+  @Prop fontFolder: string = '';
+  onChangeFontFolder: (path: string) => void = (_path: string) => {};
+  /** 选中已有字体（不走系统文件选择器，直接指向已导入的那份副本）。 */
+  onSelectAppFont: (path: string) => void = (_path: string) => {};
+  /** 十个导航图标槽位；空串表示用内置矢量图标。上游 `AppShellSettings.kt:20-29`。 */
+  @Prop navIconHome: string = '';
+  @Prop navIconBookshelf: string = '';
+  @Prop navIconExplore: string = '';
+  @Prop navIconRss: string = '';
+  @Prop navIconMy: string = '';
+  @Prop navIconHomeSelected: string = '';
+  @Prop navIconBookshelfSelected: string = '';
+  @Prop navIconExploreSelected: string = '';
+  @Prop navIconRssSelected: string = '';
+  @Prop navIconMySelected: string = '';
+  /** 选中某个槽位的新图标文件（已复制进沙箱）。 */
+  onSelectNavIcon: (slot: string, path: string) => void = (_slot: string, _path: string) => {};
+  /** 清空某个槽位。 */
+  onClearNavIcon: (slot: string) => void = (_slot: string) => {};
+  /** 当前正在使用的桌面图标 id，空串表示默认图标（对齐上游 `PreferKey.launcherIcon`）。 */
+  @Prop launcherIconId: string = '';
+  /** 切换桌面图标成功后回调，参数是新 id，空串表示已恢复默认。 */
+  onLauncherIconChange: (iconId: string) => void = (_iconId: string) => {};
+  /**
+   * 当前打开的 sheet 键；空串表示全关。
+   *
+   * 同一节点只能挂一个 `bindSheet`（多个只生效最后一个，见
+   * `pages/AppCoverSettingsPage.ets:435` 的注释），所以用这个键切内容。
+   */
+  @State activeSheet: string = '';
   @State collapsedHeader: boolean = false;
   private themeScroller: Scroller = new Scroller();
 
@@ -377,6 +416,38 @@ export struct ThemeSettingsPage {
     return hidden > 0 ? `${base} · 隐藏 ${hidden} 项` : `${base} · ${visible.length} 项`;
   }
 
+  /**
+   * 「导航栏图标」行的摘要，对齐上游 `MainNavigationSettingsSheet.kt:90-96`：
+   * 有自定义时是 `theme_config_nav_icons_custom_count`（已设置 %1$d 个自定义图标），
+   * 否则是 `theme_config_nav_icons_default`（使用默认图标）。
+   */
+  private navIconSummary(): string {
+    const paths: string[] = this.navIconPaths();
+    let count = 0;
+    for (const path of paths) {
+      if (path.length > 0) {
+        count++;
+      }
+    }
+    return count > 0 ? `已设置 ${count} 个自定义图标` : '使用默认图标';
+  }
+
+  /** 十个槽位按 `NAV_ICON_SLOTS` 顺序排成数组，供面板与摘要共用。 */
+  private navIconPaths(): string[] {
+    const paths: string[] = [];
+    paths.push(this.navIconHome);
+    paths.push(this.navIconBookshelf);
+    paths.push(this.navIconExplore);
+    paths.push(this.navIconRss);
+    paths.push(this.navIconMy);
+    paths.push(this.navIconHomeSelected);
+    paths.push(this.navIconBookshelfSelected);
+    paths.push(this.navIconExploreSelected);
+    paths.push(this.navIconRssSelected);
+    paths.push(this.navIconMySelected);
+    return paths;
+  }
+
   /** 可见导航项（按配置顺序），供「默认主页面」下拉使用。 */
   private visibleNavigationOptions(): string[] {
     const ordered = orderedMainNavigation(this.mainNavigationOrder);
@@ -389,6 +460,11 @@ export struct ThemeSettingsPage {
       result.push(route);
     }
     return result;
+  }
+
+  /** 主导航全量顺序（含隐藏项），拖拽列表按它渲染。 */
+  private navigationOrderRoutes(): string[] {
+    return orderedMainNavigation(this.mainNavigationOrder);
   }
 
   private coverBackgroundOptions(): string[] {
@@ -483,6 +559,73 @@ export struct ThemeSettingsPage {
     });
   }
 
+  /**
+   * sheet 内容分发。
+   *
+   * 一个节点只能挂一个 `bindSheet`，多个只生效最后一个，所以按 `activeSheet` 切内容
+   * （同 `pages/AppCoverSettingsPage.ets:435` 的写法）。
+   */
+  @Builder
+  private SheetContent() {
+    if (this.activeSheet === 'font') {
+      AppFontSheet({
+        selectedPath: this.appFontPath,
+        folderPath: this.fontFolder,
+        onSelectFont: (path: string) => {
+          this.onSelectAppFont(path);
+          this.activeSheet = '';
+        },
+        onClearFont: () => {
+          this.onClearAppFont();
+          this.activeSheet = '';
+        },
+        onFolderChange: (path: string) => this.onChangeFontFolder(path)
+      })
+    } else if (this.activeSheet === 'navIcon') {
+      NavIconManageSheet({
+        slotPaths: this.navIconPaths(),
+        onSelectIcon: (slot: string, path: string) => this.onSelectNavIcon(slot, path),
+        onClearIcon: (slot: string) => this.onClearNavIcon(slot)
+      })
+    } else if (this.activeSheet === 'topBottomBar') {
+      TopBottomBarSettingsSheet({
+        useFlexibleTopAppBar: this.useFlexibleTopAppBar,
+        topBarButtonStyle: this.topBarButtonStyle,
+        mergeTopBarActions: this.mergeTopBarActions,
+        showBottomView: this.showBottomView,
+        useFloatingBottomBar: this.useFloatingBottomBar,
+        useFloatingBottomBarLiquidGlass: this.useFloatingBottomBarLiquidGlass,
+        bottomBarLensRadius: this.bottomBarLensRadius,
+        enableBlur: this.enableBlur,
+        topBarBlurRadius: this.topBarBlurRadius,
+        bottomBarBlurRadius: this.bottomBarBlurRadius,
+        topBarBlurAlpha: this.topBarBlurAlpha,
+        bottomBarBlurAlpha: this.bottomBarBlurAlpha,
+        topBarOpacity: this.topBarOpacity,
+        bottomBarOpacity: this.bottomBarOpacity,
+        onUseFlexibleTopAppBarChange: (value: boolean) => this.onUseFlexibleTopAppBarChange(value),
+        onTopBarButtonStyleChange: (value: string) => this.onTopBarButtonStyleChange(value),
+        onMergeTopBarActionsChange: (value: boolean) => this.onMergeTopBarActionsChange(value),
+        onShowBottomViewChange: (value: boolean) => this.onShowBottomViewChange(value),
+        onUseFloatingBottomBarChange: (value: boolean) => this.onUseFloatingBottomBarChange(value),
+        onUseFloatingBottomBarLiquidGlassChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value),
+        onBottomBarLensRadiusChange: (value: number) => this.onBottomBarLensRadiusChange(value),
+        onTopBarBlurRadiusChange: (value: number) => this.onTopBarBlurRadiusChange(value),
+        onBottomBarBlurRadiusChange: (value: number) => this.onBottomBarBlurRadiusChange(value),
+        onTopBarBlurAlphaChange: (value: number) => this.onTopBarBlurAlphaChange(value),
+        onBottomBarBlurAlphaChange: (value: number) => this.onBottomBarBlurAlphaChange(value),
+        onTopBarOpacityChange: (value: number) => this.onTopBarOpacityChange(value),
+        onBottomBarOpacityChange: (value: number) => this.onBottomBarOpacityChange(value)
+      })
+    } else if (this.activeSheet === 'launcherIcon') {
+      LauncherIconPickerSheet({
+        selectedId: this.launcherIconId,
+        onDismiss: () => { this.activeSheet = ''; },
+        onIconChanged: (iconId: string) => this.onLauncherIconChange(iconId)
+      })
+    }
+  }
+
   build() {
     Column() {
       CollapsingSettingsHeader({ title: '外观', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
@@ -566,20 +709,10 @@ export struct ThemeSettingsPage {
                 .onClick(() => this.onPureBlackChange(!this.pureBlack))
             }
             ThemeGroupItem() {
+              // 上游 `ThemeConfigScreen.kt:948` 是一个 ListSettingItem，点开 `FontSelectSheet`；
+              // 本地同样点开 sheet（不再用可展开组承接，展开组放不下搜索/排序/网格）。
               UiAction({showDivider: false, title: '字体设置', detail: this.appFontSummary(),
-                onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
-            }
-            if (this.appFontExpanded) {
-              ThemeGroupItem() {
-                Row() {
-                  UiAction({showDivider: false, title: '选择字体文件', onSelect: () => this.onPickAppFont() }).layoutWeight(1)
-                  // 上游 FontSettingSheet 的 clear 是图标按钮（contentDescription=R.string.clear=清除），
-                  // 不是独立文字行；本地用删除图标承接同一 onClearAppFont 回调（任务书 6.2）。
-                  AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorTextTertiary })
-                    .padding({ left: 16, right: 16 }).accessibilityText('清除')
-                    .onClick(() => this.onClearAppFont())
-                }.width('100%')
-              }
+                onSelect: () => { this.activeSheet = 'font'; } })
             }
             // 上游 `ThemeConfigScreen.kt:266-270`：只有 appTheme == "12"（自定义）时才显示这一行。
             if (this.paletteIndex === 12) {
@@ -589,7 +722,10 @@ export struct ThemeSettingsPage {
               }
             }
             ThemeGroupItem() {
-              UiAction({showDivider: false, title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
+              // 上游 `ThemeConfigScreen.kt:272-280` 打开 `LauncherIconPickerSheet`（8 个内置图标）；
+              // 鸿蒙的图标包由 AGC 下发，改用 `@kit.AppGalleryKit` 的 appInfoManager 查询与切换。
+              UiAction({showDivider: false, title: '切换图标', detail: '切换软件显示在桌面的图标',
+                onSelect: () => { this.activeSheet = 'launcherIcon'; } })
             }
             ThemeGroupItem() {
               ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => this.onPredictiveBackChange(value) })
@@ -680,18 +816,51 @@ export struct ThemeSettingsPage {
                     onSelect: (value: string) => this.onTabletInterfaceChange(value)
                   })
                 }
-                // 拖排顺序：上游用可拖列表，本地用上下移两枚按钮承接同一个 onSetOrder。
+                // 主导航顺序：上游 `MainNavigationSettingsSheet.kt:38-46` 用
+                // `rememberReorderableLazyListState` 做拖拽重排，松手时把整串顺序回写。
+                // 本地用 `List` + `onItemDragStart`/`onItemDrop`（ArkUI 的列表内拖拽），
+                // 上下移两枚按钮保留在同一行右侧，作为无障碍与「拖不动」时的回退路径。
                 ThemeGroupItem() {
                   Column() {
                     Text('主导航顺序').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
-                    ForEach(orderedMainNavigation(this.mainNavigationOrder), (navRoute: string) => {
-                      Row() {
-                        Text(mainNavigationLabel(navRoute)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-                        Button('上移').fontSize(LABEL_MEDIUM).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
-                        Button('下移').fontSize(LABEL_MEDIUM).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
-                      }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
-                    }, (navRoute: string) => navRoute)
+                    List() {
+                      ForEach(this.navigationOrderRoutes(), (navRoute: string, index: number) => {
+                        ListItem() {
+                          Row() {
+                            AppGlyph({ name: 'list', tint: this.themeColorTextTertiary, glyphSize: 18 })
+                              .margin({ right: 8 })
+                            Text(mainNavigationLabel(navRoute)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+                            Button('上移').fontSize(LABEL_MEDIUM).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
+                            Button('下移').fontSize(LABEL_MEDIUM).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+                          .alignItems(VerticalAlign.Center)
+                        }
+                        .accessibilityText(`${mainNavigationLabel(navRoute)}，第 ${index + 1} 项`)
+                      }, (navRoute: string) => navRoute)
+                    }
+                    .width('100%')
+                    .editMode(true)
+                    .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
+                      this.draggingRoute = this.navigationOrderRoutes()[itemIndex];
+                    })
+                    .onItemDrop((_event: ItemDragInfo, itemIndex: number, insertIndex: number, isSuccess: boolean) => {
+                      if (!isSuccess) { return; }
+                      this.onNavigationReorder(itemIndex, insertIndex);
+                      this.draggingRoute = '';
+                    })
                   }.width('100%')
+                }
+                // 导航栏图标：上游 `MainNavigationSettingsSheet.kt:90-96` 的
+                // `CompactClickableSettingItem('导航图标', description = 自定义数量文案)`，
+                // 点开 `NavIconManageSheet`。数量文案取上游 `theme_config_nav_icons_custom_count`。
+                ThemeGroupItem() {
+                  UiAction({showDivider: false,
+                    title: '导航栏图标',
+                    detail: this.navIconSummary(),
+                    onSelect: () => { this.activeSheet = 'navIcon'; }
+                  })
                 }
               }
               .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
@@ -703,115 +872,7 @@ export struct ThemeSettingsPage {
               ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
             }
             ThemeGroupItem() {
-              UiAction({showDivider: false, title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.topBottomBarExpanded = !this.topBottomBarExpanded } })
-            }
-            if (this.topBottomBarExpanded) {
-              Column() {
-                ThemeGroupItem() {
-                  ThemeSwitchRow({ title: '使用折叠应用栏', checked: this.useFlexibleTopAppBar, onChange: (value: boolean) => this.onUseFlexibleTopAppBarChange(value) })
-                }
-                ThemeGroupItem() {
-                  UiDropdown({showDivider: false,
-                    title: '顶栏按钮样式',
-                    option: this.topBarButtonStyle,
-                    options: TOP_BAR_BUTTON_STYLES,
-                    labelOf: (value: string) => topBarButtonStyleLabel(value),
-                    onSelect: (value: string) => this.onTopBarButtonStyleChange(value)
-                  })
-                }
-                if (this.topBarButtonStyle !== 'plain') {
-                  ThemeGroupItem() {
-                    ThemeSwitchRow({ title: '合并顶栏按钮', checked: this.mergeTopBarActions, onChange: (value: boolean) => this.onMergeTopBarActionsChange(value) })
-                      .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-                  }
-                }
-                ThemeGroupItem() {
-                  ThemeSwitchRow({ title: '显示导航栏', detail: '仍可滑动切换页面', checked: this.showBottomView, onChange: (value: boolean) => this.onShowBottomViewChange(value) })
-                }
-                ThemeGroupItem() {
-                  ThemeSwitchRow({ title: '悬浮底栏', detail: '底部导航栏使用悬浮胶囊样式', checked: this.useFloatingBottomBar, onChange: (value: boolean) => this.onUseFloatingBottomBarChange(value) })
-                }
-                if (this.useFloatingBottomBar) {
-                  ThemeGroupItem() {
-                    ThemeSwitchRow({ title: '液态玻璃效果', detail: '为悬浮底栏启用液态玻璃高光效果', checked: this.useFloatingBottomBarLiquidGlass, onChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value) })
-                      .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-                  }
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '底栏模糊强度',
-                      detail: `液态玻璃扭曲程度 ${this.bottomBarLensRadius}vp`,
-                      value: this.bottomBarLensRadius,
-                      minValue: BOTTOM_BAR_LENS_RADIUS_MIN,
-                      maxValue: BOTTOM_BAR_LENS_RADIUS_MAX,
-                      onChange: (value: number) => this.onBottomBarLensRadiusChange(value)
-                    })
-                  }
-                }
-                if (this.enableBlur) {
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '顶栏模糊半径',
-                      detail: `采样模糊强度 ${this.topBarBlurRadius}`,
-                      value: this.topBarBlurRadius,
-                      minValue: TOP_BAR_BLUR_RADIUS_MIN,
-                      maxValue: TOP_BAR_BLUR_RADIUS_MAX,
-                      onChange: (value: number) => this.onTopBarBlurRadiusChange(value)
-                    })
-                  }
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '底栏模糊半径',
-                      detail: `采样模糊强度 ${this.bottomBarBlurRadius}`,
-                      value: this.bottomBarBlurRadius,
-                      minValue: BOTTOM_BAR_BLUR_RADIUS_MIN,
-                      maxValue: BOTTOM_BAR_BLUR_RADIUS_MAX,
-                      onChange: (value: number) => this.onBottomBarBlurRadiusChange(value)
-                    })
-                  }
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '顶栏模糊透明度',
-                      detail: `${this.topBarBlurAlpha}%`,
-                      value: this.topBarBlurAlpha,
-                      minValue: BAR_BLUR_ALPHA_MIN,
-                      maxValue: BAR_BLUR_ALPHA_MAX,
-                      onChange: (value: number) => this.onTopBarBlurAlphaChange(value)
-                    })
-                  }
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '底栏模糊透明度',
-                      detail: `${this.bottomBarBlurAlpha}%`,
-                      value: this.bottomBarBlurAlpha,
-                      minValue: BAR_BLUR_ALPHA_MIN,
-                      maxValue: BAR_BLUR_ALPHA_MAX,
-                      onChange: (value: number) => this.onBottomBarBlurAlphaChange(value)
-                    })
-                  }
-                } else {
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '顶栏不透明度',
-                      detail: `${this.topBarOpacity}%`,
-                      value: this.topBarOpacity,
-                      minValue: TOP_BAR_OPACITY_MIN,
-                      maxValue: TOP_BAR_OPACITY_MAX,
-                      onChange: (value: number) => this.onTopBarOpacityChange(value)
-                    })
-                  }
-                  ThemeGroupItem() {
-                    UiSlider({showDivider: false,
-                      title: '底栏不透明度',
-                      detail: `${this.bottomBarOpacity}%`,
-                      value: this.bottomBarOpacity,
-                      minValue: TOP_BAR_OPACITY_MIN,
-                      maxValue: TOP_BAR_OPACITY_MAX,
-                      onChange: (value: number) => this.onBottomBarOpacityChange(value)
-                    })
-                  }
-                }
-              }
-              .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              UiAction({showDivider: false, title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.activeSheet = 'topBottomBar'; } })
             }
           }
 
@@ -1001,6 +1062,13 @@ export struct ThemeSettingsPage {
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
+      .bindSheet(this.activeSheet.length > 0, this.SheetContent(), {
+        height: 620,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: this.themeColorSurfaceElevated,
+        onDisappear: () => { this.activeSheet = ''; }
+      })
   }
 }
 

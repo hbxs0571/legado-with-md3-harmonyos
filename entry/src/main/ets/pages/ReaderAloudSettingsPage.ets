@@ -10,6 +10,7 @@
  * 配色全取主题色槽位跟随日夜主题。面板不持播放器，所有操作回调给 Index。
  */
 import { glassColor, AloudSliderSetting } from '../components/ReadAloudGlassWidgets';
+import { resolveGlassBlurRadius } from '../data/GlassColor';
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
 import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
@@ -73,7 +74,7 @@ export struct ReaderAloudSettingsPage {
       scrimColor: '#66000000',
       panelColor: glassColor(this.themeColorSurfacePrimary, 0.78),
       panelHeight: '80%',
-      blurRadius: 30,
+      blurRadius: resolveGlassBlurRadius(30),
       onDismiss: () => this.onBack()
     }) {
         Row() {
@@ -106,12 +107,12 @@ export struct ReaderAloudSettingsPage {
               .layoutWeight(1).height(48)
               .justifyContent(FlexAlign.Center)
               .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7))
-              .backdropBlur(12).borderRadius(24)
+              .backdropBlur(resolveGlassBlurRadius(12)).borderRadius(24)
               .onClick(() => this.onNext())
             }
             .width('100%').padding(8)
             .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.45))
-            .backdropBlur(16).borderRadius(20)
+            .backdropBlur(resolveGlassBlurRadius(16)).borderRadius(20)
             .margin({ left: 12, right: 12, bottom: 8 })
 
             Text(this.unitTotal > 0 ? `第 ${this.unitIndex + 1} / ${this.unitTotal} 句` : '未开始朗读')
@@ -170,7 +171,7 @@ export struct ReaderAloudSettingsPage {
                   })
               }
               .width('100%').padding(8)
-              .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.85)).backdropBlur(16).borderRadius(12)
+              .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.85)).backdropBlur(resolveGlassBlurRadius(16)).borderRadius(12)
               .margin({ left: 12, right: 12, bottom: 6 })
             }
 
@@ -179,18 +180,18 @@ export struct ReaderAloudSettingsPage {
               Text('上一章').fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
                 .fontColor(this.themeColorTextPrimary)
                 .layoutWeight(1).height(44).textAlign(TextAlign.Center)
-                .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7)).backdropBlur(12).borderRadius(22)
+                .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7)).backdropBlur(resolveGlassBlurRadius(12)).borderRadius(22)
                 .onClick(() => this.onTurnChapter(-1))
               Text('下一章').fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
                 .fontColor(this.themeColorTextPrimary)
                 .layoutWeight(1).height(44).textAlign(TextAlign.Center)
-                .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7)).backdropBlur(12).borderRadius(22)
+                .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.7)).backdropBlur(resolveGlassBlurRadius(12)).borderRadius(22)
                 .margin({ left: 8 })
                 .onClick(() => this.onTurnChapter(1))
             }
             .width('100%').padding(8)
             .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.45))
-            .backdropBlur(16).borderRadius(20)
+            .backdropBlur(resolveGlassBlurRadius(16)).borderRadius(20)
             .margin({ left: 12, right: 12, bottom: 10 })
 
             // 背景音乐总音量（上游 cast_bgm_master_volume）：上游有此行，本地 TTS 无 BGM 混音。
@@ -253,7 +254,7 @@ struct AloudTonalIcon {
       }
     }
     .layoutWeight(1).height(48)
-    .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.75)).backdropBlur(12).borderRadius(24)
+    .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.75)).backdropBlur(resolveGlassBlurRadius(12)).borderRadius(24)
     .onClick(() => this.onAction())
     .accessibilityText(this.icon === 'previous' ? '上一句' : (this.icon === 'pause' ? '暂停' : (this.icon === 'stop' ? '停止' : '播放')))
   }
@@ -279,7 +280,7 @@ struct ConfigGlassSwitch {
     }
     .width('100%').constraintSize({ minHeight: 56 })
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-    .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55)).backdropBlur(16).borderRadius(12)
+    .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55)).backdropBlur(resolveGlassBlurRadius(16)).borderRadius(12)
     .margin({ left: 12, right: 12, bottom: 6 })
     .onClick(() => this.onChange(!this.checked))
   }
@@ -304,7 +305,7 @@ struct ConfigGlassRow {
     }
     .width('100%').constraintSize({ minHeight: 56 })
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-    .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55)).backdropBlur(16).borderRadius(12)
+    .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55)).backdropBlur(resolveGlassBlurRadius(16)).borderRadius(12)
     .margin({ left: 12, right: 12, bottom: 6 })
     .onClick(() => this.onNext())
   }
@@ -335,7 +336,7 @@ struct AloudActionButton {
         }
       }
       .width(48).height(48).borderRadius(24)
-      .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.75)).backdropBlur(12)
+      .backgroundColor(glassColor(this.themeColorSurfaceElevated, 0.75)).backdropBlur(resolveGlassBlurRadius(12))
       Text(this.label).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center).margin({ top: 6 })

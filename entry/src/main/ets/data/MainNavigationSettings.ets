@@ -126,6 +126,24 @@ export function moveNavigationDown(routes: string[], route: string): string[] {
 }
 
 /**
+ * 把 `routes[from]` 移到 `to` 位置，返回新数组。
+ *
+ * 对齐上游 `MainNavigationSettingsSheet.kt:38-46` 的 `navigationItems.move(from.index, to.index)`：
+ * 拖拽结束时按「取出再插入」调整顺序，而不是相邻交换——跨多位拖动时两者结果不同，
+ * 上游用的是 `move`。越界或同位直接返回副本。
+ */
+export function moveNavigationTo(routes: string[], from: number, to: number): string[] {
+  const next = routes.slice();
+  if (from < 0 || from >= next.length || to < 0 || to >= next.length || from === to) {
+    return next;
+  }
+  const item = next[from];
+  next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/**
  * 默认主页面必须是可见项；不可见时回落书架，
  * 对齐上游 `MainNavigationSettingsSheet.kt:81-84`。
  */

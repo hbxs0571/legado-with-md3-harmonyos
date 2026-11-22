@@ -80,6 +80,18 @@ export struct BookCover {
   @Prop applyAspectRatio: boolean = false;
   /** 无障碍朗读文本（：114）。不传时空串，读屏不播报这张封面。 */
   @Prop a11yText: string = '';
+  /**
+   * 共享元素键。非空时把这张封面登记为 `geometryTransition` 的一端。
+   *
+   * 对齐上游 `ui/main/BookCoverSharedElement.kt:17-20 bookCoverSharedElementKey`：
+   * 键由 `data/BookCoverSharedElement.ets` 统一拼装，书架卡片与阅读页两端必须用同一个
+   * 函数算，不能各写一遍字面量。空串表示这张封面不参与共享元素转场。
+   *
+   * ArkUI 的约束是「一个 id 只能绑定两个组件」（`common.d.ts:21406`），所以同一个键
+   * 只允许出现在书架那一格与阅读页面板上；同一本书在多个分组页里键不同（键里带来源
+   * 标识），不会互相抢锚点。
+   */
+  @Prop sharedKey: string = '';
   @State imageFailed: boolean = false;
   /** 封面原图宽高比（width / height）；异步读图后回填，0 表示读不到或不需要。 */
   @State coverAspectRatio: number = 0;
@@ -114,12 +126,17 @@ export struct BookCover {
   /**
    * 实际要显示的封面图路径。
    *
-   * A3「使用默认封面」打开时改取选中相册的默认图（对齐 model/BookCover.kt:125 的
-   * useDefaultCover 分支），没有相册图就返回空串、走文字占位；关闭时用书籍自带图。
+   * A3「使用默认封面」打开时改取选中相册按 seed 选中的那张（对齐
+   * `CoilBookCover.kt:144-150 getRandomDefaultPath(seed = name ?: author ?: path ?: "")`），
+   * 相册没有可用图时返回空串、走「书本图标 + 书名」占位；关闭时用书籍自带图。
    */
   private effectiveCoverUri(): string {
     if (this.coverSettings.useDefaultCover) {
-      return CoverAlbumRepository.defaultCoverPath(this.isNight);
+      // seed 口径照上游：书名优先，其次作者，最后封面路径（三者都空时是空串）。
+      const seed = this.book.title.length > 0
+        ? this.book.title
+        : this.book.author.length > 0 ? this.book.author : (this.book.coverUri ?? '');
+      return CoverAlbumRepository.defaultCoverPath(this.isNight, seed);
     }
     const uri = this.book.coverUri;
     if (uri === undefined) { return ''; }
@@ -366,6 +383,8 @@ export struct BookCover {
     .shadow(this.shadowEnabled
       ? { radius: 6, color: '#66000000', offsetX: 0, offsetY: 2 }
       : { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 })
+    // 共享元素源端：空串按 `common.d.ts:21406` 的文档语义解除绑定，所以不需要 if 包裹。
+    .geometryTransition(this.sharedKey)
     .accessibilityText(this.a11yText)
   }
 

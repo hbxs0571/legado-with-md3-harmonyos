@@ -211,6 +211,8 @@ export enum AppRoute {
   SEARCH = 'search',
   /** 本地书多选后的导入确认页（批 10 的 :555）。 */
   LOCAL_BOOK_IMPORT = 'localBookImport',
+  /** 按给定 exploreUrl 直接看结果的一页，对齐上游 MainRouteExploreShow（MainNavGraph.kt:583-591）。 */
+  EXPLORE_SHOW = 'exploreShow',
   PROFILE_SUBPAGE = 'profileSubpage'
 }
 

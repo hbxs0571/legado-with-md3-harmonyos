@@ -83,7 +83,8 @@ export struct OtherSettingsPage {
       defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
       sourceEditMaxLine: isNaN(value) ? DEFAULT_OTHER_SETTINGS.sourceEditMaxLine : Math.max(1, value),
       webPort: this.otherSettings.webPort,
-      recordLog: this.otherSettings.recordLog
+      recordLog: this.otherSettings.recordLog,
+      fontSort: this.otherSettings.fontSort
     };
     this.saveOtherSettings();
   }
@@ -96,7 +97,8 @@ export struct OtherSettingsPage {
       defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
       sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
       webPort: port,
-      recordLog: this.otherSettings.recordLog
+      recordLog: this.otherSettings.recordLog,
+      fontSort: this.otherSettings.fontSort
     };
     this.saveOtherSettings();
   }
@@ -108,7 +110,8 @@ export struct OtherSettingsPage {
       defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
       sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
       webPort: this.otherSettings.webPort,
-      recordLog: value
+      recordLog: value,
+      fontSort: this.otherSettings.fontSort
     };
     this.saveOtherSettings();
   }
@@ -129,7 +132,8 @@ export struct OtherSettingsPage {
         defaultBookTreeUri: uri,
         sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
         webPort: this.otherSettings.webPort,
-        recordLog: this.otherSettings.recordLog
+        recordLog: this.otherSettings.recordLog,
+        fontSort: this.otherSettings.fontSort
       };
       this.saveOtherSettings();
     } catch (error) {

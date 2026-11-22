@@ -7,8 +7,14 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/BookInfoBackdropStyle';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
+import { lerpHexColor, withAlphaHex } from '../data/ColorLerp';
+import { ProgressiveBackdrop } from '../components/ProgressiveBackdrop';
+import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '../model/ReadRecord';
+import { RelatedBooksBanner } from '../components/RelatedBooksBanner';
+import { RelatedBooksModule, RelatedBooksService } from '../bookSource/RelatedBooksService';
+import { SearchBookItem } from '../bookSource/SourceModels';
 import { HighlightTagRule } from '../model/HighlightTagRule';
 import { HighlightedTag, matchHighlightTags } from '../data/HighlightTagMatcher';
 import { pasteboard } from '@kit.BasicServicesKit';
@@ -39,7 +45,8 @@ export struct BookInfoPage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
-  /** surfaceContainerHigh 档，本地降级顶替上游的 secondaryContainer（ThemePalette 无该字段）。 */
+  /** 分组容器色（上游 secondaryContainer）。详情页背景取色叠层的插值基色，见 `seedOverlayBaseColor()`。 */
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE7C8';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -50,6 +57,14 @@ export struct BookInfoPage {
   @StorageProp('appTopInset') appTopInset: number = 0;
   /** 顶栏按钮版式（tonal / plain / outlined / glass / liquid），顶栏三颗按钮的底色由它决定。 */
   @StorageProp('themeTopBarButtonStyle') themeTopBarButtonStyle: string = 'tonal';
+  /**
+   * 顶栏模糊半径与模糊开关。上游详情页顶栏挂的是 `HazeStyle.kt:65-90
+   * Modifier.responsiveHazeEffectFixedStyle`（`BookInfoScreen.kt:760` 与 `:785` 两处），
+   * 它先判 `enableBlur`，再**无条件**挂 `HazeProgressive.verticalGradient(1f, 0f)` ——
+   * 详情页这条栏不读 `enableProgressiveBlur`，强度渐变是写死的。
+   */
+  @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
+  @StorageProp('themeEnableBlur') themeEnableBlur: boolean = false;
   // 批8（:369）：加入书架成功后 Index 会整体替换 selectedBook，@Watch 在这里接手
   // 上游 `BookInfoScreen.kt:1398-1414 LaunchedEffect(inBookshelf)` 的两段引导提示。
   @Prop @Watch('onBookPropChanged') book: Book = {
@@ -64,6 +79,12 @@ export struct BookInfoPage {
   @Prop defaultCoverBackground: string = 'on';
   /** 封面文字设置，从 Index 下发；详情页封面受 A8「限制封面比例」约束。 */
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
+  /**
+   * 当前是否夜间。默认封面按 `isNight` 分白天/夜间两套相册取图
+   * （上游 `BookCover.kt:58-63 isNightTheme` + `:80-88 getRandomDefaultPath`），
+   * 详情页背景层与取色也要用同一套，否则夜间档会拿到白天那张图。
+   */
+  @Prop isNight: boolean = false;
   /** 全书架书目，删除面板用它找同名副本（批 7 的 `:338`）。 */
   @Prop books: Book[] = [];
   /** 高亮标签规则，从 Index 启动时 load 一次下发；详情页自己 await 会让首帧空。 */
@@ -84,6 +105,21 @@ export struct BookInfoPage {
   @Prop bookSourceName: string = '';
   /** 移出书架前是否二次确认（批 7 的 `:291`）。 */
   @Prop deleteAlertEnabled: boolean = true;
+  /**
+   * 无关联规则时按作者搜索。对齐上游 `BookInfoViewModel.kt:2016-2018` 的兜底条件：
+   * `modules.isEmpty() && bookInfoAuthorSearchFallback && ruleBookInfo.relatedBooks.isNullOrBlank()`。
+   * 开关本体在外观页（`ThemeSettingsPage` 的「无关联规则时按作者搜索」），这里只读。
+   */
+  @Prop relatedBooksAuthorFallback: boolean = false;
+  /** 点关联书籍里的一本：交给 Index 的 `openOnlineBookInfo`，复用未上架书目全链路。 */
+  onOpenRelatedBook: (item: SearchBookItem) => void = (_item: SearchBookItem) => {};
+  /**
+   * 点关联书籍的「更多」。对齐上游 `BookInfoViewModel.kt:1846-1859 onRelatedBooksMore`：
+   * `resolvedUrl` 空直接返回（作者兜底那条没有更多页），否则发
+   * `BookInfoEffect.NavigateToExploreShow(title, sourceUrl, exploreUrl)` 进发现结果页。
+   */
+  onOpenRelatedBooksMore: (title: string, sourceUrl: string, exploreUrl: string) => void =
+    (_title: string, _sourceUrl: string, _exploreUrl: string) => {};
   onBack: () => void = () => {};
   /** 打开书籍信息编辑页（批 5 的独立整页，不是浮窗）。 */
   onOpenEditPage: () => void = () => {};
@@ -152,8 +188,7 @@ export struct BookInfoPage {
   onSetBooksGroup: (bookKeys: string[], groupName: string) => void =
     (_bookKeys: string[], _groupName: string) => {};
   /** 批8（:369）：刚点过「放入书架」，等书变成在架后播两段引导（上游 awaitingShelfAddition）。 */
-  @State awaitingShelfAddition: boolean = false;
-  @State showShelfRemoveHint: boolean = false;
+  @State awaitingShelfAddition: boolean = false;  @State showShelfRemoveHint: boolean = false;
   @State showLongPressGroupHint: boolean = false;
   /** 批8（:369）：同名冲突面板（共存 / 迁移）。 */
   @State conflictSheetVisible: boolean = false;
@@ -179,16 +214,51 @@ export struct BookInfoPage {
   @State deleteSourceChecked: boolean = false;
   /** 封面长按看大图（:301）。 */
   @State photoPreviewVisible: boolean = false;
+  /** 大图加载失败过，改用打包内置默认封面兜底（上游 `PhotoDialog.kt:71` 的 `.error(...)`）。 */
+  @State photoPreviewFailed: boolean = false;
   /** 溢出菜单「日志」打开的日志面板（上游 `BookInfoMenuAction.ShowLog` → `AppLogSheet`）。 */
   @State logSheetVisible: boolean = false;
   /** 日志面板的行，打开时从 AppLog 内存缓冲取一次。 */
   @State logEntries: AppLogEntry[] = [];
+  /**
+   * 关联书籍分组。对齐上游 `BookInfoContract.kt:39 relatedBooks` 与
+   * `BookInfoScreen.kt:482-497` 的 `state.relatedBooks.forEach { RelatedBooksBanner(...) }`。
+   * 空数组表示没有关联书籍（书源没配 relatedBooks 规则、或兜底搜索也没结果）。
+   */
+  @State relatedBooks: RelatedBooksModule[] = [];
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadFileSize();
     this.loadCoverSeedColor();
     this.refreshHighlightedTags();
+    this.scheduleRelatedBooksLoad();
+  }
+
+  /**
+   * 关联书籍加载。对齐上游 `BookInfoViewModel.kt:1990-2031 scheduleRelatedBooksLoad`：
+   * 先 `delay(350L)` 让详情页首屏先出来，再拉书源；异常时清空列表，不打断页面。
+   * 350ms 是上游原值，不是随手取的。
+   */
+  private scheduleRelatedBooksLoad(): void {
+    this.relatedBooks = [];
+    const sourceUrl = this.bookSourceUrl.length > 0 ? this.bookSourceUrl : (this.book.origin ?? '');
+    if (sourceUrl.length === 0) { return; }
+    const bookUrl = this.book.contentPath ?? '';
+    setTimeout(() => {
+      RelatedBooksService.load(
+        bookUrl,
+        this.book.title,
+        this.book.author,
+        sourceUrl,
+        this.relatedBooksAuthorFallback
+      ).then((modules: RelatedBooksModule[]) => {
+        this.relatedBooks = modules;
+      }).catch((e: Error) => {
+        AppLog.put(`关联书籍加载失败 ${e.message}`);
+        this.relatedBooks = [];
+      });
+    }, 350);
   }
 
   /**
@@ -242,6 +312,10 @@ export struct BookInfoPage {
    * 加入成功后由 true 变 false，正是「刚从详情页放入书架」的可靠信号。
    */
   private onBookPropChanged(): void {
+    // 换了书就重拉关联书籍：上游 `BookInfoViewModel.kt:1990-2031` 每次 book 变化都会重跑一次
+    // scheduleRelatedBooksLoad，并用 `isCurrentBookSource` 丢弃过期结果；本地用整份替换
+    // relatedBooks 达到同样效果（旧请求回来时 book 已换，直接覆盖成新书的结果）。
+    this.scheduleRelatedBooksLoad();
     const nowOnShelf = this.book.notShelf !== true;
     if (this.awaitingShelfAddition && nowOnShelf) {
       this.awaitingShelfAddition = false;
@@ -296,29 +370,60 @@ export struct BookInfoPage {
   }
 
   /**
-   * 背景样式。对齐上游 `BookInfoScreen.kt:863-875`：使用默认封面时读默认封面那档，
-   * 否则读网络封面那档；本地没有内置默认封面图，`usesDefaultCover` 恒为 false。
+   * 这本书当前是否走默认封面。
+   *
+   * 对齐上游 `CoilBookCover.kt:106-108 usesDefaultBookCover(path)`：
+   * `cover.useDefaultCover || isDefaultCoverPath(path)`，而
+   * `isDefaultCoverPath(path) = path.isNullOrBlank() || path == DefaultCoverPath`（`:95-96`）。
+   */
+  private usesDefaultCover(): boolean {
+    if (this.coverSettings.useDefaultCover) { return true; }
+    const coverUri = this.book.coverUri;
+    return coverUri === undefined || coverUri.length === 0;
+  }
+
+  /**
+   * 背景样式。对齐上游 `BookInfoScreen.kt:863-875`：使用默认封面时读默认封面那档
+   * （`defaultCoverBackground`），否则读网络封面那档（`networkCoverBackground`）。
    */
   private backdropStyle(): BookInfoBackdropStyle {
-    return resolveBookInfoBackdropStyleFor(false, this.defaultCoverBackground, this.networkCoverBackground);
+    return resolveBookInfoBackdropStyleFor(this.usesDefaultCover(), this.defaultCoverBackground, this.networkCoverBackground);
   }
 
   /**
    * 取封面主色。
    *
-   * 对齐上游 `BookInfoScreen.kt:807-847 rememberBookInfoColorTheme` 的三个前置：
-   * 有封面、`showCover` 为真、`followCoverColor` 为真；任一不满足就不取色（返回空串）。
+   * 对齐上游 `BookInfoScreen.kt:807-858 rememberBookInfoColorTheme`：
+   * - 前置：有封面可读、`showCover` 为真、`followCoverColor` 为真，任一不满足就不取色；
+   * - 默认封面档取的是**相册里按 seed 选中的那张**（`BookCoverModel.getRandomDefaultPath(seed = book.name, isNight)`），
+   *   不是书籍自带的 `coverPath`；网络封面档才用 `book.coverPath`。
    */
   private loadCoverSeedColor(): void {
     this.coverSeedColor = '';
-    const coverUri = this.book.coverUri;
-    if (coverUri === undefined || coverUri.length === 0) { return; }
+    const sourceUri = this.coverSourceUri();
+    if (sourceUri.length === 0) { return; }
     if (!this.backdropStyle().showCover || !this.followCoverColor) { return; }
-    ImageSeedColorExtractor.extract(coverUri).then((color: string) => {
+    ImageSeedColorExtractor.extract(sourceUri).then((color: string) => {
       this.coverSeedColor = color;
     }).catch(() => {
       this.coverSeedColor = '';
     });
+  }
+
+  /**
+   * 背景层与取色共用的封面图来源。
+   *
+   * 默认封面档：相册里按 `book.title` 为 seed 选中的那张（上游 `BookInfoScreen.kt:823`
+   * 用 `getRandomDefaultPath(seed = book.name, isNight)`）；相册没有可用图时返回空串，
+   * 背景层随之退化成纯主题色（上游此时 `rememberBookInfoColorTheme` 直接返回 null）。
+   * 网络封面档：书籍自带的 `coverUri`。
+   */
+  private coverSourceUri(): string {
+    if (this.usesDefaultCover()) {
+      return CoverAlbumRepository.defaultCoverPath(this.isNight, this.book.title);
+    }
+    const coverUri = this.book.coverUri;
+    return coverUri === undefined ? '' : coverUri;
   }
 
   /** 取色叠层的颜色：主色半透明，对齐上游 `seedOverlay.copy(alpha = 0.34f)`。 */
@@ -333,25 +438,11 @@ export struct BookInfoPage {
    *
    * 上游 `BookInfoScreen.kt:950-954` 是 `lerp(secondaryContainer, seedColor, 0.42f)` ——
    * 封面主色要先和主题的 secondaryContainer 按 0.42 插值，才拿去铺叠层与渐变。
-   * 本地 `ThemePalette` 没有 secondaryContainer（`data/ThemePalette.ets:31-44` 只有 10 个字段），
-   * 降级用 `themeColorSurfaceElevated`（= surfaceContainerHigh）顶替，其余算法照上游。
+   * 本地 `themeColorSecondaryContainer` 由 `data/ThemePalette.ets:1010` 广播，与上游同位。
    */
   private seedOverlayBaseColor(): string {
     if (this.coverSeedColor.length < 7) { return ''; }
-    return BookInfoPage.lerpHexColor(this.themeColorSurfaceElevated, this.coverSeedColor, 0.42);
-  }
-
-  /** 两个 `#RRGGBB` 按 t 线性插值，返回 `#RRGGBB`。上游对应 Compose 的 `lerp(Color, Color, Float)`。 */
-  private static lerpHexColor(from: string, to: string, t: number): string {
-    if (from.length < 7 || to.length < 7) { return to; }
-    const clamp: (value: number) => number = (value: number) =>
-      Math.max(0, Math.min(255, Math.round(value)));
-    const mix: (offset: number) => number = (offset: number) =>
-      clamp(parseInt(from.substring(offset, offset + 2), 16) * (1 - t)
-        + parseInt(to.substring(offset, offset + 2), 16) * t);
-    const hex: (value: number) => string = (value: number) =>
-      value.toString(16).padStart(2, '0').toUpperCase();
-    return `#${hex(mix(1))}${hex(mix(3))}${hex(mix(5))}`;
+    return lerpHexColor(this.themeColorSecondaryContainer, this.coverSeedColor, 0.42);
   }
 
   /**
@@ -385,7 +476,7 @@ export struct BookInfoPage {
     // 自定义背景图模式下 pageBaseColor() 是全透明，插值会算出黑色，这里直接给透明。
     if (base.length !== 7) { return '#00000000'; }
     if (this.backdropStyle().applySeedOverlay && this.coverSeedColor.length >= 7) {
-      return this.withAlpha(BookInfoPage.lerpHexColor(base, this.coverSeedColor, 0.08), 0.5);
+      return withAlphaHex(lerpHexColor(base, this.coverSeedColor, 0.08), 0.5);
     }
     return this.withAlpha(base, 0.5);
   }
@@ -656,6 +747,7 @@ export struct BookInfoPage {
       this.onUnavailableAction('这本书没有封面');
       return;
     }
+    this.photoPreviewFailed = false;
     this.photoPreviewVisible = true;
   }
 
@@ -834,11 +926,28 @@ export struct BookInfoPage {
   private PhotoPreview() {
     Stack({ alignContent: Alignment.Center }) {
       Column().width('100%').height('100%').backgroundColor('#000000')
-      Image(this.book.customCoverUri ?? this.book.coverUri ?? '')
+      Image(this.photoPreviewSource())
         .objectFit(ImageFit.Contain).width('100%').height('100%')
+        // 加载失败兜底到打包内置图，对齐上游 `PhotoDialog.kt:71` 的 `.error(BookCover.defaultDrawable)`
+        // 与 `BookCover.kt:65-78`（相册为空时取 `R.drawable.image_cover_default`）。
+        .onError(() => { this.photoPreviewFailed = true; })
+      if (this.photoPreviewFailed) {
+        Image($r('app.media.image_cover_default'))
+          .objectFit(ImageFit.Contain).width('100%').height('100%')
+          .hitTestBehavior(HitTestMode.None)
+      }
       Column().width('100%').height('100%').backgroundColor('#01000000')
         .onClick(() => this.photoPreviewVisible = false)
     }.width('100%').height('100%').zIndex(1002)
+  }
+
+  /** 全屏预览的图源：先自定义封面，再书籍封面；都空时直接用内置默认封面。 */
+  private photoPreviewSource(): string | Resource {
+    const custom = this.book.customCoverUri;
+    if (custom !== undefined && custom.length > 0) { return custom; }
+    const cover = this.book.coverUri;
+    if (cover !== undefined && cover.length > 0) { return cover; }
+    return $r('app.media.image_cover_default');
   }
 
   /**
@@ -1166,11 +1275,12 @@ export struct BookInfoPage {
       // 内容层 + FAB 层：FAB 浮在内容右下角（上游 floatingActionButton），不占布局高度。
       Stack({ alignContent: Alignment.BottomEnd }) {
       Stack({ alignContent: Alignment.TopStart }) {
-      if (this.backdropStyle().showCover && this.book.coverUri !== undefined && this.book.coverUri.length > 0) {
+      if (this.backdropStyle().showCover && this.coverSourceUri().length > 0) {
         // 上游 BookInfoScreen.kt:965-989 的封面层不设 opacity，也不做淡入：整层靠 Crossfade
         // 换状态（书名/作者/封面/来源任一变化才重放），封面本身始终满不透明。
         // 本地原来挂 opacity 0→0.45 的 animateTo，等于把背景永远压掉一半，这里去掉。
-        Image(this.book.coverUri).width('100%').height(480).objectFit(ImageFit.Cover)
+        // 图片来源走 coverSourceUri()：默认封面档是相册里按 seed 选中的那张，不是 book.coverUri。
+        Image(this.coverSourceUri()).width('100%').height(480).objectFit(ImageFit.Cover)
           .blur(this.backdropStyle().blurCover ? 24 : 0)
       }
       if (this.backdropStyle().applySeedOverlay && this.seedOverlayColor().length > 0) {
@@ -1390,6 +1500,26 @@ export struct BookInfoPage {
             }
           }.width('100%').alignItems(HorizontalAlign.Start)
             .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+          // 关联书籍：上游 `BookInfoScreen.kt:482-497` 在简介之后逐个 module 铺一条
+          // `RelatedBooksBanner`，每条自带 `padding(bottom = 16.dp)`。书源没配 relatedBooks
+          // 规则时，若开了「无关联规则时按作者搜索」，服务层会补一条「作者其它作品」。
+          ForEach(this.relatedBooks, (module: RelatedBooksModule) => {
+            RelatedBooksBanner({
+              title: module.title,
+              books: module.books,
+              // 上游 `showMore = module.resolvedUrl.isNotBlank()`：只有规则里带 URL 的
+              // 模块才给「更多」入口，作者兜底那条 url 是空串，没有更多页可去。
+              showMore: module.resolvedUrl.length > 0,
+              coverSettings: this.coverSettings,
+              isNight: this.isNight,
+              onSelectBook: (item: SearchBookItem) => this.onOpenRelatedBook(item),
+              onMore: () => this.onOpenRelatedBooksMore(
+                module.title,
+                this.bookSourceUrl.length > 0 ? this.bookSourceUrl : (this.book.origin ?? ''),
+                module.resolvedUrl
+              )
+            })
+          }, (module: RelatedBooksModule) => module.key)
           // 头部以下铺一整片页面底色。上游 `BookInfoScreen.kt:419-427` 这一层是
           // `fillMaxWidth().background(surface).padding(bottom = 24.dp)`：动作卡、摘要、
           // 简介全部落在这一片不透明底色上，背景图只透在头部那一段。
@@ -1405,36 +1535,47 @@ export struct BookInfoPage {
       // 顶栏：上游 BookInfoTransparentTopAppBar（BookInfoScreen.kt:738-805）在顶部时完全透明，
       // 滚动后才是 scrolledContainerColor。三个动作按 BookInfoTopBarActions 的顺序：
       // 编辑（inBookshelf 才有）→ 分享 → 更多。
-      Row() {
-        TopBarBackButton({ onSelect: () => this.onBack() })
-        Blank()
-        Row({ space: topBarActionSpacing(this.themeTopBarButtonStyle) }) {
-          TopBarButton({ icon: 'edit', onSelect: () => this.onOpenEditPage() })
-          TopBarButton({ icon: 'share', onSelect: () => this.shareBook() })
-          // menuMode: true 让 TopBarButton 不注册自己的 onSelect（否则内层点击会被它吃掉）；
-          // bindPopup 要求宿主节点可点击，所以这里补一个只翻转显隐的 onClick。
-          TopBarButton({ icon: 'more', menuMode: true })
-            .onClick(() => { this.overflowVisible = !this.overflowVisible; })
-            .bindPopup(this.overflowVisible, {
-              builder: this.OverflowMenuPopup,
-              placement: Placement.BottomRight,
-              popupColor: '#00000000',
-              enableArrow: false,
-              autoCancel: true,
-              width: OVERFLOW_MENU_WIDTH,
-              onStateChange: (event: PopupStateChangeParam) => {
-                this.overflowVisible = event.isVisible;
-              }
-            })
+      // 模糊层独立成 Stack 的第一层：上游这条栏挂的是
+      // `HazeStyle.kt:65-90 responsiveHazeEffectFixedStyle`，它**无条件**挂
+      // `HazeProgressive.verticalGradient(1f, 0f)`（不读 enableProgressiveBlur），
+      // 所以这里也用 ProgressiveBackdrop 分段递减，不用开关判断。
+      Stack() {
+        if (this.themeEnableBlur && this.themeTopBarBlurRadius > 0) {
+          ProgressiveBackdrop({ blurRadius: this.themeTopBarBlurRadius })
         }
-        .height(topBarButtonSize(this.themeTopBarButtonStyle))
-        .borderRadius(topBarButtonSize(this.themeTopBarButtonStyle) / 2)
+        Row() {
+          TopBarBackButton({ onSelect: () => this.onBack() })
+          Blank()
+          Row({ space: topBarActionSpacing(this.themeTopBarButtonStyle) }) {
+            TopBarButton({ icon: 'edit', onSelect: () => this.onOpenEditPage() })
+            TopBarButton({ icon: 'share', onSelect: () => this.shareBook() })
+            // menuMode: true 让 TopBarButton 不注册自己的 onSelect（否则内层点击会被它吃掉）；
+            // bindPopup 要求宿主节点可点击，所以这里补一个只翻转显隐的 onClick。
+            TopBarButton({ icon: 'more', menuMode: true })
+              .onClick(() => { this.overflowVisible = !this.overflowVisible; })
+              .bindPopup(this.overflowVisible, {
+                builder: this.OverflowMenuPopup,
+                placement: Placement.BottomRight,
+                popupColor: '#00000000',
+                enableArrow: false,
+                autoCancel: true,
+                width: OVERFLOW_MENU_WIDTH,
+                onStateChange: (event: PopupStateChangeParam) => {
+                  this.overflowVisible = event.isVisible;
+                }
+              })
+          }
+          .height(topBarButtonSize(this.themeTopBarButtonStyle))
+          .borderRadius(topBarButtonSize(this.themeTopBarButtonStyle) / 2)
+        }.width('100%').height('100%')
+          .padding({ left: TOP_BAR_SIDE_PADDING, right: TOP_BAR_ACTIONS_END, top: this.appTopInset })
+          // 滚动后铺的是 `scrolledContainerColor` = surfaceContainer（本地 themeColorSurfaceElevated）。
+          // 原来用的是 themeColorSurfacePrimary，与页面底色同值，看起来等于「没底色」。
+          .backgroundColor(this.collapsedHeader ? this.themeColorSurfaceElevated : '#00000000')
+          .animation({ duration: DURATION_FADE, curve: Curve.EaseInOut })
       }.width('100%').height(64 + this.appTopInset)
-        .padding({ left: TOP_BAR_SIDE_PADDING, right: TOP_BAR_ACTIONS_END, top: this.appTopInset })
-        // 滚动后铺的是 `scrolledContainerColor` = surfaceContainer（本地 themeColorSurfaceElevated）。
-        // 原来用的是 themeColorSurfacePrimary，与页面底色同值，看起来等于「没底色」。
-        .backgroundColor(this.collapsedHeader ? this.themeColorSurfaceElevated : '#00000000')
-        .animation({ duration: DURATION_FADE, curve: Curve.EaseInOut })
+        // 模糊层要裁在本栏范围内：不裁的话分段横带会溢出到内容区。
+        .clip(true)
       }.width('100%').height('100%').backgroundColor(bookCoverColor(this.book))
 
       // 阅读按钮：上游是 ExtendedFloatingActionButton，浮在内容右下角，不是常驻底栏。

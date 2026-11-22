@@ -170,6 +170,31 @@ export interface ThemeSnapshot {
   /** 应用字体文件在沙箱内的绝对路径；空串表示系统默认字体。对齐上游 `ThemeSettings.appFontPath`。 */
   appFontPath: string;
   /**
+   * 主导航十个自定义图标槽位，对齐上游 `domain/model/settings/AppShellSettings.kt:20-29`：
+   * 五个页面各一份「未选中」与「选中」图，空串表示用内置矢量图标。
+   *
+   * 上游存的是 `filesDir/nav_icons/<内容摘要>.png` 绝对路径（`ThemeConfigRouteScreen.kt:60-78`），
+   * 本地同口径，路径由 `data/NavIconLibrary.ets` 落盘。
+   */
+  navIconHome: string;
+  navIconBookshelf: string;
+  navIconExplore: string;
+  navIconRss: string;
+  navIconMy: string;
+  navIconHomeSelected: string;
+  navIconBookshelfSelected: string;
+  navIconExploreSelected: string;
+  navIconRssSelected: string;
+  navIconMySelected: string;
+  /**
+   * 当前使用的桌面图标 id，空串表示默认图标。
+   *
+   * 上游 `PreferKey.kt` 的 `launcherIcon` 存的是 launcher-alias 的类名（`LauncherIconHelp.kt:26-52`
+   * 按类名启用/禁用组件）；鸿蒙没有 alias，等价物是 AppGallery Kit 动态图标的 `iconId`
+   * （`data/LauncherIconLibrary.ets`），语义相同：记住用户选的那一个，重启后仍生效。
+   */
+  launcherIconId: string;
+  /**
    * 自定义主题配色（上游 `appTheme == "12"` 那套 16 个键）。
    *
    * 上游是 16 个平铺键（`ThemeSettings.kt` 的 6 个颜色 + 6 个 `*Night` + 4 个开关/枚举），
@@ -265,6 +290,17 @@ export class ThemeSettingsRepository {
     return THEME_MODE_FOLLOW_SYSTEM;
   }
 
+  /**
+   * 导航图标槽位路径兜底：只接受非空字符串，其余一律回落默认值。
+   *
+   * 上游 `ThemeConfigRouteScreen.kt:60-78` 把图标复制进 `filesDir/nav_icons` 后存绝对路径，
+   * 空串表示「用内置矢量图标」。这里不再校验文件是否存在：文件被外部清掉时
+   * 渲染端按空串处理即可，读偏好时做 IO 会把启动路径拖慢。
+   */
+  private static normalizeNavIconPath(value: string, fallback: string): string {
+    return value.length > 0 ? value : fallback;
+  }
+
   static async load(context: Context): Promise<ThemeSnapshot> {
     const defaults: ThemeSnapshot = {
       themeMode: THEME_MODE_FOLLOW_SYSTEM,
@@ -323,6 +359,17 @@ export class ThemeSettingsRepository {
       topBarOpacity: TOP_BAR_OPACITY_DEFAULT,
       bottomBarOpacity: BOTTOM_BAR_OPACITY_DEFAULT,
       appFontPath: '',
+      navIconHome: '',
+      navIconBookshelf: '',
+      navIconExplore: '',
+      navIconRss: '',
+      navIconMy: '',
+      navIconHomeSelected: '',
+      navIconBookshelfSelected: '',
+      navIconExploreSelected: '',
+      navIconRssSelected: '',
+      navIconMySelected: '',
+      launcherIconId: '',
       customTheme: defaultCustomThemeSnapshot()
     };
     try {
@@ -385,6 +432,17 @@ export class ThemeSettingsRepository {
       const topBarOpacity = await store.get('topBarOpacity', defaults.topBarOpacity);
       const bottomBarOpacity = await store.get('bottomBarOpacity', defaults.bottomBarOpacity);
       const appFontPath = await store.get('appFontPath', defaults.appFontPath);
+      const navIconHome = await store.get('navIconHome', defaults.navIconHome);
+      const navIconBookshelf = await store.get('navIconBookshelf', defaults.navIconBookshelf);
+      const navIconExplore = await store.get('navIconExplore', defaults.navIconExplore);
+      const navIconRss = await store.get('navIconRss', defaults.navIconRss);
+      const navIconMy = await store.get('navIconMy', defaults.navIconMy);
+      const navIconHomeSelected = await store.get('navIconHomeSelected', defaults.navIconHomeSelected);
+      const navIconBookshelfSelected = await store.get('navIconBookshelfSelected', defaults.navIconBookshelfSelected);
+      const navIconExploreSelected = await store.get('navIconExploreSelected', defaults.navIconExploreSelected);
+      const navIconRssSelected = await store.get('navIconRssSelected', defaults.navIconRssSelected);
+      const navIconMySelected = await store.get('navIconMySelected', defaults.navIconMySelected);
+      const launcherIconId = await store.get('launcherIconId', defaults.launcherIconId);
       const customThemeRaw = await store.get('customTheme', '');
       return {
         themeMode: typeof themeMode === 'string' ? ThemeSettingsRepository.normalizeThemeMode(themeMode) : defaults.themeMode,
@@ -484,6 +542,32 @@ export class ThemeSettingsRepository {
         bottomBarOpacity: normalizeBottomBarOpacity(
           typeof bottomBarOpacity === 'number' ? bottomBarOpacity : defaults.bottomBarOpacity),
         appFontPath: normalizeAppFontPath(typeof appFontPath === 'string' ? appFontPath : defaults.appFontPath),
+        navIconHome: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconHome === 'string' ? navIconHome : defaults.navIconHome, defaults.navIconHome),
+        navIconBookshelf: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconBookshelf === 'string' ? navIconBookshelf : defaults.navIconBookshelf, defaults.navIconBookshelf),
+        navIconExplore: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconExplore === 'string' ? navIconExplore : defaults.navIconExplore, defaults.navIconExplore),
+        navIconRss: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconRss === 'string' ? navIconRss : defaults.navIconRss, defaults.navIconRss),
+        navIconMy: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconMy === 'string' ? navIconMy : defaults.navIconMy, defaults.navIconMy),
+        navIconHomeSelected: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconHomeSelected === 'string' ? navIconHomeSelected : defaults.navIconHomeSelected,
+          defaults.navIconHomeSelected),
+        navIconBookshelfSelected: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconBookshelfSelected === 'string' ? navIconBookshelfSelected : defaults.navIconBookshelfSelected,
+          defaults.navIconBookshelfSelected),
+        navIconExploreSelected: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconExploreSelected === 'string' ? navIconExploreSelected : defaults.navIconExploreSelected,
+          defaults.navIconExploreSelected),
+        navIconRssSelected: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconRssSelected === 'string' ? navIconRssSelected : defaults.navIconRssSelected,
+          defaults.navIconRssSelected),
+        navIconMySelected: ThemeSettingsRepository.normalizeNavIconPath(
+          typeof navIconMySelected === 'string' ? navIconMySelected : defaults.navIconMySelected,
+          defaults.navIconMySelected),
+        launcherIconId: typeof launcherIconId === 'string' ? launcherIconId : defaults.launcherIconId,
         customTheme: parseCustomThemeSnapshot(typeof customThemeRaw === 'string' ? customThemeRaw : '')
       };
     } catch (_) {
@@ -567,6 +651,17 @@ export class ThemeSettingsRepository {
     await store.put('topBarOpacity', normalizeTopBarOpacity(snapshot.topBarOpacity));
     await store.put('bottomBarOpacity', normalizeBottomBarOpacity(snapshot.bottomBarOpacity));
     await store.put('appFontPath', normalizeAppFontPath(snapshot.appFontPath));
+    await store.put('navIconHome', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconHome, ''));
+    await store.put('navIconBookshelf', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconBookshelf, ''));
+    await store.put('navIconExplore', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconExplore, ''));
+    await store.put('navIconRss', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconRss, ''));
+    await store.put('navIconMy', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconMy, ''));
+    await store.put('navIconHomeSelected', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconHomeSelected, ''));
+    await store.put('navIconBookshelfSelected', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconBookshelfSelected, ''));
+    await store.put('navIconExploreSelected', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconExploreSelected, ''));
+    await store.put('navIconRssSelected', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconRssSelected, ''));
+    await store.put('navIconMySelected', ThemeSettingsRepository.normalizeNavIconPath(snapshot.navIconMySelected, ''));
+    await store.put('launcherIconId', snapshot.launcherIconId);
     await store.put('customTheme', JSON.stringify(normalizeCustomThemeSnapshot(snapshot.customTheme)));
     await store.flush();
   }

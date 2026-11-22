@@ -7,6 +7,9 @@
 // 平台边界：系统 TTS 无调速 API，语速滑杆只存值并如实标注；音色只有系统 3 条。
 
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
+import { CoverBlurBackdrop } from '../components/CoverBlurBackdrop';
+import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
+import { resolveGlassBlurRadius } from '../data/GlassColor';
 import { BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_LARGE_LINE_HEIGHT, LABEL_SMALL, TITLE_LARGE, TITLE_LARGE_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Extend(Text)
@@ -49,6 +52,14 @@ export struct ReadAloudPlayerPage {
   // 默认 Blur(1)。背景档由设置 readAloudPlayerBgMode 持久化，切换经 onBgModeChange 回写。
   @Prop bgIndex: number = 1;
   @State speedPreview: number = 5;
+  /**
+   * 封面取色得到的主色 `#RRGGBB`，供 `CoverBlurBackdrop` 的第 2 层插值用。
+   *
+   * 上游 `PlayerBackground.kt` 的 `CoverBlurBackdrop` 里 `LegadoTheme.seedColor` 是当前主题的
+   * seed —— 播放器场景下它来自 `PlayerThemeOverride.kt:56 rememberImageSeedColor(...)`，
+   * 也就是从封面图量化出来的主色。本地在 `aboutToAppear` 里用同一套量化器取一次。
+   */
+  @State coverSeedColor: string = '';
   @State timerModeSel: string = 'minute';
   @State timerMinutesSel: number = 10;
   @State timerChaptersSel: number = 1;
@@ -82,6 +93,26 @@ export struct ReadAloudPlayerPage {
 
   aboutToAppear(): void {
     this.speedPreview = this.parseRate(this.speedLabel);
+    this.loadCoverSeedColor();
+  }
+
+  /**
+   * 取封面主色，喂给背景第 2 层。
+   *
+   * 上游 `PlayerThemeOverride.kt:56-64` 是 `rememberImageSeedColor(...)` 后 `rememberThemeOverride`，
+   * 也就是播放器用自己的封面重算一套主题；本地播放器不换全局主题（换主题要走 Index 那套
+   * 广播，且退出播放器还得还原），只把 seed 用在背景叠层上 —— 视觉结果与上游那层一致。
+   */
+  private loadCoverSeedColor(): void {
+    if (this.coverUri.length === 0) {
+      this.coverSeedColor = '';
+      return;
+    }
+    ImageSeedColorExtractor.extract(this.coverUri).then((color: string) => {
+      this.coverSeedColor = color;
+    }).catch(() => {
+      this.coverSeedColor = '';
+    });
   }
 
   private parseRate(label: string): number {
@@ -141,26 +172,28 @@ export struct ReadAloudPlayerPage {
   BackgroundLayer() {
     Stack() {
       if (this.bgIndex === 1 && this.coverUri.length > 0) {
-        // Blur(1)：上游 CoverBlurBackdrop —— 封面拉伸铺满 + 高斯模糊 + 暗色遮罩。
-        Image(this.coverUri)
-          .width('100%').height('100%').objectFit(ImageFit.Cover)
-          .blur(40).scale({ x: 1.2, y: 1.2 })
-        Column().width('100%').height('100%').backgroundColor('#B3000000')
+        // Blur(1)：上游 `ui/widget/components/player/PlayerBackground.kt:32-38` → `CoverBlurBackdrop`，
+        // 三层依次是「封面铺满 + 高斯模糊 48dp」「lerp(secondaryContainer, seedColor, 0.42) alpha 0.38」
+        // 「surface alpha 0.52」。本地原来只有「封面模糊 + #B3000000 一层」，缺了后两层。
+        CoverBlurBackdrop({ coverUri: this.coverUri, seedColor: this.coverSeedColor, blurRadius: 48 })
       } else if (this.bgIndex === 2) {
-        // FlowingLight(2)：上游是封面模糊 + Compose 流动光 shader；鸿蒙 SDK 无对应着色器能力，
-        // 以封面模糊 + 静态渐变呈现，流动动画这一视觉细节平台做不到。
+        // FlowingLight(2)：上游 `PlayerBackground.kt:40-64` 在设备支持运行时着色器时用
+        // `CoverBlurBackdrop(blurRadius = 64.dp)` 打底再叠 `BgEffectBackground`；鸿蒙 SDK 无对应
+        // 着色器能力（平台边界，已在 A31 登记），故按上游「不支持」那一支的 48dp 打底，
+        // 再叠一层静态渐变补足流动光的观感。
         if (this.coverUri.length > 0) {
-          Image(this.coverUri).width('100%').height('100%').objectFit(ImageFit.Cover).blur(48)
+          CoverBlurBackdrop({ coverUri: this.coverUri, seedColor: this.coverSeedColor, blurRadius: 48 })
         }
         Column().width('100%').height('100%')
           .linearGradient({ angle: 135, colors: this.isDarkBg()
             ? [['#CC1A1A2E', 0], ['#CC2E1A3E', 0.5], ['#CC101820', 1]]
             : [['#CCB3C8FF', 0], ['#CCE8C8FF', 0.5], ['#CCFFD9C8', 1]] })
       } else if (this.bgIndex === 3) {
-        // Transparent(3)：上游透出下层；本地浮层透出阅读页，仅叠极淡遮罩保证文字可读。
+        // Transparent(3)：上游 `PlayerBackground.kt:66-68` 是空 Box，直接透出下层。
+        // 本地浮层透出阅读页，仅叠极淡遮罩保证文字可读。
         Column().width('100%').height('100%').backgroundColor(this.isDarkBg() ? '#33000000' : '#33FFFFFF')
       } else {
-        // Solid(0)：上游 surface 实色。
+        // Solid(0)：上游 `PlayerBackground.kt:70-77` 的 `surface` 实色。
         Column().width('100%').height('100%')
           .backgroundColor(this.isLightColor(this.surfacePrimary) ? this.surfacePrimary : '#17181D')
       }
@@ -325,7 +358,7 @@ export struct ReadAloudPlayerPage {
     .width('100%')
     .padding({ left: 20, right: 20, top: 10, bottom: 10 + this.appBottomInset })
     .backgroundColor(this.barBg())
-    .backdropBlur(20)
+    .backdropBlur(resolveGlassBlurRadius(20))
   }
 
   @Builder

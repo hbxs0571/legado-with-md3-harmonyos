@@ -156,6 +156,12 @@ export interface ReaderSettingsSnapshot extends ReaderInfoSettings {
   textFont: string;
   titleFont: string;
   systemTypefaces: number;
+  /**
+   * 用户自选的字体文件夹（目录路径），对应上游 `ReadSettings.kt:79 fontFolder: String = ""`
+   * （落盘键 `PreferKey.kt:77 fontFolder`）。空串表示未配置；读不到时由
+   * `data/AppFontLibrary.ets` 的 `AppFontFolderState` 区分「未配置/空/不可读」三种情况。
+   */
+  fontFolder: string;
   textItalic: boolean;
   textBold: number;
   textShadow: boolean;
@@ -839,6 +845,7 @@ export class ReaderSettingsRepository {
       textFont: '',
       titleFont: '',
       systemTypefaces: 0,
+      fontFolder: '',
       textItalic: false,
       textBold: 0,
       textShadow: false,
@@ -1033,6 +1040,7 @@ export class ReaderSettingsRepository {
       const textFontValue = await store.get('textFont', defaults.textFont);
       const titleFontValue = await store.get('titleFont', defaults.titleFont);
       const systemTypefacesValue = await store.get('system_typefaces', defaults.systemTypefaces);
+      const fontFolderValue = await store.get('fontFolder', defaults.fontFolder);
       const textItalicValue = await store.get('textItalic', defaults.textItalic);
       const textBoldValue = await store.get('textBold', defaults.textBold);
       const textShadowValue = await store.get('textShadow', defaults.textShadow);
@@ -1362,6 +1370,7 @@ export class ReaderSettingsRepository {
         textFont: textFont,
         titleFont: titleFont,
         systemTypefaces: systemTypefaces,
+        fontFolder: typeof fontFolderValue === 'string' ? fontFolderValue : defaults.fontFolder,
         textItalic: textItalic,
         textBold: textBold,
         textShadow: textShadow,
@@ -1606,6 +1615,7 @@ export class ReaderSettingsRepository {
       await store.put('textFont', settings.textFont);
       await store.put('titleFont', settings.titleFont);
       await store.put('system_typefaces', Math.max(0, Math.min(2, Math.round(settings.systemTypefaces))));
+      await store.put('fontFolder', settings.fontFolder);
       await store.put('textItalic', settings.textItalic);
       await store.put('textBold', ReaderSettingsRepository.normalizeInteger(settings.textBold, 0, 1000, 500));
       await store.put('textShadow', settings.textShadow);

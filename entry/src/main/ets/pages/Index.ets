@@ -1,5 +1,4 @@
 import { DURATION_FADE } from '../components/UiTokens';
-import curves from '@ohos.curves';
 import { AppRoute, Book, BookChapter, bookCoverColor, bookCoverMark, BookMediaType, ProfileRoute } from '../model/Book';
 import { ChapterDownloadQueue } from '../bookSource/ChapterDownloadQueue';
 import { AppLog } from '../lib/AppLog';
@@ -7,6 +6,7 @@ import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
 import { DiscoverPage } from './DiscoverPage';
+import { ExploreShowPage } from './ExploreShowPage';
 import { SubscriptionPage } from './SubscriptionPage';
 import { SubscriptionFavoritesPage, SubscriptionRulesPage, SubscriptionSourceManagePage } from './SubscriptionSubPages';
 import { ProfilePage } from './ProfilePage';
@@ -49,6 +49,8 @@ import { ThemeSettingsPage } from './ThemeSettingsPage';
 import { CustomThemePage } from './CustomThemePage';
 import { ThemeManagePage } from './ThemeManagePage';
 import { APP_FONT_FAMILY, appFontDisplayName, normalizeAppFontPath } from '../data/AppFontSettings';
+import { NavIconLibrary } from '../data/NavIconLibrary';
+import { disableLauncherIcon, selectLauncherIcon } from '../data/LauncherIconLibrary';
 import { OtherSettingsPage } from './OtherSettingsPage';
 import { AppReadAloudSettingsPage } from './AppReadAloudSettingsPage';
 import { AppCoverSettingsPage } from './AppCoverSettingsPage';
@@ -124,6 +126,7 @@ import {
   joinMainNavigation,
   mainNavigationLabel,
   moveNavigationDown,
+  moveNavigationTo,
   moveNavigationUp,
   normalizeDefaultHomePage,
   normalizeTabletInterface,
@@ -260,6 +263,11 @@ struct Index {
   @State readerSettingsOpenBottomActionConfig: boolean = false;
   @State searchReturnRoute: AppRoute = AppRoute.BOOKSHELF;
   @State searchPageQuery: string = '';
+  /** A23：「按给定 exploreUrl 看结果」那一页的三个入参，对齐上游 MainRouteExploreShow(title, sourceUrl, exploreUrl)。 */
+  @State exploreShowTitle: string = '';
+  @State exploreShowSourceUrl: string = '';
+  @State exploreShowUrl: string = '';
+  @State exploreShowReturnRoute: AppRoute = AppRoute.BOOK_INFO;
   /** :224 阅读器全文搜索初值（与书架搜索 searchPageQuery 分开，避免串页）。 */
   @State readerSearchQuery: string = '';
   @State searchPageGroup: string = '全部书籍';
@@ -370,6 +378,8 @@ struct Index {
   @State readerTextFont: string = '';
   @State readerTitleFont: string = '';
   @State readerSystemTypefaces: number = 0;
+  /** 用户自选的字体文件夹路径，对应上游 `ReadSettings.kt:79 fontFolder`。空串表示未配置。 */
+  @State readerFontFolder: string = '';
   @State readerTextItalic: boolean = false;
   @State readerTextBold: number = 0;
   @State readerTextShadow: boolean = false;
@@ -785,6 +795,13 @@ struct Index {
   @State themePredictiveBack: boolean = true;
   /** 阅读界面共享元素动画；上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
   @State themeReaderSharedElement: boolean = true;
+  /**
+   * 当前这次开书用的共享元素键（来自书架卡片，见 `data/BookCoverSharedElement.ets`）。
+   *
+   * 对齐上游 `MainNavGraph.kt:976` 把 `route.sharedCoverKey` 传给 `ReadBookRouteScreen`：
+   * 键随这一次导航一起走，不参与持久化；空串表示这次开书不参与共享元素转场。
+   */
+  @State readerSharedCoverKey: string = '';
   /** 顶栏与底栏的 15 个键，对齐上游 `TopBottomBarSettingsSheet.kt` + `ThemeSettings.kt:35-46`。 */
   @State themeEnableBlur: boolean = false;
   @State themeEnableProgressiveBlur: boolean = false;
@@ -803,6 +820,30 @@ struct Index {
   @State themeBottomBarOpacity: number = BOTTOM_BAR_OPACITY_DEFAULT;
   /** 应用字体在沙箱内的绝对路径；空串表示系统默认字体。对齐上游 `ThemeSettings.appFontPath`。 */
   @State themeAppFontPath: string = '';
+  /**
+   * 主导航十个自定义图标槽位，对齐上游 `AppShellSettings.kt:20-29`。
+   *
+   * 每个值都是 `filesDir/nav_icons/<内容摘要>.png` 的绝对路径，空串表示用内置矢量图标。
+   * 渲染端在 `navigationTabIconPath()` 里按 route + 选中态取。
+   */
+  @State themeNavIconHome: string = '';
+  @State themeNavIconBookshelf: string = '';
+  @State themeNavIconExplore: string = '';
+  @State themeNavIconRss: string = '';
+  @State themeNavIconMy: string = '';
+  @State themeNavIconHomeSelected: string = '';
+  @State themeNavIconBookshelfSelected: string = '';
+  @State themeNavIconExploreSelected: string = '';
+  @State themeNavIconRssSelected: string = '';
+  @State themeNavIconMySelected: string = '';
+  /**
+   * 当前使用的桌面图标 id，空串表示默认图标。
+   *
+   * 上游 `PreferKey.launcherIcon` 存 launcher-alias 类名，由 `LauncherIconHelp.changeIcon` 启用对应组件；
+   * 鸿蒙没有 alias，等价物是 AppGallery Kit 动态图标 id（`data/LauncherIconLibrary.ets`），
+   * 语义相同：记住用户选的那个，冷启动后 `applyLauncherIcon` 重新应用一次。
+   */
+  @State themeLauncherIconId: string = '';
   /**
    * 自定义主题配色（上游 `appTheme == "12"` 那套）。
    *
@@ -3018,6 +3059,17 @@ struct Index {
         topBarOpacity: this.themeTopBarOpacity,
         bottomBarOpacity: this.themeBottomBarOpacity,
         appFontPath: this.themeAppFontPath,
+        navIconHome: this.themeNavIconHome,
+        navIconBookshelf: this.themeNavIconBookshelf,
+        navIconExplore: this.themeNavIconExplore,
+        navIconRss: this.themeNavIconRss,
+        navIconMy: this.themeNavIconMy,
+        navIconHomeSelected: this.themeNavIconHomeSelected,
+        navIconBookshelfSelected: this.themeNavIconBookshelfSelected,
+        navIconExploreSelected: this.themeNavIconExploreSelected,
+        navIconRssSelected: this.themeNavIconRssSelected,
+        navIconMySelected: this.themeNavIconMySelected,
+        launcherIconId: this.themeLauncherIconId,
         customTheme: this.themeCustomColors
       },
       themeMode: this.themeMode
@@ -3100,6 +3152,17 @@ struct Index {
     this.themeTopBarOpacity = theme.topBarOpacity;
     this.themeBottomBarOpacity = theme.bottomBarOpacity;
     this.themeAppFontPath = theme.appFontPath;
+    this.themeNavIconHome = theme.navIconHome;
+    this.themeNavIconBookshelf = theme.navIconBookshelf;
+    this.themeNavIconExplore = theme.navIconExplore;
+    this.themeNavIconRss = theme.navIconRss;
+    this.themeNavIconMy = theme.navIconMy;
+    this.themeNavIconHomeSelected = theme.navIconHomeSelected;
+    this.themeNavIconBookshelfSelected = theme.navIconBookshelfSelected;
+    this.themeNavIconExploreSelected = theme.navIconExploreSelected;
+    this.themeNavIconRssSelected = theme.navIconRssSelected;
+    this.themeNavIconMySelected = theme.navIconMySelected;
+    this.themeLauncherIconId = theme.launcherIconId;
     this.themeCustomColors = theme.customTheme;
     this.applyDefaultHomePage();
     this.applyThemeFontScale(context);
@@ -3107,6 +3170,9 @@ struct Index {
     this.publishThemeCardStyle();
     this.publishTopBottomBarStyle();
     this.publishTopBarSwitches();
+    // 上游 Restore.kt:394 在恢复流程里按 PreferKey.launcherIcon 重放一次 changeIcon；
+    // 本地等价于冷启动读回 launcherIconId 后立刻向系统重放，系统清数据/换机后才不会退回默认图标。
+    this.applyThemeLauncherIcon();
     if (!hasStored && state.completed) {
       const mode = ThemeSettingsRepository.fromModeNumber(state.themeMode);
       await this.applyThemeMode(context, mode, state.paletteIndex, true);
@@ -3299,6 +3365,25 @@ struct Index {
   }
 
   /**
+   * 该项的自定义图标路径；空串表示用内置矢量图标。
+   *
+   * 上游 `AppShellSettings.kt:20-29` 十个槽位按「页面 + 是否选中」取
+   * （`ThemeConfigViewModel.kt:334-415` 的 `navIconPath(destination)`）。
+   * 路径指向的文件被外部删掉时 `NavIconLibrary.exists()` 为 false，渲染端回落内置图标，
+   * 不让底栏出现空白格。
+   */
+  private navigationTabIconPath(route: string): string {
+    const selected = this.selectedTab === this.navigationRouteTabIndex(route);
+    let path = '';
+    if (route === 'home') { path = selected ? this.themeNavIconHomeSelected : this.themeNavIconHome; }
+    else if (route === 'bookshelf') { path = selected ? this.themeNavIconBookshelfSelected : this.themeNavIconBookshelf; }
+    else if (route === 'explore') { path = selected ? this.themeNavIconExploreSelected : this.themeNavIconExplore; }
+    else if (route === 'rss') { path = selected ? this.themeNavIconRssSelected : this.themeNavIconRss; }
+    else { path = selected ? this.themeNavIconMySelected : this.themeNavIconMy; }
+    return NavIconLibrary.exists(path) ? path : '';
+  }
+
+  /**
    * 该项是否显示文字标签。上游 `labelVisibilityMode` 四档：
    * auto / selected（仅选中项）/ labeled（全部）/ unlabeled（全部隐藏）。
    */
@@ -3324,12 +3409,20 @@ struct Index {
     Column() {
       ForEach(this.visibleNavigationRoutes(), (navRoute: string) => {
         Row() {
-          AppGlyph({
-            name: this.navigationTabIcon(navRoute),
-            tint: this.selectedTab === this.navigationRouteTabIndex(navRoute)
-              ? this.themeColorTextPrimary : this.themeColorTextSecondary,
-            glyphSize: 24
-          })
+          if (this.navigationTabIconPath(navRoute).length > 0) {
+            Image(`file://${this.navigationTabIconPath(navRoute)}`)
+              .width(24)
+              .height(24)
+              .objectFit(ImageFit.Contain)
+              .opacity(this.selectedTab === this.navigationRouteTabIndex(navRoute) ? 1 : 0.74)
+          } else {
+            AppGlyph({
+              name: this.navigationTabIcon(navRoute),
+              tint: this.selectedTab === this.navigationRouteTabIndex(navRoute)
+                ? this.themeColorTextPrimary : this.themeColorTextSecondary,
+              glyphSize: 24
+            })
+          }
           if (this.navigationLabelVisible(navRoute)) {
             Text(mainNavigationLabel(navRoute))
               .fontSize(BODY_SMALL)
@@ -3408,6 +3501,18 @@ struct Index {
   /** 拖动排序：把 route 下移一位。 */
   private moveThemeNavigationDown(context: Context, route: string): void {
     const next = moveNavigationDown(orderedMainNavigation(this.themeMainNavigationOrder), route);
+    this.themeMainNavigationOrder = joinMainNavigation(next);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('导航顺序保存失败，请重试');
+    });
+  }
+
+  /**
+   * 拖动排序：把第 `from` 项移到第 `to` 位（取出再插入）。
+   * 对齐上游 `MainNavigationSettingsSheet.kt:38-46`：拖拽松手时一次性回写整串顺序。
+   */
+  private reorderThemeNavigation(context: Context, from: number, to: number): void {
+    const next = moveNavigationTo(orderedMainNavigation(this.themeMainNavigationOrder), from, to);
     this.themeMainNavigationOrder = joinMainNavigation(next);
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('导航顺序保存失败，请重试');
@@ -3509,6 +3614,16 @@ struct Index {
     AppStorage.setOrCreate('themeTopBarBlurRadius', this.themeEnableBlur ? this.themeTopBarBlurRadius : 0);
     AppStorage.setOrCreate('themeBottomBarBlurRadius', this.themeEnableBlur ? this.themeBottomBarBlurRadius : 0);
     AppStorage.setOrCreate('themeBottomBarRadius', resolveBottomBarCornerRadius(snapshot));
+    // 底部内缩档：上游 `BookshelfViewModel.kt:718/737` 的 `useRaisedBottomInset` 与
+    // `HomepageModuleFeed.kt:126` 都按 `useFloatingBottomBar || enableBlur` 把列表底部
+    // 从 8dp 抬到 120dp（`BookshelfScreen.kt:999/1769`）。书架与首页不在本页组件树里，
+    // 只能靠 AppStorage 把这两个开关广播过去。
+    AppStorage.setOrCreate('themeUseFloatingBottomBar', this.themeUseFloatingBottomBar);
+    AppStorage.setOrCreate('themeEnableBlur', this.themeEnableBlur);
+    // 渐变模糊开关：上游 `HazeStyle.kt:51-58` 按它决定 haze 是否挂
+    // `HazeProgressive.verticalGradient(1f, 0f)`，即模糊强度自上而下衰减到 0。
+    // 顶栏/底栏在 `components/TopBar.ets` 与 Index 底栏里渲染，同样只能走 AppStorage。
+    AppStorage.setOrCreate('themeEnableProgressiveBlur', this.themeEnableProgressiveBlur);
   }
 
   /**
@@ -3643,14 +3758,22 @@ struct Index {
   /**
    * 进阅读页的转场。
    *
-   * 上游 `readerSharedElementEnabled` 打开时走共享元素（书封展开），关闭时走渐变；
-   * ArkUI 的 `geometryTransition` 要求源与目标组件同时在场，本地是整页 if/else 切换，
-   * 做不到真正的共享元素，所以打开时用「缩小淡入 + 放大淡出」近似，关闭时只做淡入淡出。
+   * 共享元素打开时，整块阅读面板由 `geometryTransition`（书架封面与 `ReaderPage` 根节点
+   * 各挂一端，键来自 `data/BookCoverSharedElement.ets`）搬运，页面自身只做交叉淡入淡出，
+   * 时长取上游 `ui/main/ReaderSharedBounds.kt:52-58` 的 `enter = fadeIn(tween(140))` 与
+   * `exit = fadeOut(tween(600))`。
+   *
+   * 关闭时退回普通的 `DURATION_FADE` 淡入淡出，与上游 `readerSharedElementEnabled` 为 false
+   * 时一致。缩放不再参与：上游那块面是「只裁剪、不缩放」的板子（`ReaderSharedBounds.kt:60-64`
+   * 的 `ResizeMode.scaleToBounds(ContentScale.None, Alignment.TopStart)`）。
    */
   private readerRouteTransition(): TransitionEffect {
     const fade = TransitionEffect.OPACITY.animation({ duration: DURATION_FADE });
     if (!this.themeReaderSharedElement) { return fade; }
-    return fade.combine(TransitionEffect.scale({ x: 0.92, y: 0.92 }).animation({ curve: curves.springMotion(0.3, 0.85) }));
+    return TransitionEffect.asymmetric(
+      TransitionEffect.OPACITY.animation({ duration: 140 }),
+      TransitionEffect.OPACITY.animation({ duration: 600 })
+    );
   }
 
   /**
@@ -3896,6 +4019,29 @@ struct Index {
     this.themeTopBarOpacity = TOP_BAR_OPACITY_DEFAULT;
     this.themeBottomBarOpacity = BOTTOM_BAR_OPACITY_DEFAULT;
     this.themeAppFontPath = '';
+    // 上游 resetDefaults() 会连导航图标文件一起删（ThemeConfigViewModel.kt:205-240），
+    // 这里先把十个槽位清空，再按「已无引用」清目录，顺序不能反：先删文件会让槽位指向不存在的路径。
+    this.themeNavIconHome = '';
+    this.themeNavIconBookshelf = '';
+    this.themeNavIconExplore = '';
+    this.themeNavIconRss = '';
+    this.themeNavIconMy = '';
+    this.themeNavIconHomeSelected = '';
+    this.themeNavIconBookshelfSelected = '';
+    this.themeNavIconExploreSelected = '';
+    this.themeNavIconRssSelected = '';
+    this.themeNavIconMySelected = '';
+    NavIconLibrary.pruneAll(context, []);
+    // 上游 resetDefaults() 会把 launcherIcon 重置成 "ic_launcher" 并立刻
+    // ChangeLauncherIcon（ThemeConfigViewModel.kt:237），这里等价成「恢复系统默认图标」。
+    // 只有原本用过自定义图标时才调系统接口：否则系统会返回「无动态图标数据」这类噪音提示。
+    const previousLauncherIconId = this.themeLauncherIconId;
+    this.themeLauncherIconId = '';
+    if (previousLauncherIconId.length > 0) {
+      disableLauncherIcon().then((failure: string) => {
+        if (failure.length > 0) { this.showUnavailableAction(failure); }
+      }).catch(() => {});
+    }
     this.themeCustomColors = defaultCustomThemeSnapshot();
     this.applyThemeFontScale(context);
     this.applyThemeStatusBar(context);
@@ -4013,6 +4159,17 @@ struct Index {
       topBarOpacity: this.themeTopBarOpacity,
       bottomBarOpacity: this.themeBottomBarOpacity,
       appFontPath: this.themeAppFontPath,
+      navIconHome: this.themeNavIconHome,
+      navIconBookshelf: this.themeNavIconBookshelf,
+      navIconExplore: this.themeNavIconExplore,
+      navIconRss: this.themeNavIconRss,
+      navIconMy: this.themeNavIconMy,
+      navIconHomeSelected: this.themeNavIconHomeSelected,
+      navIconBookshelfSelected: this.themeNavIconBookshelfSelected,
+      navIconExploreSelected: this.themeNavIconExploreSelected,
+      navIconRssSelected: this.themeNavIconRssSelected,
+      navIconMySelected: this.themeNavIconMySelected,
+      launcherIconId: this.themeLauncherIconId,
       customTheme: this.themeCustomColors
     });
   }
@@ -4163,6 +4320,144 @@ struct Index {
     }
   }
 
+  /**
+   * 选中「已导入」的字体文件。
+   *
+   * 上游 `ThemeConfigViewModel.kt:555-582` 的 `setAppFont(fileDoc)` 会把选中的字体复制成
+   * `app_font_<内容摘要>.<ext>` 再写路径；本地字体网格里的条目已经是 `filesDir/fonts/` 下的
+   * 副本（`data/AppFontLibrary.ets` 导入时按内容摘要命名），所以这里直接落路径、清掉其余副本。
+   */
+  private selectThemeAppFont(context: Context, path: string): void {
+    try {
+      const normalized = normalizeAppFontPath(path);
+      if (normalized.length === 0) { return; }
+      this.themeAppFontPath = normalized;
+      this.pruneThemeAppFonts(`${context.filesDir}/fonts`, normalized);
+      this.applyThemeAppFont();
+      this.saveThemeSettings(context).catch(() => {});
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '设置字体失败');
+    }
+  }
+
+  /**
+   * 写回字体文件夹偏好（上游 `ReadSettings.fontFolder`）。
+   *
+   * 上游存的是 SAF tree URI，本地存文档选择器给的 URI，两者都只在授权有效期内可用；
+   * 读取失败由 `data/AppFontLibrary.ets` 的 `readFolder` 报 `Unreadable`，面板会提示重选。
+   */
+  private changeReaderFontFolder(context: Context, path: string): void {
+    this.readerFontFolder = path;
+    const snapshot = this.getCurrentReaderSettingsSnapshot();
+    ReaderSettingsRepository.save(context, snapshot).catch(() => {});
+  }
+
+  /** 槽位名 → 当前路径，写回用。 */
+  private themeNavIconPathOf(slot: string): string {
+    if (slot === 'home') { return this.themeNavIconHome; }
+    if (slot === 'bookshelf') { return this.themeNavIconBookshelf; }
+    if (slot === 'explore') { return this.themeNavIconExplore; }
+    if (slot === 'rss') { return this.themeNavIconRss; }
+    if (slot === 'my') { return this.themeNavIconMy; }
+    if (slot === 'homeSelected') { return this.themeNavIconHomeSelected; }
+    if (slot === 'bookshelfSelected') { return this.themeNavIconBookshelfSelected; }
+    if (slot === 'exploreSelected') { return this.themeNavIconExploreSelected; }
+    if (slot === 'rssSelected') { return this.themeNavIconRssSelected; }
+    if (slot === 'mySelected') { return this.themeNavIconMySelected; }
+    return '';
+  }
+
+  /** 十个槽位当前路径，清理旧文件时判断是否还被别人引用。 */
+  private themeNavIconAllPaths(): string[] {
+    const paths: string[] = [];
+    paths.push(this.themeNavIconHome);
+    paths.push(this.themeNavIconBookshelf);
+    paths.push(this.themeNavIconExplore);
+    paths.push(this.themeNavIconRss);
+    paths.push(this.themeNavIconMy);
+    paths.push(this.themeNavIconHomeSelected);
+    paths.push(this.themeNavIconBookshelfSelected);
+    paths.push(this.themeNavIconExploreSelected);
+    paths.push(this.themeNavIconRssSelected);
+    paths.push(this.themeNavIconMySelected);
+    return paths;
+  }
+
+  /** 把某个槽位设成新路径；未识别的槽位名直接忽略。 */
+  private assignThemeNavIcon(slot: string, path: string): void {
+    if (slot === 'home') { this.themeNavIconHome = path; }
+    else if (slot === 'bookshelf') { this.themeNavIconBookshelf = path; }
+    else if (slot === 'explore') { this.themeNavIconExplore = path; }
+    else if (slot === 'rss') { this.themeNavIconRss = path; }
+    else if (slot === 'my') { this.themeNavIconMy = path; }
+    else if (slot === 'homeSelected') { this.themeNavIconHomeSelected = path; }
+    else if (slot === 'bookshelfSelected') { this.themeNavIconBookshelfSelected = path; }
+    else if (slot === 'exploreSelected') { this.themeNavIconExploreSelected = path; }
+    else if (slot === 'rssSelected') { this.themeNavIconRssSelected = path; }
+    else if (slot === 'mySelected') { this.themeNavIconMySelected = path; }
+  }
+
+  /**
+   * 换某个槽位的图标。
+   *
+   * 对齐上游 `ThemeConfigViewModel.kt:334-415 selectNavigationIcon()`：写入新路径后，
+   * 旧文件只有在不再被任何槽位引用时才删（图标按内容摘要命名，多槽位可能共享同一张图）。
+   */
+  private selectThemeNavIcon(context: Context, slot: string, path: string): void {
+    try {
+      if (path.length === 0) { return; }
+      const oldPath = this.themeNavIconPathOf(slot);
+      this.assignThemeNavIcon(slot, path);
+      NavIconLibrary.pruneReplaced(context, this.themeNavIconAllPaths(), oldPath, path);
+      this.saveThemeSettings(context).catch(() => {});
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '设置导航图标失败');
+    }
+  }
+
+  /** 清空某个槽位，并清掉不再被引用的图标文件。 */
+  private clearThemeNavIcon(context: Context, slot: string): void {
+    try {
+      const oldPath = this.themeNavIconPathOf(slot);
+      this.assignThemeNavIcon(slot, '');
+      NavIconLibrary.pruneReplaced(context, this.themeNavIconAllPaths(), oldPath, '');
+      this.saveThemeSettings(context).catch(() => {});
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '清除导航图标失败');
+    }
+  }
+
+  /**
+   * 切换桌面图标。
+   *
+   * 上游 `ThemeConfigViewModel.kt:331` 写 `appShellSettingsGateway.update { it.copy(launcherIcon = value) }`
+   * 后由 `ChangeLauncherIcon` 副作用调 `LauncherIconHelp.changeIcon()` 真正切组件；
+   * 本地同样先落盘再调用，落盘失败时把内存值回滚，避免下次冷启动重放一个没生效的 id。
+   */
+  private selectThemeLauncherIcon(context: Context, iconId: string): void {
+    const previous = this.themeLauncherIconId;
+    this.themeLauncherIconId = iconId;
+    this.saveThemeSettings(context).catch(() => {
+      this.themeLauncherIconId = previous;
+      this.showUnavailableAction('桌面图标设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 冷启动/恢复备份后按已存的 id 重新应用一次桌面图标。
+   *
+   * 上游 `Restore.kt:394` 在恢复流程里调 `LauncherIconHelp.changeIcon(getPrefString(PreferKey.launcherIcon))`；
+   * 鸿蒙的动态图标由系统记住，但用户换机、清除应用数据或系统回收后会回到默认，
+   * 所以每次启动都重放一次，与上游同一语义。
+   */
+  private applyThemeLauncherIcon(): void {
+    const iconId = this.themeLauncherIconId;
+    if (iconId.length === 0) { return; }
+    selectLauncherIcon(iconId).then((failure: string) => {
+      if (failure.length > 0) { this.showUnavailableAction(failure); }
+    }).catch(() => {});
+  }
+
   /** 清空自定义字体，回落到系统默认字体。 */
   private clearThemeAppFont(context: Context): void {
     this.themeAppFontPath = '';
@@ -4277,6 +4572,7 @@ struct Index {
       this.readerTextFont = settings.textFont;
       this.readerTitleFont = settings.titleFont;
       this.readerSystemTypefaces = settings.systemTypefaces;
+      this.readerFontFolder = settings.fontFolder;
       this.readerTextItalic = settings.textItalic;
       this.readerTextBold = settings.textBold;
       this.readerTextShadow = settings.textShadow;
@@ -4556,6 +4852,8 @@ struct Index {
         textFont: this.readerTextFont,
         titleFont: this.readerTitleFont,
         systemTypefaces: this.readerSystemTypefaces,
+        // 字体文件夹属于「外观页字体设置」的偏好，随快照原样带回去，避免保存时被清空。
+        fontFolder: this.readerFontFolder,
         textItalic: this.readerTextItalic,
         textBold: this.readerTextBold,
         textShadow: this.readerTextShadow,
@@ -7553,6 +7851,36 @@ private canWriteInto(dir: string): boolean {
   }
 
   /**
+   * A23：详情页关联书籍横幅里点一本书。
+   *
+   * 上游 `BookInfoViewModel.kt:551` 的 `RelatedBookClick` 最终发
+   * `ExploreShowEffect.OpenBookInfo`（`ExploreShowScreen.kt:107-118`），落到同一个详情页入口，
+   * 与搜索/发现页点书走同一条路。本地把它包成 `MergedBook` 交给 `openOnlineBookInfo`，
+   * 复用「未上架书目」的落库与 `notShelf` 位语义。
+   */
+  private openRelatedBookInfo(item: SearchBookItem): void {
+    const merged: MergedBook = { book: item, origins: [item.origin], originCount: 1 };
+    this.openOnlineBookInfo(merged);
+  }
+
+  /**
+   * A23：详情页关联书籍横幅的「更多」。
+   *
+   * 对齐上游 `BookInfoViewModel.kt:1846-1859 onRelatedBooksMore`：`resolvedUrl` 空直接返回
+   * （作者兜底那条没有更多页可去），否则进「按给定 exploreUrl 直接看结果」的那一页 ——
+   * 上游是 `MainRouteExploreShow(title, sourceUrl, exploreUrl)`（`MainNavGraph.kt:583-591`）。
+   */
+  private openRelatedBooksExplore(title: string, sourceUrl: string, exploreUrl: string): void {
+    if (exploreUrl.length === 0) { return; }
+    if (sourceUrl.length === 0) { return; }
+    this.exploreShowTitle = title;
+    this.exploreShowSourceUrl = sourceUrl;
+    this.exploreShowUrl = exploreUrl;
+    this.exploreShowReturnRoute = this.route;
+    this.route = AppRoute.EXPLORE_SHOW;
+  }
+
+  /**
    * 批8（:369）：详情页点「放入书架」。照上游 AddToBookshelfUseCase.kt:26-40 六步：
    * 清 notShelf 位 → 冲突检测交给详情页面板 → 无冲突按 min-1 排序入架。
    * 详情页在有同名副本时不会调到这里（它先弹共存/迁移面板）。
@@ -8176,7 +8504,14 @@ private canWriteInto(dir: string): boolean {
     return next;
   }
 
-  private async openBook(book: Book): Promise<void> {
+  /**
+   * 打开书籍。
+   *
+   * `sharedCoverKey` 由书架卡片算好传进来（上游 `BookshelfScreen.kt:1778` 同一形态），
+   * 阅读页根节点拿它做共享元素入端。其它入口（首页卡片、搜索结果、文件管理、阅读记录）
+   * 没有源卡片在场，传空串表示不参与转场。
+   */
+  private async openBook(book: Book, sharedCoverKey: string = ''): Promise<void> {
     this.checkReadRecordAlias(book);
     const progressSynced = await this.warnNewerRemoteProgress(book);
     if (progressSynced !== undefined) { book = progressSynced; }
@@ -8290,6 +8625,8 @@ private canWriteInto(dir: string): boolean {
     this.readerReplaceUsesDefault = ReplaceRuleRepository.isBookUsingDefault(openedBook);
     this.selectedChapter = openedBook.lastChapter;
     this.readerContent = content;
+    // 共享元素键随这次导航走（上游 MainNavGraph.kt:976 `sharedCoverKey = route.sharedCoverKey`）。
+    this.readerSharedCoverKey = sharedCoverKey;
     this.route = AppRoute.READER;
   }  private openBookInfo(book: Book): void {
     this.bookInfoReturnRoute = this.route;
@@ -10380,12 +10717,16 @@ private canWriteInto(dir: string): boolean {
     // P9 书源脚本 ArkWeb 宿主：常驻隐藏 Web，为登录/脚本提供 StageWebRuntime 控制器。
     BookSourceStageRuntimeHost()
     // 全 App 背景图：上游 `ui/theme/AppBackground.kt:17-48` 把背景图铺在内容层之下、按日夜选路径与虚化度。
-    // 本地放在根 Stack 的首个子节点，`ImageFit.Cover` 填满；`.blur()` 接受动态半径。
+    // 本地放在根 Stack 的首个子节点，`ImageFit.Cover` 填满。
+    // 上游 `AppScaffold.kt:248-268`：开模糊时背景图挂 `hazeSource(hazeState)`（自己不做 blur，由上层
+    // haze 效果采样时模糊）；关模糊时才按 `backgroundImageBlurring` 直接 `.blur()`。
+    // 本地 `backdropBlur` 采样的就是「组件自身背后」，栏上的模糊会把背景图一起糊掉，
+    // 所以这里同样只在关模糊时给背景图加 blur —— 两档语义与上游一致，不是省略。
     if (this.appBackgroundSource().length > 0) {
       Image(`file://${this.appBackgroundSource()}`)
         .width('100%').height('100%')
         .objectFit(ImageFit.Cover)
-        .blur(this.appBackgroundBlur())
+        .blur(this.themeEnableBlur ? 0 : this.appBackgroundBlur())
         .hitTestBehavior(HitTestMode.None)
     }
     Column() {
@@ -10442,6 +10783,8 @@ private canWriteInto(dir: string): boolean {
           layout: this.bookshelfLayout,
           coverSettings: this.coverSettings,
           readerNightMode: this.readerNightMode,
+          // 共享元素开关：关闭时书架卡片不登记共享元素键（上游 BookshelfScreen.kt:1778 同条件）。
+          readerSharedElement: this.themeReaderSharedElement,
           refreshingBookIds: this.refreshingBookIds,
           // :368（批6，r360）：加载态驱动标题逐字淡入。
           bookshelfLoading: this.bookshelfLoading,
@@ -10455,7 +10798,8 @@ private canWriteInto(dir: string): boolean {
           onChooseGroupCover: (id: number) => this.chooseBookshelfGroupCover(id),
           onClearGroupCover: (id: number) => this.clearBookshelfGroupCover(id),
           onMoveGroup: (fromId: number, toId: number) => this.moveBookshelfGroup(fromId, toId),
-          onOpenBook: (book: Book) => this.openBook(book),
+          // 书架卡片把共享元素键一起传出来（上游 BookshelfScreen.kt:1778 → MainNavGraph.kt:976）。
+          onOpenBook: (book: Book, sharedCoverKey: string) => this.openBook(book, sharedCoverKey),
           onOpenBookInfo: (book: Book) => this.openBookInfo(book),
           onSearch: () => this.openSearch(),
           onImportBook: () => this.importLocalBook(),
@@ -10516,6 +10860,9 @@ private canWriteInto(dir: string): boolean {
           networkCoverBackground: this.bookInfoNetworkCoverBackground,
           defaultCoverBackground: this.bookInfoDefaultCoverBackground,
           coverSettings: this.coverSettings,
+          // 默认封面按 isNight 分白天/夜间两套相册取图（上游 BookCover.kt:58-63 + :80-88），
+          // 详情页背景层与取色都走同一套，这里下发全局夜间状态。
+          isNight: this.readerNightMode,
           onBack: () => this.route = this.bookInfoReturnRoute,
           onRead: () => this.openBook(this.selectedBook),
           onOpenCatalog: () => this.openCatalogFromBookInfo(),
@@ -10534,6 +10881,12 @@ private canWriteInto(dir: string): boolean {
           onToggleCanUpdate: (canUpdate: boolean) => { void this.toggleBookCanUpdate(canUpdate); },
           onToggleSplitLongChapter: () => { void this.toggleSplitLongChapter(); },
           onChooseCover: () => this.chooseBookCover(),
+          // A23：关联书籍。开关本体在外观页，这里只把当前值下发给详情页做兜底判定。
+          relatedBooksAuthorFallback: this.bookInfoAuthorSearchFallback,
+          // 点关联书籍里的一本 → 走「未上架书目」那条链路（上游 RelatedBookClick → OpenBookInfo）。
+          onOpenRelatedBook: (item: SearchBookItem) => this.openRelatedBookInfo(item),
+          onOpenRelatedBooksMore: (title: string, sourceUrl: string, exploreUrl: string) =>
+            this.openRelatedBooksExplore(title, sourceUrl, exploreUrl),
           onRestoreCover: () => this.restoreBookCover(),
           onSaveMetadata: (title: string, author: string, category: string, description: string,
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
@@ -10608,6 +10961,9 @@ private canWriteInto(dir: string): boolean {
           if (this.readerSettingsLoaded || this.route !== AppRoute.READER) {
           ReaderPage({
             startAtChapterBeginning: this.readerStartAtChapterBeginning,
+            // 共享元素键：由书架卡片算好（见 data/BookCoverSharedElement.ets），
+            // 对齐上游 MainNavGraph.kt:976 把 route.sharedCoverKey 传给阅读页。
+            sharedCoverKey: this.readerSharedCoverKey,
             book: this.selectedBook,
             bookmarks: this.readerBookmarks,
             markings: this.readerMarkings.filter((marking: ReaderMarking) =>
@@ -11341,6 +11697,20 @@ private canWriteInto(dir: string): boolean {
           onExactMatchChange: (enabled: boolean) => this.searchPageExactMatch = enabled
         })
         .transition(this.routeTransition())
+        } else if (this.route === AppRoute.EXPLORE_SHOW) {
+        ExploreShowPage({
+          title: this.exploreShowTitle,
+          sourceUrl: this.exploreShowSourceUrl,
+          exploreUrl: this.exploreShowUrl,
+          shelfBooks: this.books,
+          coverSettings: this.coverSettings,
+          isNight: this.readerNightMode,
+          exploreFilterState: this.coverSettings.exploreFilterState,
+          onBack: () => this.route = this.exploreShowReturnRoute,
+          onOpenBook: (item: SearchBookItem) => this.openRelatedBookInfo(item),
+          onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+        })
+        .transition(this.routeTransition())
         } else if (this.route === AppRoute.PROFILE_SUBPAGE) {
         if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_MANAGE) {
           BookSourceManagePage({
@@ -11679,6 +12049,38 @@ private canWriteInto(dir: string): boolean {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.clearThemeAppFont(themeContext); }
             },
+            fontFolder: this.readerFontFolder,
+            onSelectAppFont: (path: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeAppFont(themeContext, path); }
+            },
+            onChangeFontFolder: (path: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.changeReaderFontFolder(themeContext, path); }
+            },
+            navIconHome: this.themeNavIconHome,
+            navIconBookshelf: this.themeNavIconBookshelf,
+            navIconExplore: this.themeNavIconExplore,
+            navIconRss: this.themeNavIconRss,
+            navIconMy: this.themeNavIconMy,
+            navIconHomeSelected: this.themeNavIconHomeSelected,
+            navIconBookshelfSelected: this.themeNavIconBookshelfSelected,
+            navIconExploreSelected: this.themeNavIconExploreSelected,
+            navIconRssSelected: this.themeNavIconRssSelected,
+            navIconMySelected: this.themeNavIconMySelected,
+            onSelectNavIcon: (slot: string, path: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeNavIcon(themeContext, slot, path); }
+            },
+            onClearNavIcon: (slot: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.clearThemeNavIcon(themeContext, slot); }
+            },
+            launcherIconId: this.themeLauncherIconId,
+            onLauncherIconChange: (iconId: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeLauncherIcon(themeContext, iconId); }
+            },
             pureBlack: this.themePureBlack,
             onPureBlackChange: (enabled: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
@@ -11789,6 +12191,10 @@ private canWriteInto(dir: string): boolean {
               if (themeContext === undefined) { return; }
               if (up) { this.moveThemeNavigationUp(themeContext, route); }
               else { this.moveThemeNavigationDown(themeContext, route); }
+            },
+            onNavigationReorder: (from: number, to: number) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.reorderThemeNavigation(themeContext, from, to); }
             },
             onDefaultHomePageChange: (route: string) => {
               const themeContext = this.getUIContext().getHostContext();
@@ -12881,12 +13287,19 @@ private canWriteInto(dir: string): boolean {
       if (!this.shouldUseRail() && this.themeShowBottomView &&
         (this.route === AppRoute.HOME || this.route === AppRoute.BOOKSHELF || this.route === AppRoute.DISCOVER ||
           this.route === AppRoute.SUBSCRIPTIONS || this.route === AppRoute.PROFILE)) {
+        // 底栏不套 Stack：上游 `AppNavigationBar.kt:66` 挂的是 `Modifier.regularHazeEffect(hazeState)`
+        // （`HazeStyle.kt:96-110`），这一档**不挂** progressive（`verticalGradient` 只在
+        // `responsiveHazeEffect` 与 `responsiveHazeEffectFixedStyle` 里），所以底栏照上游只做单一半径模糊，
+        // 不跟「启用渐变模糊」开关走 —— 顶栏才跟（见 `components/TopBar.ets`）。
+        // 也正因为只有单一半径，模糊直接挂在 Row 上即可，不需要独立模糊层；
+        // 独立层写 `height('100%')` 会相对外层 Column 取高，把底栏撑满、内容区挤成 0。
         Row() {
           // 底栏项、顺序与显隐都来自「首页与导航」设置，对齐上游 `MainDestination.ordered` +
           // `showHome`/`showDiscovery`/`showRss`；标签显隐由 labelVisibilityMode 决定。
           ForEach(this.visibleNavigationRoutes(), (navRoute: string) => {
             TabItem({
               icon: this.navigationTabIcon(navRoute),
+              iconPath: this.navigationTabIconPath(navRoute),
               label: mainNavigationLabel(navRoute),
               selected: this.selectedTab === this.navigationRouteTabIndex(navRoute),
               showLabel: this.navigationLabelVisible(navRoute)
@@ -12909,6 +13322,8 @@ private canWriteInto(dir: string): boolean {
           })
           .margin(this.themeUseFloatingBottomBar ? { left: 16, right: 16, bottom: 8 } : 0)
           .borderRadius(this.bottomBarCornerRadius())
+          // 圆角 + 模糊同时生效时要裁在底栏范围内，否则模糊采样会溢出到内容区。
+          .clip(true)
           .backgroundColor(this.bottomBarBackgroundColor().length > 0 ? this.bottomBarBackgroundColor()
             : (this.themePureBlackActive ? '#121212' : this.themeColorSurfaceElevated))
           // 模糊档口径与上游**不同**，这里保留本地数值，只把差异记下来：
@@ -13051,6 +13466,13 @@ private canWriteInto(dir: string): boolean {
 @Component
 struct TabItem {
   @Prop icon: AppGlyphName = 'home';
+  /**
+   * 自定义图标路径，空串表示用内置矢量图标。
+   *
+   * 对齐上游 `AppShellSettings.kt:20-29` 的十个 `navIconXxx` 槽位：有自定义图时画图，
+   * 没有时回落 `icon`。上游 `AppNavigationBar.kt` 同一位置也是这两种来源二选一。
+   */
+  @Prop iconPath: string = '';
   @Prop label: string = '';
   @Prop selected: boolean = false;
   /** 是否显示文字标签；由 labelVisibilityMode 决定，对齐上游 `labelVisibilityMode`。 */
@@ -13070,11 +13492,19 @@ struct TabItem {
     Column() {
       Stack({ alignContent: Alignment.Center }) {
         // 图标 24vp：上游 `AppIcon.kt:82-86` 走 Material 默认 24dp。
-        AppGlyph({
-          name: this.icon,
-          tint: this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary,
-          glyphSize: 24
-        })
+        if (this.iconPath.length > 0) {
+          Image(`file://${this.iconPath}`)
+            .width(24)
+            .height(24)
+            .objectFit(ImageFit.Contain)
+            .opacity(this.selected ? 1 : 0.74)
+        } else {
+          AppGlyph({
+            name: this.icon,
+            tint: this.selected ? this.themeColorTextPrimary : this.themeColorTextSecondary,
+            glyphSize: 24
+          })
+        }
       }
         // 指示器 64×32、圆角 16：上游 `AppNavigationBar.kt:148-156`。
       .width(64).height(32)

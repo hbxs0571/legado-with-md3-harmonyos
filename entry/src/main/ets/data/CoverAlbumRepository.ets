@@ -2,6 +2,17 @@ import { fileIo, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
+import { KotlinRandom } from './KotlinRandom';
+
+/**
+ * 内置默认封面的占位标识，对齐上游 `CoilBookCover.kt:66 DefaultCoverPath = "use_default_cover"`。
+ *
+ * 相册里一张图都没有时，上游 `BookCover.kt:70-72` 返回打包在 APK 里的
+ * `R.drawable.image_cover_default`；本地对应 `resources/base/media/image_cover_default.png`
+ * （与上游同一张图，600×900，sha256 00b7cf58…cbe749）。这里只传标识、不传路径：
+ * 渲染端按标识换成 `$r('app.media.image_cover_default')`，因为 resource 不是文件系统路径。
+ */
+export const BUILTIN_DEFAULT_COVER: string = 'use_default_cover';
 
 /**
  * 默认封面相册的数据层。
@@ -83,22 +94,38 @@ export class CoverAlbumRepository {
   }
 
   /**
-   * 当前选中相册的默认封面图路径（A3「使用默认封面」用）。
+   * 当前选中相册里按 seed 选中的那张默认封面路径。
    *
-   * 白天优先 lightImages、夜间优先 darkImages，取首张；对应一套为空时回落到另一套，
-   * 与上游 CoverAlbumRepository.kt:90-96 selectedImagePaths(isDark) 的取图方向一致。
-   * 未选相册或相册无图时返回空串，调用方据此走文字占位。
+   * 对齐上游 `model/BookCover.kt:80-88 getRandomDefaultPath(seed, isNight)`：
+   * 相册没有可用图时返回空串（上游返回 null），调用方据此走「书本图标 + 书名」占位；
+   * 有图时用 `Random(seed.hashCode())` 选一张，seed 由调用方传书名/作者，
+   * 保证同一本书每次落到同一张（`CoilBookCover.kt:144-150` 就是这么传的）。
+   *
+   * 注意：上游 CoilBookCover 走的是这条路径，它**不画**打包里的
+   * `R.drawable.image_cover_default`——那张内置图只出现在 `BookCover.defaultDrawable`
+   * 的消费方（web 服务 /cover、PhotoSheet、PhotoDialog 的 error 兜底）。
+   * 本地同理：`BUILTIN_DEFAULT_COVER` 只给大图预览的加载失败兜底用，不在这里返回。
    */
-  static defaultCoverPath(isNight: boolean): string {
+  static defaultCoverPath(isNight: boolean, seed: string = ''): string {
+    const paths = CoverAlbumRepository.selectedImagePaths(isNight);
+    if (paths.length === 0) { return ''; }
+    return paths[KotlinRandom.forSeed(seed).nextIntUntil(paths.length)];
+  }
+
+  /**
+   * 选中相册某一套图的全部路径，对齐上游 `selectedImagePaths(isDark)`（`:90-96`）。
+   *
+   * 上游只取一套（isDark 决定 light 还是 dark），为空就是空，不回落另一套——
+   * 回落逻辑在上游是调用方按 `defaultCover`/`defaultCoverDark` 两个键各取一次实现的，
+   * 本地沿用同一口径：不在这里混两套，混了会让夜间档拿到白天图。
+   */
+  static selectedImagePaths(isNight: boolean): string[] {
     const selected = CoverAlbumRepository.cachedSelection;
-    if (selected.length === 0) { return ''; }
+    if (selected.length === 0) { return []; }
     const album = CoverAlbumRepository.cachedAlbums.find((item: CoverAlbumItem) => item.id === selected);
-    if (album === undefined) { return ''; }
+    if (album === undefined) { return []; }
     const preferred = isNight ? album.darkImages : album.lightImages;
-    if (preferred.length > 0) { return preferred[0].path; }
-    const fallback = isNight ? album.lightImages : album.darkImages;
-    if (fallback.length > 0) { return fallback[0].path; }
-    return '';
+    return preferred.map((item: CoverAlbumImageItem) => item.path);
   }
 
   private static rootDir(context: Context): string {

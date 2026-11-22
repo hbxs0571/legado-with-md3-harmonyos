@@ -1,4 +1,5 @@
 import { AppGlyph, AppGlyphName } from './AppGlyph';
+import { ProgressiveBackdrop } from './ProgressiveBackdrop';
 import { cubicBezierEasing } from './motion/CubicBezier';
 import { TYPE_SCALE_HEADLINE_MEDIUM, TYPE_SCALE_LABEL_LARGE, TYPE_SCALE_TITLE_LARGE } from './typography/TypographyTokens';
 
@@ -71,6 +72,12 @@ export struct AppTopBar {
   /** 顶栏底色（含不透明度与模糊），由 `Index.publishTopBottomBarStyle()` 广播。 */
   @StorageProp('themeTopBarBackground') themeTopBarBackground: string = '';
   @StorageProp('themeTopBarBlurRadius') themeTopBarBlurRadius: number = 0;
+  /**
+   * 「启用渐变模糊」，对齐上游 `ThemeSettings.kt:38 enableProgressiveBlur`（默认 false）。
+   * 上游在 `HazeStyle.kt:51-58` 里用它决定 haze 的 `HazeProgressive.verticalGradient(1f, 0f)`，
+   * 即模糊强度自上而下线性衰减到 0；本地靠 `components/ProgressiveBackdrop.ets` 分带实现。
+   */
+  @StorageProp('themeEnableProgressiveBlur') themeEnableProgressiveBlur: boolean = false;
   /** 「使用折叠应用栏」：关掉后恒 64 高单行（上游 pinned 分支）。 */
   @StorageProp('themeUseFlexibleTopAppBar') themeUseFlexibleTopAppBar: boolean = true;
   /** 「顶栏按钮样式」五档，决定动作区的行高、间距与胶囊。 */
@@ -211,74 +218,88 @@ export struct AppTopBar {
   }
 
   build() {
-    Column() {
-      // 第一行：收起态标题 + 导航 + 动作。这一行在任何折叠状态下都在，只是标题透明度在变。
-      Row() {
-        if (this.hasNavigation) {
-          Row() { this.navigationIcon() }.padding({ left: TOP_BAR_SIDE_PADDING })
+    Stack() {
+      // 模糊层独立成一层，放在内容之下：ArkUI 的 backdropBlur 采样的是「组件背后」，
+      // 拆出来之后采样源仍是顶栏背后的页面内容，与原来挂在内容节点上等价；
+      // 拆开是为了让「渐变模糊」能用多条不同半径的横带拼出强度梯度（见 ProgressiveBackdrop）。
+      if (this.themeTopBarBlurRadius > 0) {
+        if (this.themeEnableProgressiveBlur) {
+          ProgressiveBackdrop({ blurRadius: this.themeTopBarBlurRadius })
+        } else {
+          Column().width('100%').height('100%').backdropBlur(this.themeTopBarBlurRadius)
         }
-        Row() {
-          this.titleLine(TOP_BAR_TITLE_COLLAPSED_SIZE)
-        }
-        .padding({ left: this.hasNavigation ? 0 : TOP_BAR_TITLE_START, right: TOP_BAR_SIDE_PADDING })
-        // 收起行标题透明度：M3 走 TopTitleAlphaEasing(collapsedFraction)，不是布尔两态。
-        // 折叠被关掉时这一行就是常驻标题，恒为 1。
-        .opacity(!this.themeUseFlexibleTopAppBar ? 1 : this.topTitleAlpha())
-        Blank()
-        Row({ space: this.actionsSpacing() }) { this.actions() }
-          .height(topBarButtonSize(this.themeTopBarButtonStyle))
-          .borderRadius(topBarButtonSize(this.themeTopBarButtonStyle) / 2)
-          .backgroundColor(this.capsuleBackground())
-          .border({
-            width: this.mergedCapsule() && this.themeTopBarButtonStyle === 'outlined' ? 1 : 0,
-            color: this.themeColorTextTertiary
-          })
-          .clip(true)
       }
-      .width('100%')
-      .height(TOP_BAR_COLLAPSED_HEIGHT)
-      // 右端留 16：这个 padding 放在外层 Row 上，不能放在动作 Row 上——
-      // 放在动作 Row 上会被当作胶囊的内边距，胶囊会向右多出 16 宽。
-      .padding({ right: TOP_BAR_ACTIONS_END })
-
-      // 第二行：展开态大标题（+ 可选副标题）。导航与动作都不放，照 TwoRowsTopAppBar 的第二行。
-      // M3 里这一行的布局高度 = maxLayoutHeight + heightOffset，随 collapsedFraction 连续收缩
-      // （AppBar.kt:3123-3128 + 2920），所以这里高度也按比例收缩而不是布尔切换。
-      if (this.themeUseFlexibleTopAppBar && this.currentExpandedBodyHeight() > 0) {
-        Column() {
-          Column() {
-            this.titleLine(TOP_BAR_TITLE_EXPANDED_SIZE)
+      Column() {
+        // 第一行：收起态标题 + 导航 + 动作。这一行在任何折叠状态下都在，只是标题透明度在变。
+        Row() {
+          if (this.hasNavigation) {
+            Row() { this.navigationIcon() }.padding({ left: TOP_BAR_SIDE_PADDING })
           }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          if (this.subtitle.length > 0) {
-            Text(this.subtitle)
-              .fontSize(TOP_BAR_SUBTITLE_SIZE)
-              .fontColor(this.themeColorTextSecondary)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-              .textAlign(TextAlign.Start)
+          Row() {
+            this.titleLine(TOP_BAR_TITLE_COLLAPSED_SIZE)
           }
+          .padding({ left: this.hasNavigation ? 0 : TOP_BAR_TITLE_START, right: TOP_BAR_SIDE_PADDING })
+          // 收起行标题透明度：M3 走 TopTitleAlphaEasing(collapsedFraction)，不是布尔两态。
+          // 折叠被关掉时这一行就是常驻标题，恒为 1。
+          .opacity(!this.themeUseFlexibleTopAppBar ? 1 : this.topTitleAlpha())
+          Blank()
+          Row({ space: this.actionsSpacing() }) { this.actions() }
+            .height(topBarButtonSize(this.themeTopBarButtonStyle))
+            .borderRadius(topBarButtonSize(this.themeTopBarButtonStyle) / 2)
+            .backgroundColor(this.capsuleBackground())
+            .border({
+              width: this.mergedCapsule() && this.themeTopBarButtonStyle === 'outlined' ? 1 : 0,
+              color: this.themeColorTextTertiary
+            })
+            .clip(true)
         }
         .width('100%')
-        .height(this.currentExpandedBodyHeight())
-        .justifyContent(FlexAlign.End)
-        .padding({ left: TOP_BAR_TITLE_START, right: TOP_BAR_TITLE_START, bottom: this.titleBottomPadding() })
-        .clip(true)
-        // 展开行标题透明度：M3 `1f - collapsedFraction`。
-        .opacity(this.bottomTitleAlpha())
+        .height(TOP_BAR_COLLAPSED_HEIGHT)
+        // 右端留 16：这个 padding 放在外层 Row 上，不能放在动作 Row 上——
+        // 放在动作 Row 上会被当作胶囊的内边距，胶囊会向右多出 16 宽。
+        .padding({ right: TOP_BAR_ACTIONS_END })
+
+        // 第二行：展开态大标题（+ 可选副标题）。导航与动作都不放，照 TwoRowsTopAppBar 的第二行。
+        // M3 里这一行的布局高度 = maxLayoutHeight + heightOffset，随 collapsedFraction 连续收缩
+        // （AppBar.kt:3123-3128 + 2920），所以这里高度也按比例收缩而不是布尔切换。
+        if (this.themeUseFlexibleTopAppBar && this.currentExpandedBodyHeight() > 0) {
+          Column() {
+            Column() {
+              this.titleLine(TOP_BAR_TITLE_EXPANDED_SIZE)
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            if (this.subtitle.length > 0) {
+              Text(this.subtitle)
+                .fontSize(TOP_BAR_SUBTITLE_SIZE)
+                .fontColor(this.themeColorTextSecondary)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+                .textAlign(TextAlign.Start)
+            }
+          }
+          .width('100%')
+          .height(this.currentExpandedBodyHeight())
+          .justifyContent(FlexAlign.End)
+          .padding({ left: TOP_BAR_TITLE_START, right: TOP_BAR_TITLE_START, bottom: this.titleBottomPadding() })
+          .clip(true)
+          // 展开行标题透明度：M3 `1f - collapsedFraction`。
+          .opacity(this.bottomTitleAlpha())
+        }
       }
+      .width('100%')
+      .height('100%')
+      // 状态栏让位：内容整体下移 appTopInset，模糊层不受影响（它铺满整块）。
+      .padding({ top: this.appTopInset })
     }
     .width('100%')
     // 高度加 appTopInset：多出来的这段就是状态栏让位，不给它的话两行会被压扁。
     .height(this.totalHeight() + this.appTopInset)
-    .padding({ top: this.appTopInset })
     .clip(true)
     .backgroundColor(this.themeTopBarBackground.length > 0 ? this.themeTopBarBackground
       : (this.themeAppBackground.length > 0 ? '#00000000'
         : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)))
-    .backdropBlur(this.themeTopBarBlurRadius)
   }
 }
 

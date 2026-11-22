@@ -39,7 +39,8 @@ export function resolveBookInfoBackdropStyle(backgroundMode: string): BookInfoBa
  * 按封面来源选背景模式。
  *
  * 上游 `BookInfoScreen.kt:863-875`：使用默认封面时读 `bookInfoDefaultCoverBackground`，
- * 否则读 `bookInfoNetworkCoverBackground`。本地没有内置默认封面图，一律走网络封面那一档。
+ * 否则读 `bookInfoNetworkCoverBackground`。`usesDefaultCover` 的判定见上游
+ * `CoilBookCover.kt:106-108 usesDefaultBookCover(path)`（`cover.useDefaultCover || isDefaultCoverPath(path)`）。
  */
 export function resolveBookInfoBackdropStyleFor(
   usesDefaultCover: boolean,

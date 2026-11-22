@@ -1,5 +1,6 @@
 
 import { LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from './typography/TypographyTokens';
+import { resolveGlassColor, resolveGlassBlurRadius } from '../data/GlassColor';
 
 /**
  * 朗读面板共享的「磨砂玻璃」视觉组件。
@@ -17,17 +18,13 @@ import { LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_SMALL } from
 
 /**
  * 把 6 位 #RRGGBB 主题色转成带 alpha 的 8 位 #AARRGGBB。
- * alpha 对齐上游 GlassCard 的 `containerColor.alpha * alpha`（containerOpacity/100）。
+ *
+ * 语义已上收到 `data/GlassColor.ets`：对齐上游 `GlassDefaults.glassColor()`，
+ * 「模糊效果」关掉时返回**原色**（上游 `else noBlurColor`），不再无条件压 alpha。
+ * 保留这个名字是因为有 20 处调用点，改签名会牵动无关文件。
  */
 export function glassColor(color: string, alpha: number): string {
-  const a: number = Math.round(Math.max(0, Math.min(1, alpha)) * 255);
-  let hex: string = a.toString(16);
-  if (hex.length < 2) { hex = '0' + hex; }
-  hex = hex.toUpperCase();
-  if (color.length === 7 && color.charAt(0) === '#') {
-    return '#' + hex + color.substring(1);
-  }
-  return color;
+  return resolveGlassColor(color, alpha);
 }
 
 /**
@@ -140,7 +137,8 @@ export struct AloudSliderSetting {
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .backgroundColor(glassColor(this.themeColorSurfaceSecondary, 0.55))
-    .backdropBlur(16)
+    // 上游 `HazeStyle.kt:39` 的 `if (!enableBlur) return this`：关模糊时不挂模糊层。
+    .backdropBlur(resolveGlassBlurRadius(16))
     .borderRadius(12)
     .margin({ left: 12, right: 12, bottom: 6 })
     .opacity(this.settingEnabled ? 1 : 0.5)

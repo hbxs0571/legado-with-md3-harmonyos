@@ -25,6 +25,12 @@ export struct HomePage {
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
+  /**
+   * 底部内缩档的两个输入，由 `pages/Index.ets` 的 `publishTopBottomBarStyle()` 广播。
+   * 上游 `HomepageModuleFeed.kt:126`：`contentPadding(bottom = if (useFloatingBottomBar || enableBlur) 120.dp else 8.dp)`。
+   */
+  @StorageProp('themeUseFloatingBottomBar') themeUseFloatingBottomBar: boolean = false;
+  @StorageProp('themeEnableBlur') themeEnableBlur: boolean = false;
   @Prop books: Book[] = [];
   @Prop totalReadTimeMs: number = 0;
   // 今日阅读目标：由 Index 从偏好与今日阅读记录灌入，本页只显示与编辑（回写走 onGoalChange）。
@@ -369,7 +375,14 @@ export struct HomePage {
           }.width('100%').constraintSize({ minHeight: 220 }).justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
         }.width('100%').alignItems(HorizontalAlign.Start).justifyContent(FlexAlign.Start)
-          .padding({ left: 16, right: 16, top: 8, bottom: 14 })
+          // 底部内缩：上游 `HomepageModuleFeed.kt:126` 是
+          // `contentPadding(bottom = if (useFloatingBottomBar || enableBlur) 120.dp else 8.dp)`。
+          // 抬起档（120）照做；未抬起档本地原本是 14（与首页顶部 8 的卡片间距配套），
+          // 这一档不改，只在注释里登记与上游 8.dp 的差异。
+          .padding({
+            left: 16, right: 16, top: 8,
+            bottom: this.themeUseFloatingBottomBar || this.themeEnableBlur ? 120 : 14
+          })
           .constraintSize({ minHeight: '100%' })
         }.position({ x: 0, y: 0 })
         .edgeEffect(EdgeEffect.Spring).width('100%').height('100%').scrollBar(BarState.Off).onScroll(() => {

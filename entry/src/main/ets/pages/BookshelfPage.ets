@@ -13,6 +13,7 @@ import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepo
 import { BookRepository } from '../data/BookRepository';
 import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookCover } from '../components/BookCover';
+import { bookCoverSharedElementKey, bookshelfSharedCoverSourceId } from '../data/BookCoverSharedElement';
 import { BookGroupCard } from '../components/BookGroupCard';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
@@ -119,6 +120,13 @@ export struct BookshelfPage {
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
+  /**
+   * 底部内缩档的两个输入，由 `pages/Index.ets` 的 `publishTopBottomBarStyle()` 广播。
+   * 上游 `BookshelfViewModel.kt:718/737`：`useRaisedBottomInset = useFloatingBottomBar || enableBlur`，
+   * 消费点 `BookshelfScreen.kt:999/1769` 把底部内边距在 120.dp 与 8.dp 之间二选一。
+   */
+  @StorageProp('themeUseFloatingBottomBar') themeUseFloatingBottomBar: boolean = false;
+  @StorageProp('themeEnableBlur') themeEnableBlur: boolean = false;
   /** 书目：变化时重算 LazyForEach 数据源（:154）。 */
   @Prop @Watch('onBookshelfDataDirty') books: Book[] = [];
   @Prop groups: BookGroup[] = [];
@@ -128,6 +136,13 @@ export struct BookshelfPage {
   @Prop coverSettings: CoverSettings = DEFAULT_COVER_SETTINGS;
   /** 当前是否夜间主题，决定封面文字用日间还是夜间那一套开关与颜色。 */
   @Prop readerNightMode: boolean = false;
+  /**
+   * 阅读界面共享元素动画开关（外观页「阅读界面共享元素动画」）。
+   *
+   * 对齐上游 `AppShellSettings.kt:13 readerSharedElementEnabled`：关闭时不登记共享元素键，
+   * 封面与阅读页之间退回普通淡入淡出。
+   */
+  @Prop readerSharedElement: boolean = true;
   /** 正在刷新目录的书主键集合（来自 Index），网格卡据此显示更新中转圈（:120）。 */
   @Prop refreshingBookIds: string[] = [];
   /**
@@ -257,7 +272,7 @@ export struct BookshelfPage {
   private windowSizeListener: (size: window.Size) => void = (_size: window.Size): void => {};
   private readonly bookshelfScroller: Scroller = new Scroller();
   private readonly emptyFaces: string[] = ['(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)', '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'];
-  onOpenBook: (book: Book) => void = () => {};
+  onOpenBook: (book: Book, sharedCoverKey: string) => void = () => {};
   onOpenBookInfo: (book: Book) => void = () => {};
   onSearch: () => void = () => {};
   onImportBook: () => Promise<Book | undefined> = async () => undefined;
@@ -743,6 +758,30 @@ export struct BookshelfPage {
   /** 书籍的稳定键：与 books 表主键同口径（contentPath 优先），不用 book.id。 */
   private bookKey(book: Book): string {
     return LocalBookRestorePlanner.bookUrlOf(book);
+  }
+
+  /**
+   * 当前分组的分组 id，用作共享元素键的来源标识。
+   *
+   * 对齐上游 `BookshelfScreen.kt:1778` 的 `bookshelfSharedCoverSourceId(sharedCoverGroupId)`：
+   * 「全部」与「本地未分组」不是真实分组，用 0 表示，键里就不带来源段。
+   */
+  private sharedCoverSourceId(): string {
+    const selectedGroup = this.activeFilter();
+    const group = this.groups.find((item: BookGroup) => item.groupName === selectedGroup);
+    return bookshelfSharedCoverSourceId(group === undefined ? 0 : group.groupId);
+  }
+
+  /**
+   * 封面共享元素键。同一本书在不同分组页里键不同，避免两个页签同时在场时抢同一个锚点。
+   *
+   * 对齐上游 `ui/main/BookCoverSharedElement.kt:17-20 bookCoverSharedElementKey`。
+   */
+  private sharedCoverKeyOf(book: Book): string {
+    if (!this.readerSharedElement) {
+      return '';
+    }
+    return bookCoverSharedElementKey(this.bookKey(book), this.sharedCoverSourceId());
   }
 
   private isBookSelected(book: Book): boolean {
@@ -1740,6 +1779,19 @@ export struct BookshelfPage {
   }
 
   /**
+   * 列表底部内缩：`useFloatingBottomBar || enableBlur` 时 120vp，否则 8vp。
+   *
+   * 对齐上游 `BookshelfViewModel.kt:718/737` 的
+   * `useRaisedBottomInset = appShellSettings.useFloatingBottomBar || themeSettings.enableBlur`，
+   * 消费点 `BookshelfScreen.kt:999`（网格）与 `:1769`（列表）都是
+   * `bottom = if (uiState.useRaisedBottomInset) 120.dp else 8.dp`。
+   * 这两个开关不在本组件的参数里，走 AppStorage 广播（见 `pages/Index.ets` 的 `publishTopBottomBarStyle()`）。
+   */
+  private raisedBottomInset(): number {
+    return this.themeUseFloatingBottomBar || this.themeEnableBlur ? 120 : 8;
+  }
+
+  /**
    * 网格里单个格子能给出的封面宽度（vp）。
    *
    * 对齐上游 BookItem.kt:269-273：封面宽度由格子宽度决定，高度按 5:7 推导。
@@ -2647,7 +2699,10 @@ export struct BookshelfPage {
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.folderColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
-        .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
+        .padding({
+          left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING,
+          bottom: this.raisedBottomInset()
+        })
         .layoutWeight(1).scrollBar(BarState.Off)
       } else if (this.activeGroupLocked()) {
         this.PrivateGroupLockedPanel()
@@ -2683,6 +2738,8 @@ export struct BookshelfPage {
                         isNight: this.readerNightMode,
                         // 私密书封面盖一层锁遮罩（:325）。
                         locked: this.isBookLocked(book),
+                        // 共享元素源端（上游 BookItem.kt:797 同一位置）。
+                        sharedKey: this.sharedCoverKeyOf(book),
                         a11yText: [book.title, book.author, book.lastChapter]
                           .filter((value: string) => value.length > 0).join('，')
                       })
@@ -2774,6 +2831,8 @@ export struct BookshelfPage {
                     isNight: this.readerNightMode,
                     // 私密书封面盖一层锁遮罩（:325）。
                     locked: this.isBookLocked(book),
+                    // 共享元素源端（上游 BookItem.kt:797 同一位置）。
+                    sharedKey: this.sharedCoverKeyOf(book),
                     a11yText: [book.title, book.author, book.lastChapter]
                       .filter((value: string) => value.length > 0).join('，')
                   })
@@ -2822,7 +2881,8 @@ export struct BookshelfPage {
                   if (BookRepository.isBodyMissing(book)) {
                     this.onOpenBookInfo(book);
                   } else {
-                    this.onOpenBook(book);
+                    // 带上共享元素键：上游 BookshelfScreen.kt:1778 算完键后一路传到阅读页。
+                    this.onOpenBook(book, this.sharedCoverKeyOf(book));
                   }
                 })
                 // 手动排序下 Grid 的 onMove 拖拽同样靠长按启动，卡片这层必须先让位：
@@ -2864,7 +2924,10 @@ export struct BookshelfPage {
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.bookshelfColumnsTemplate())
         .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
-        .padding({ left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING })
+        .padding({
+          left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING,
+          bottom: this.raisedBottomInset()
+        })
         // 批10（:1453/:1456）：预加载半屏——按当前列数取 2 行（下限 6、上限 12），
         // LazyForEach 只建「视口 + cachedCount」的项，视口外这些卡的封面会提前进入加载队列。
         .cachedCount(this.coverCacheCount())

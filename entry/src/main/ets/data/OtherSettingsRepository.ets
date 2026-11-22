@@ -1,4 +1,5 @@
 import { preferences } from '@kit.ArkData';
+import { normalizeAppFontSort } from './AppFontLibrary';
 
 /**
  * 「其它设置」页三个真落盘的偏好（批 9）。
@@ -19,13 +20,20 @@ export interface OtherSettings {
    * 落盘键 PreferKey.kt:70 `recordLog`；AppLog.putDebug 用它门控（AppLog.kt:66-70）。
    */
   recordLog: boolean;
+  /**
+   * 字体列表排序档位。上游 `OtherSettings.kt:28 val fontSort: Int = 0`，
+   * 落盘键 `PreferKey.kt:78 fontSort`，0..5 依次对应
+   * `FontSelectGrid.kt:72-83 FontSort` 的名称升序/名称降序/大小升序/大小降序/时间升序/时间降序。
+   */
+  fontSort: number;
 }
 
 export const DEFAULT_OTHER_SETTINGS: OtherSettings = {
   defaultBookTreeUri: '',
   sourceEditMaxLine: 2147483647,
   webPort: 1122,
-  recordLog: false
+  recordLog: false,
+  fontSort: 0
 };
 
 export class OtherSettingsRepository {
@@ -34,11 +42,13 @@ export class OtherSettingsRepository {
   private static readonly keySourceEditMaxLine: string = 'sourceEditMaxLine';
   private static readonly keyWebPort: string = 'webPort';
   private static readonly keyRecordLog: string = 'recordLog';
+  private static readonly keyFontSort: string = 'fontSort';
   private static cached: OtherSettings = {
     defaultBookTreeUri: '',
     sourceEditMaxLine: 2147483647,
     webPort: 1122,
-    recordLog: false
+    recordLog: false,
+    fontSort: 0
   };
 
   private static publish(settings: OtherSettings): void {
@@ -46,7 +56,8 @@ export class OtherSettingsRepository {
       defaultBookTreeUri: settings.defaultBookTreeUri,
       sourceEditMaxLine: settings.sourceEditMaxLine,
       webPort: settings.webPort,
-      recordLog: settings.recordLog
+      recordLog: settings.recordLog,
+      fontSort: settings.fontSort
     };
   }
 
@@ -56,7 +67,8 @@ export class OtherSettingsRepository {
       defaultBookTreeUri: OtherSettingsRepository.cached.defaultBookTreeUri,
       sourceEditMaxLine: OtherSettingsRepository.cached.sourceEditMaxLine,
       webPort: OtherSettingsRepository.cached.webPort,
-      recordLog: OtherSettingsRepository.cached.recordLog
+      recordLog: OtherSettingsRepository.cached.recordLog,
+      fontSort: OtherSettingsRepository.cached.fontSort
     };
   }
 
@@ -66,12 +78,14 @@ export class OtherSettingsRepository {
     let sourceEditMaxLine = DEFAULT_OTHER_SETTINGS.sourceEditMaxLine;
     let webPort = DEFAULT_OTHER_SETTINGS.webPort;
     let recordLog = DEFAULT_OTHER_SETTINGS.recordLog;
+    let fontSort = DEFAULT_OTHER_SETTINGS.fontSort;
     try {
       const store = await preferences.getPreferences(context, OtherSettingsRepository.preferenceName);
       defaultBookTreeUri = store.getSync(OtherSettingsRepository.keyDefaultBookTreeUri, defaultBookTreeUri) as string;
       sourceEditMaxLine = store.getSync(OtherSettingsRepository.keySourceEditMaxLine, sourceEditMaxLine) as number;
       webPort = store.getSync(OtherSettingsRepository.keyWebPort, webPort) as number;
       recordLog = store.getSync(OtherSettingsRepository.keyRecordLog, recordLog) as boolean;
+      fontSort = store.getSync(OtherSettingsRepository.keyFontSort, fontSort) as number;
     } catch (error) {
       console.error(`其它设置读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -79,7 +93,8 @@ export class OtherSettingsRepository {
       defaultBookTreeUri: defaultBookTreeUri,
       sourceEditMaxLine: sourceEditMaxLine,
       webPort: webPort,
-      recordLog: recordLog
+      recordLog: recordLog,
+      fontSort: normalizeAppFontSort(fontSort)
     };
     OtherSettingsRepository.publish(settings);
     return settings;
@@ -92,6 +107,7 @@ export class OtherSettingsRepository {
     await store.put(OtherSettingsRepository.keySourceEditMaxLine, settings.sourceEditMaxLine);
     await store.put(OtherSettingsRepository.keyWebPort, settings.webPort);
     await store.put(OtherSettingsRepository.keyRecordLog, settings.recordLog);
+    await store.put(OtherSettingsRepository.keyFontSort, normalizeAppFontSort(settings.fontSort));
     await store.flush();
     OtherSettingsRepository.publish(settings);
   }

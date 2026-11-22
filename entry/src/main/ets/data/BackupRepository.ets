@@ -2458,6 +2458,8 @@ export class BackupRepository {
       // Android 字体路径属于 Android 私有目录；没有随 ZIP 附带可验证字体文件时保留本机选择。
       textFont: current.textFont,
       titleFont: current.titleFont,
+      // 字体文件夹同理：Android 侧是 SAF tree URI，跨设备无效，保留本机选择。
+      fontFolder: current.fontFolder,
       textFullJustify: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'textFullJustify') ?? current.textFullJustify,
       textBottomJustify: BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'textBottomJustify') ?? current.textBottomJustify,
       textItalic: BackupRepository.readJsonBoolean(selected, 'textItalic') ??
