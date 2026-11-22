@@ -204,10 +204,15 @@ export struct AppGlyph {
       // 路径取自 Material DeleteSweep（垃圾桶 + 三条递减横线），与上游语义一致。
       Image($r('app.media.app_delete_sweep')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'playArrow') {
-      // 上游 `Icons.Default.PlayArrow`（调试页「开始调试」）：复用已有 reader_play 资源。
-      Image($r('app.media.reader_play')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
+      // 上游 `Icons.Default.PlayArrow`（BookSourceDebugScreen.kt:93「开始调试」）。
+      // 不能复用 reader_play：那个是阅读器的「播放」图标，pathData 带镂空三角，与 Material
+      // PlayArrow 的实心三角不同。本地 app_play_arrow.svg 的 path 由官方 pathData
+      // `M8 5v14l11-7z`（viewBox 24）等比换算到 960 视口：M320,200 L320,760 L760,480 Z。
+      Image($r('app.media.app_play_arrow')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'stop') {
-      // 上游 `Icons.Default.Stop`（调试页「停止」）：复用已有 app_stop_square 资源。
+      // 上游 `Icons.Default.Stop`（BookSourceDebugScreen.kt:93「停止」）。
+      // app_stop_square.svg 的 pathData `M240,720L240,240L720,240L720,720L240,720Z` 与上游
+      // ic_stop_black_24dp.xml 逐字节相同，直接复用即可。
       Image($r('app.media.app_stop_square')).width(this.glyphSize).height(this.glyphSize).fillColor(this.tint)
     } else if (this.name === 'unfoldMore') {
       // 上游 `Icons.Default.UnfoldMore`（登录表单 select 型尾部的「展开更多」）：本地新增 app_unfold_more.svg。
