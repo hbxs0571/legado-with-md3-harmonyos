@@ -26,7 +26,7 @@ import { Context } from '@kit.AbilityKit';
 import { BookSource as LocalBookSource } from '../model/BookSource';
 import { BookSourceRepository } from '../data/BookSourceRepository';
 import { AppLog } from '../lib/AppLog';
-import { BookSourceCheckMarking, DEFAULT_RESPOND_TIME } from './BookSourceCheckMarking';
+import { BookSourceCheckMarking } from './BookSourceCheckMarking';
 import { LegadoSourceMapper } from './LegadoSourceMapper';
 import { SourceHttp } from './SourceHttp';
 import { WebBookService } from './WebBookService';
@@ -395,13 +395,11 @@ export class BookSourceCheckCoordinator {
     // 上游 :185-186：每轮先清掉上一轮的失效分组与错误注释，再按本轮结果重新打。
     marking.removeInvalidGroups();
     marking.removeErrorComment();
-    const failures: string[] = [];
     // 上游 :190 `source.getCheckKeyword(keyword)`：规则自带的 checkKeyWord 优先。
     const word: string = marking.getCheckKeyword(keyword);
     if (options.checkSearch) {
       if (source.searchUrl.length === 0) {
         marking.addGroup('搜索链接规则为空');
-        failures.push('搜索链接规则为空');
       } else {
         marking.removeGroup('搜索链接规则为空');
         gate.checkpoint();
@@ -409,10 +407,9 @@ export class BookSourceCheckCoordinator {
         gate.checkpoint();
         if (books.length === 0) {
           marking.addGroup('搜索失效');
-          failures.push('搜索失效');
         } else {
           marking.removeGroup('搜索失效');
-          await BookSourceCheckCoordinator.checkBook(source, books[0].bookUrl, true, options, gate, marking, failures);
+          await BookSourceCheckCoordinator.checkBook(source, books[0].bookUrl, true, options, gate, marking);
         }
       }
     }
@@ -420,7 +417,6 @@ export class BookSourceCheckCoordinator {
       const url: string = BookSourceCheckCoordinator.firstExploreUrl(source.exploreUrl);
       if (url.length === 0) {
         marking.addGroup('发现规则为空');
-        failures.push('发现规则为空');
       } else {
         marking.removeGroup('发现规则为空');
         gate.checkpoint();
@@ -428,10 +424,9 @@ export class BookSourceCheckCoordinator {
         gate.checkpoint();
         if (books.length === 0) {
           marking.addGroup('发现失效');
-          failures.push('发现失效');
         } else {
           marking.removeGroup('发现失效');
-          await BookSourceCheckCoordinator.checkBook(source, books[0].bookUrl, false, options, gate, marking, failures);
+          await BookSourceCheckCoordinator.checkBook(source, books[0].bookUrl, false, options, gate, marking);
         }
       }
     }
@@ -474,8 +469,7 @@ export class BookSourceCheckCoordinator {
    */
   private static async checkBook(
     source: EngineBookSource, bookUrl: string, searchBook: boolean,
-    options: BookSourceCheckOptions, gate: TimeoutGate, marking: BookSourceCheckMarking,
-    failures: string[]): Promise<void> {
+    options: BookSourceCheckOptions, gate: TimeoutGate, marking: BookSourceCheckMarking): Promise<void> {
     const type: string = searchBook ? '搜索' : '发现';
     if (!options.checkInfo) return;
     gate.checkpoint();
@@ -487,7 +481,6 @@ export class BookSourceCheckCoordinator {
       const message: string = error instanceof Error ? error.message : String(error);
       if (/目录|toc/i.test(message)) {
         marking.addGroup(type + '目录失效');
-        failures.push(type + '目录失效');
         return;
       }
       throw new Error(message);
@@ -502,7 +495,6 @@ export class BookSourceCheckCoordinator {
     } catch (error) {
       const message: string = error instanceof Error ? error.message : String(error);
       marking.addGroup(type + '目录失效');
-      failures.push(type + '目录失效');
       return;
     }
     gate.checkpoint();
@@ -517,7 +509,6 @@ export class BookSourceCheckCoordinator {
     if (usable.length === 0) {
       // 上游 TocEmptyException → addGroup("${type}目录失效")。
       marking.addGroup(type + '目录失效');
-      failures.push(type + '目录失效');
       return;
     }
     if (!options.checkContent) return;
@@ -528,13 +519,11 @@ export class BookSourceCheckCoordinator {
     } catch (error) {
       const message: string = error instanceof Error ? error.message : String(error);
       marking.addGroup(type + '正文失效');
-      failures.push(type + '正文失效');
       return;
     }
     if (content.trim().length === 0) {
       // 上游 ContentEmptyException("内容为空") → addGroup("${type}正文失效")。
       marking.addGroup(type + '正文失效');
-      failures.push(type + '正文失效');
       return;
     }
     // 上游 onSuccess：目录/正文都过就把这两个标签摘掉。
