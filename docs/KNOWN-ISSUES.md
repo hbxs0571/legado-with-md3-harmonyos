@@ -2790,6 +2790,73 @@ DevEco 自带离线文档（`plugins/openharmony/ohos-info-center-view/static/ho
 
 ---
 
+## 智能伴生分组：上游 13 个内置状态分组，本地只补了「本地未分组」（r368 盘点）
+
+**KI-BOOKGROUP1 书架没有「在读 / 未读 / 已读」这类自动状态分组** —— 状态：**未接**（判据已在书籍详情页存在，缺的是内置行与书架页签）
+
+### 一、这个词从哪来
+
+- 上游 `legado-with-MD3/README.md:35`（分支特性）原文：「**实用功能：** 新增书籍备注、智能伴生分组（自动归类已读/未读），支持**手柄**上下**翻页**。」
+- 本地 `README.md:39` 的对齐表已登记一行：「智能伴生分组 | 未接 | 按已读/未读自动归类的伴生分组未做」。
+- 代码里其实没有「智能」这个词：`grep -rn 智能` 在分组语境零命中（上游只用于「智能排序」「智能导入」「智能扫描」「智能适应」）。它的真身叫**伴生分组**（companion group），出处是 `data/AppDatabase.kt:352` 的注释原文：「伴生分组默认隐藏，仅『全部』默认显示；已有数据库不受影响，用户仍可在分组管理中手动开启」。
+
+### 二、上游的做法：13 行内置分组 + 按条件现算
+
+`AppDatabase.kt` 的 `onOpen` 用 `insert ... where not exists` 幂等插入 13 行（`:354`-`:444`），常量定义在 `data/entities/BookGroup.kt:31`-`:44`。用户从没建过这些组，它们也随数据库出现，所以叫「伴生」。
+
+| groupId | 名称 | 常量（`BookGroup.kt`） | `order` | 默认 `show` | 归类判据（`BookDao` 的 `@Query`） |
+| --- | --- | --- | --- | --- | --- |
+| -1 | 全部 | `IdAll` `:32` | -10 | 1 | 不筛（`flowAll`） |
+| -2 | 本地 | `IdLocal` `:33` | -9 | 0 | `type & local > 0`（`flowLocal` `:209`） |
+| -3 | 音频 | `IdAudio` `:34` | -8 | 0 | `type & audio > 0`（`flowAudio` `:173`） |
+| -4 | 网络未分组 | `IdNetNone` `:35` | -7 | 0 | 非本地非音频，且未进任何自定义分组（`flowNetNoGroup` `:250`） |
+| -5 | 本地未分组 | `IdLocalNone` `:36` | -6 | 0 | 本地书，且未进任何自定义分组（`flowLocalNoGroup` `:292`） |
+| -7 | 漫画 | `IdManga` `:37` | -25 | 0 | `type & image > 0`（`flowManga` `:625`） |
+| -8 | 小说 | `IdText` `:38` | -26 | 0 | `type & text > 0`（`flowText` `:661`） |
+| -11 | 更新失败 | `IdError` `:39` | -1 | 0 | `type & updateError > 0`（`flowUpdateError` `:404`） |
+| -20 | 在读 | `IdReading` `:40` | -30 | 0 | `totalChapterNum > 0 AND durChapterIndex > 0 AND durChapterIndex < totalChapterNum - 1`（`flowReading` `:589`） |
+| -21 | 未读 | `IdUnread` `:41` | -29 | 0 | `durChapterIndex = 0 AND durChapterPos = 0`（`flowUnread` `:441`） |
+| -22 | 已读 | `IdReadFinished` `:42` | -28 | 0 | `totalChapterNum > 0 AND durChapterIndex >= totalChapterNum - 1`（`flowReadFinished` `:477`） |
+| -23 | 连载已读 | `IdReadFinishedUpdate` `:43` | -27 | 0 | 已读 + `canUpdate = 1`（`flowReadFinishedUpdate` `:515`） |
+| -24 | 完本已读 | `IdReadFinishedComplete` `:44` | -26 | 0 | 已读 + `canUpdate = 0`（`flowReadFinishedComplete` `:553`） |
+
+- `IdRoot = -100`（`BookGroup.kt:31`）**不入库**：它是 `BookDao.kt:44` 的虚拟根，分组计数在 `:871` 的 UNION 里合成，界面上没有对应页签。
+- 除「全部」外 12 行默认 `show = 0`，所以新装用户书架上只看得到「全部」；其余要在分组管理里手动打开（`AppDatabase.kt:352` 注释说的就是这件事）。
+- `order` 有重复：小说 -26 与完本已读 -26 都是 -26（上游原样），说明 `order` 不唯一，排序不稳定时靠插入顺序兜底。
+
+### 三、「智能」在哪：不是成员表，是每组一条 `@Query`
+
+`BookDao.flowByGroup(groupId)`（`BookDao.kt:42`-`:62`）用 `when (groupId)` 把每个负 id 映射到一条独立查询，`flowBookShelfByGroup`（`:64`-`:83`，同名分支 `:66`-`:79`）也一一对应。表里的判据就是全部逻辑：书的状态一变，它自动从「未读」挪到「在读」、再挪到「已读」，用户不需要把书拖进组。所以 README 说的「自动归类已读/未读」指的是这层现算，不涉及任何成员关系表。
+
+README 只提了已读/未读，实际有五个阅读状态组（在读 / 未读 / 已读 / 连载已读 / 完本已读），区分开关是 `canUpdate`（连载中 vs 完本）。
+
+### 四、本地现状
+
+1. **只补了一行「本地未分组」**：`data/BookGroupRepository.ets:37` 的 `LOCAL_NONE_GROUP_ID = -5`、`:39` 的 `LOCAL_NONE_GROUP_NAME`，补行发生在 `:495`-`:508` 的 `normalize`（`order = -6`、`show = false`）。`:30`-`:36` 的注释说明了理由：老库与导入数据里都没有这一行，而它的显隐开关有界面入口，所以补齐保证可开可关。其余 11 行（本地 / 小说 / 漫画 / 音频 / 在读 / 未读 / 已读 / 连载已读 / 完本已读 / 网络未分组 / 更新失败）本地都没有。
+2. **书架页签只有三类**：`'全部'` + 自定义分组（`groupId > 0`）+「本地未分组」（`pages/BookshelfPage.ets:405`-`:409`）；「隐藏没有书籍的分组」只过滤自定义分组，`'全部'` 永远保留（`:425`-`:427`）。所以「在读 / 未读 / 已读」页签不存在。
+3. **判据其实已经写好了**：`pages/BookInfoPage.ets:620`-`:627` 的 `readStateLabel()` 已按上游口径分「未读 → 已读完 → 已读 N 章」三支，字段 `model/Book.ets:20` 的 `chapterIndex`、`:37` 的 `chapterCount`、`:115` 的 `durChapterTime` 都在。缺的不是数据，是把同一判据做成分组页签。
+4. **本地「未读」只以角标形式存在**：`BookshelfPage.ets:690`-`:694` 的「作者 · N 未读」是每本书的未读章节数，不是「未读分组」，两者不要混为一谈。
+
+### 五、要做的话缺什么（判断，未实现）
+
+- **内置行**：两条路。学上游 seed 12 行（默认 `show = 0`，与上游一致，但要把分组管理的内置行显隐入口做出来）；或不落库，把状态组做成固定页签——本地已有先例：「全部」不在库里却有页签（`BookshelfPage.ets:405` 的 `names = ['全部']`）。不落库省掉 seed 与分组管理交互，代价是与上游「可在分组管理里开关」的行为不一致。
+- **筛选**：本地书架的书列表是全量在内存还是 SQL 分页加载，**未核实**。若已全量，直接用 `chapterIndex / chapterProgress / chapterCount / canUpdate` 在内存过滤即可；若走 SQL，就要像上游一样按组加条件。
+- **交互**：若做落库方案，还要在 `GroupManagerSheet`（`pages/BookshelfPage.ets:1624`，挂载点在 `:2224`）里给内置行补「可切换显隐」的路径——本地目前只有「本地未分组」一行能切（`BookGroupRepository.ets:310`-`:313` 的 `setVisible`）。
+
+### 六、顺带发现
+
+- `data/BookGroupRepository.ets:31` 的注释写「对齐上游 `BookGroup.kt:35` 的 `IdLocalNone = -5L`」，实测该常量在 `BookGroup.kt:36`（`:35` 是 `IdNetNone = -4L`）。本轮只记在这里，没改源码。
+
+### 七、没验
+
+- 没上机看上游这些页签的真实表现（全部结论来自源码与 SQL，未跑设备）；
+- 没改任何源码，也没写实现；
+- 「本地书架是否全量加载」未核实（见第五节），这决定筛选放 SQL 层还是内存层。
+
+关联：[`docs/FEATURES.md`](FEATURES.md) 第一章书架、[`docs/GLOSSARY.md`](GLOSSARY.md) 的「伴生分组」词条、本地 `README.md:39` 的对齐表。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
