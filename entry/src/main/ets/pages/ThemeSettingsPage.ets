@@ -8,7 +8,7 @@ import { UiSlider } from '../components/settings/UiSlider';
 import { AppGlyph } from '../components/AppGlyph';
 import { ThemeModeSelector, ThemeColorSelector } from '../components/ThemeSelectors';
 import { appFontDisplayName } from '../data/AppFontSettings';
-import { ThemeItemDivider } from '../components/ThemeItemDivider';
+import { ThemeGroupColumn, ThemeGroupItem } from '../components/settings/ThemeGroupColumn';
 import { ThemeRefactorTipStore } from '../data/ThemeRefactorTipStore';
 import { resolvePaletteColors, ThemePaletteColors } from '../data/ThemePalette';
 import {
@@ -62,7 +62,6 @@ export struct ThemeSettingsPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
@@ -312,9 +311,16 @@ export struct ThemeSettingsPage {
 
   /**
    * 预览卡用的整套配色：上游 `ThemeCard`（`ThemeConfigScreen.kt:1195-1207`）按当前主题现算一套
-   * `getThemeColors(...)`，四块色分别取 `onSurfaceVariant` / `secondaryContainer` / `secondary` /
-   * `surfaceContainer` / `primary`。本地 `ThemePaletteColors` 没有 `secondaryContainer` 字段，
-   * 书块底色降级用 `surfaceContainerHigh`（否则会与内部 `secondary` 角标同色看不出层次）。
+   * `getThemeColors(...)`，五个色块分别取 `onSurfaceVariant`（顶条）/ `secondaryContainer`（书块）/
+   * `secondary`（书块角标）/ `surfaceContainer`（底条）/ `primary`（底条圆点）/ `surface`（卡底）。
+   *
+   * 上游这套预览色由 `getThemeColors(context, value, isDark, isAmoled, paletteStyle,
+   * customLightSeedColor, customNightSeedColor)` 现算（`ThemeConfigScreen.kt:1330`），七个入参里
+   * `isAmoled`（纯黑）与两个 seedColor（自定义配色）会影响结果；本地调色板是 14 档静态表
+   * （`data/ThemePalette.ets`），`resolvePaletteColors(index, isDark)` 只吃「档位 + 深色」两维，
+   * 纯黑由各页面 `themePureBlack ? '#000000' : ...` 的条件替换承接、自定义配色的 seed 本地不参与
+   * 调色板求值，所以预览卡与上游在「纯黑 / 自定义 seed」两种情形下会有色差。这条差异登记在报告
+   * 待办账本「主题管理页 / 自定义主题页」两行的备注里，不在本函数内伪造入参。
    */
   private previewPalette(): ThemePaletteColors {
     return resolvePaletteColors(this.paletteIndex, this.readerNightMode);
@@ -477,11 +483,6 @@ export struct ThemeSettingsPage {
     });
   }
 
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       CollapsingSettingsHeader({ title: '外观', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
@@ -499,7 +500,7 @@ export struct ThemeSettingsPage {
               // 书块 56×80，圆角 8，色 secondaryContainer；内部右上角 16×12、圆角 4 的 secondary 角标。
               Stack({ alignContent: Alignment.TopEnd }) {
                 Column().width(56).height(80).borderRadius(8)
-                  .backgroundColor(this.previewPalette().surfaceContainerHigh)
+                  .backgroundColor(this.previewPalette().secondaryContainer)
                 Row().width(16).height(12).borderRadius(4)
                   .backgroundColor(this.previewPalette().secondary)
                   .margin({ top: 4, right: 4 })
@@ -531,402 +532,475 @@ export struct ThemeSettingsPage {
               .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
           }
 
-          ThemeSectionTitle({ title: '主题模式' })
           // 上游「主题模式」一个分组里同时放模式三档与配色两行（`ThemeConfigScreen.kt:223`/`:237`），
-          // 本地原先拆成两张独立卡，这里合成一张，中间放分隔线。
-          Column() {
-            ThemeModeSelector({
-              selectedMode: this.themeMode === '1' ? 1 : this.themeMode === '2' ? 2 : 0,
-              onModeSelected: (mode: number) => this.onThemeModeChange(mode.toString())
-            }).padding({ top: 12, bottom: 12 })
-            ThemeItemDivider()
-            ThemeColorSelector({
-              selectedIndex: this.paletteIndex,
-              isDark: this.readerNightMode,
-              onPaletteSelected: (index: number) => this.onPaletteChange(index)
-            }).padding({ top: 12, bottom: 12 })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, bottom: 18 })
-            .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          Column() {
-            Row() {
-              Column() {
-                Text('纯黑深色模式').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
-              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              // 整行可点：点标题一侧也能切换（对齐上游 SwitchSettingItem）。
-              UiSwitchControl({
-                checked: this.pureBlack,
-                interactive: false,
-                onChange: (enabled: boolean) => this.onPureBlackChange(enabled)
-              })
-            }.padding({ left: 16, right: 16, top: 14, bottom: 14 })
-              .onClick(() => this.onPureBlackChange(!this.pureBlack))
-            ThemeItemDivider()
-            UiAction({showDivider: false, title: '字体设置', detail: this.appFontSummary(),
-              onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
-            if (this.appFontExpanded) {
-              ThemeItemDivider()
-              Row() {
-                UiAction({showDivider: false, title: '选择字体文件', onSelect: () => this.onPickAppFont() }).layoutWeight(1)
-                // 上游 FontSettingSheet 的 clear 是图标按钮（contentDescription=R.string.clear=清除），
-                // 不是独立文字行；本地用删除图标承接同一 onClearAppFont 回调（任务书 6.2）。
-                AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorTextTertiary })
-                  .padding({ left: 16, right: 16 }).accessibilityText('清除')
-                  .onClick(() => this.onClearAppFont())
-              }.width('100%')
+          // 本地原先拆成两张独立卡，这里合成一张，分隔线由条目自己负责。
+          ThemeGroupColumn({ title: '主题模式' }) {
+            ThemeGroupItem({ first: true }) {
+              ThemeModeSelector({
+                selectedMode: this.themeMode === '1' ? 1 : this.themeMode === '2' ? 2 : 0,
+                onModeSelected: (mode: number) => this.onThemeModeChange(mode.toString())
+              }).padding({ top: 12, bottom: 12 })
             }
-            ThemeItemDivider()
+            ThemeGroupItem() {
+              ThemeColorSelector({
+                selectedIndex: this.paletteIndex,
+                isDark: this.readerNightMode,
+                onPaletteSelected: (index: number) => this.onPaletteChange(index)
+              }).padding({ top: 12, bottom: 12 })
+            }
+          }
+
+          ThemeGroupColumn() {
+            ThemeGroupItem({ first: true }) {
+              Row() {
+                Column() {
+                  Text('纯黑深色模式').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                // 整行可点：点标题一侧也能切换（对齐上游 SwitchSettingItem）。
+                UiSwitchControl({
+                  checked: this.pureBlack,
+                  interactive: false,
+                  onChange: (enabled: boolean) => this.onPureBlackChange(enabled)
+                })
+              }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+                .onClick(() => this.onPureBlackChange(!this.pureBlack))
+            }
+            ThemeGroupItem() {
+              UiAction({showDivider: false, title: '字体设置', detail: this.appFontSummary(),
+                onSelect: () => { this.appFontExpanded = !this.appFontExpanded } })
+            }
+            if (this.appFontExpanded) {
+              ThemeGroupItem() {
+                Row() {
+                  UiAction({showDivider: false, title: '选择字体文件', onSelect: () => this.onPickAppFont() }).layoutWeight(1)
+                  // 上游 FontSettingSheet 的 clear 是图标按钮（contentDescription=R.string.clear=清除），
+                  // 不是独立文字行；本地用删除图标承接同一 onClearAppFont 回调（任务书 6.2）。
+                  AppGlyph({ name: 'delete', glyphSize: 20, tint: this.themeColorTextTertiary })
+                    .padding({ left: 16, right: 16 }).accessibilityText('清除')
+                    .onClick(() => this.onClearAppFont())
+                }.width('100%')
+              }
+            }
             // 上游 `ThemeConfigScreen.kt:266-270`：只有 appTheme == "12"（自定义）时才显示这一行。
             if (this.paletteIndex === 12) {
-              UiAction({showDivider: false, title: '自定义颜色', detail: this.customColorSummary(),
-                onSelect: () => this.onOpenCustomTheme() })
-              ThemeItemDivider()
+              ThemeGroupItem() {
+                UiAction({showDivider: false, title: '自定义颜色', detail: this.customColorSummary(),
+                  onSelect: () => this.onOpenCustomTheme() })
+              }
             }
-            UiAction({showDivider: false, title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => this.onPredictiveBackChange(value) })
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '阅读界面共享元素动画', detail: '进入阅读界面时从封面展开，关闭后使用渐变过渡', checked: this.readerSharedElement, onChange: (value: boolean) => this.onReaderSharedElementChange(value) })
-            ThemeItemDivider()
-            Column() {
-              Row() {
-                Text('字体大小').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                Text(`当前字体大小: ${(this.fontScale / 10).toFixed(1)}`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
-              }.width('100%')
-              Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
-                .width('100%').onChange((value: number) => this.onFontScaleChange(value))
-            }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
-            ThemeItemDivider()
-            UiAction({showDivider: false, title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onOpenThemeManage() })
-            ThemeItemDivider()
-            UiAction({showDivider: false, title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
+            ThemeGroupItem() {
+              UiAction({showDivider: false, title: '切换图标', detail: '切换软件显示在桌面的图标', onSelect: () => this.onUnavailableAction('启动图标设置尚未迁移') })
+            }
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '预见性返回手势', detail: '启用系统预见性返回手势', checked: this.predictiveBack, onChange: (value: boolean) => this.onPredictiveBackChange(value) })
+            }
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '阅读界面共享元素动画', detail: '进入阅读界面时从封面展开，关闭后使用渐变过渡', checked: this.readerSharedElement, onChange: (value: boolean) => this.onReaderSharedElementChange(value) })
+            }
+            ThemeGroupItem() {
+              Column() {
+                Row() {
+                  Text('字体大小').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                  Text(`当前字体大小: ${(this.fontScale / 10).toFixed(1)}`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary)
+                }.width('100%')
+                Slider({ value: this.fontScale, min: 8, max: 16, step: 1, style: SliderStyle.OutSet })
+                  .width('100%').onChange((value: number) => this.onFontScaleChange(value))
+              }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 8 })
+            }
+            ThemeGroupItem() {
+              UiAction({showDivider: false, title: '主题管理', detail: '管理、导入导出完整主题包', onSelect: () => this.onOpenThemeManage() })
+            }
+            ThemeGroupItem() {
+              UiAction({showDivider: false, title: '背景图片', detail: this.appBackgroundSummary(), onSelect: () => { this.backgroundExpanded = !this.backgroundExpanded } })
+            }
             if (this.backgroundExpanded) {
-              UiAction({showDivider: false, title: '日间背景图片', detail: this.appBackgroundImage.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(false) })
-              ThemeItemDivider()
-              Slider({ value: this.appBackgroundBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
-                .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(false, value))
-              ThemeItemDivider()
-              UiAction({showDivider: false, title: '夜间背景图片', detail: this.appBackgroundImageNight.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(true) })
-              ThemeItemDivider()
-              Slider({ value: this.appBackgroundNightBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
-                .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(true, value))
-              ThemeItemDivider()
-              UiAction({showDivider: false, title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
+              ThemeGroupItem() {
+                UiAction({showDivider: false, title: '日间背景图片', detail: this.appBackgroundImage.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(false) })
+              }
+              ThemeGroupItem() {
+                Slider({ value: this.appBackgroundBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
+                  .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(false, value))
+              }
+              ThemeGroupItem() {
+                UiAction({showDivider: false, title: '夜间背景图片', detail: this.appBackgroundImageNight.length > 0 ? '已选择，点击换图' : '选择图片', onSelect: () => this.onPickBackgroundImage(true) })
+              }
+              ThemeGroupItem() {
+                Slider({ value: this.appBackgroundNightBlur, min: 0, max: 40, step: 1, style: SliderStyle.OutSet })
+                  .width('100%').padding({ left: 16, right: 16 }).onChange((value: number) => this.onBackgroundBlurChange(true, value))
+              }
+              ThemeGroupItem() {
+                UiAction({showDivider: false, title: '移除背景图片', detail: '同时清空日间与夜间', onSelect: () => { this.onClearBackgroundImage(false); this.onClearBackgroundImage(true); } })
+              }
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }
 
-          ThemeSectionTitle({ title: '主界面' }).margin({ top: 20 })
-          Column() {
-            UiAction({showDivider: false, title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.navigationExpanded = !this.navigationExpanded; } })
+          ThemeGroupColumn({ title: '主界面' }) {
+            ThemeGroupItem({ first: true }) {
+              UiAction({showDivider: false, title: '首页与导航', detail: this.navigationSummary(), onSelect: () => { this.navigationExpanded = !this.navigationExpanded; } })
+            }
             if (this.navigationExpanded) {
               Column() {
                 // 逐项显隐：上游 `setVisibilityForRoute`，书架与我的恒可见。
-                ThemeSwitchRow({ title: '首页', detail: '在底部导航显示首页', checked: this.showHome, onChange: (value: boolean) => this.onNavigationVisibilityChange('home', value) })
-                ThemeItemDivider()
-                ThemeSwitchRow({ title: '发现', detail: '在底部导航显示发现', checked: this.showDiscovery, onChange: (value: boolean) => this.onNavigationVisibilityChange('explore', value) })
-                ThemeItemDivider()
-                ThemeSwitchRow({ title: '订阅', detail: '在底部导航显示订阅', checked: this.showRss, onChange: (value: boolean) => this.onNavigationVisibilityChange('rss', value) })
-                ThemeItemDivider()
+                ThemeGroupItem() {
+                  ThemeSwitchRow({ title: '首页', detail: '在底部导航显示首页', checked: this.showHome, onChange: (value: boolean) => this.onNavigationVisibilityChange('home', value) })
+                }
+                ThemeGroupItem() {
+                  ThemeSwitchRow({ title: '发现', detail: '在底部导航显示发现', checked: this.showDiscovery, onChange: (value: boolean) => this.onNavigationVisibilityChange('explore', value) })
+                }
+                ThemeGroupItem() {
+                  ThemeSwitchRow({ title: '订阅', detail: '在底部导航显示订阅', checked: this.showRss, onChange: (value: boolean) => this.onNavigationVisibilityChange('rss', value) })
+                }
                 // 默认主页面：只能选可见项，对齐上游 `MainNavigationSettingsSheet.kt:81-84`。
-                UiDropdown({showDivider: false,
-                  title: '默认主页面',
-                  option: this.defaultHomePage,
-                  options: this.visibleNavigationOptions(),
-                  labelOf: (value: string) => mainNavigationLabel(value),
-                  onSelect: (value: string) => this.onDefaultHomePageChange(value)
-                })
-                ThemeItemDivider()
-                UiDropdown({showDivider: false,
-                  title: '导航标签显示',
-                  option: this.labelVisibilityMode,
-                  options: LABEL_VISIBILITY_VALUES,
-                  labelOf: (value: string) => labelVisibilityLabel(value),
-                  onSelect: (value: string) => this.onLabelVisibilityModeChange(value)
-                })
-                ThemeItemDivider()
+                ThemeGroupItem() {
+                  UiDropdown({showDivider: false,
+                    title: '默认主页面',
+                    option: this.defaultHomePage,
+                    options: this.visibleNavigationOptions(),
+                    labelOf: (value: string) => mainNavigationLabel(value),
+                    onSelect: (value: string) => this.onDefaultHomePageChange(value)
+                  })
+                }
+                ThemeGroupItem() {
+                  UiDropdown({showDivider: false,
+                    title: '导航标签显示',
+                    option: this.labelVisibilityMode,
+                    options: LABEL_VISIBILITY_VALUES,
+                    labelOf: (value: string) => labelVisibilityLabel(value),
+                    onSelect: (value: string) => this.onLabelVisibilityModeChange(value)
+                  })
+                }
                 // 平板界面：上游 `AppShellSettings` 的 tabletInterface 档位，决定底栏还是左侧栏。
                 // 四档判据（自动/始终侧栏/横屏侧栏/始终底栏）在 data/MainNavigationSettings.ets。
-                UiDropdown({showDivider: false,
-                  title: '平板界面',
-                  option: this.tabletInterface,
-                  options: TABLET_INTERFACE_VALUES,
-                  labelOf: (value: string) => tabletInterfaceLabel(value),
-                  onSelect: (value: string) => this.onTabletInterfaceChange(value)
-                })
-                ThemeItemDivider()
+                ThemeGroupItem() {
+                  UiDropdown({showDivider: false,
+                    title: '平板界面',
+                    option: this.tabletInterface,
+                    options: TABLET_INTERFACE_VALUES,
+                    labelOf: (value: string) => tabletInterfaceLabel(value),
+                    onSelect: (value: string) => this.onTabletInterfaceChange(value)
+                  })
+                }
                 // 拖排顺序：上游用可拖列表，本地用上下移两枚按钮承接同一个 onSetOrder。
-                Text('主导航顺序').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
-                ForEach(orderedMainNavigation(this.mainNavigationOrder), (navRoute: string) => {
-                  Row() {
-                    Text(mainNavigationLabel(navRoute)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).layoutWeight(1)
-                    Button('上移').fontSize(LABEL_MEDIUM).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
-                    Button('下移').fontSize(LABEL_MEDIUM).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
-                  }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
-                }, (navRoute: string) => navRoute)
+                ThemeGroupItem() {
+                  Column() {
+                    Text('主导航顺序').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
+                    ForEach(orderedMainNavigation(this.mainNavigationOrder), (navRoute: string) => {
+                      Row() {
+                        Text(mainNavigationLabel(navRoute)).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).layoutWeight(1)
+                        Button('上移').fontSize(LABEL_MEDIUM).height(32).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, true))
+                        Button('下移').fontSize(LABEL_MEDIUM).height(32).margin({ left: 8 }).backgroundColor(this.themeColorSurfaceTertiary).fontColor(this.themeColorTextSecondary).onClick(() => this.onNavigationMove(navRoute, false))
+                      }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 })
+                    }, (navRoute: string) => navRoute)
+                  }.width('100%')
+                }
               }
               .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
-            ThemeItemDivider()
-            UiAction({showDivider: false, title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.topBottomBarExpanded = !this.topBottomBarExpanded } })
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '显示状态栏', checked: this.showStatusBarVisible, onChange: (value: boolean) => this.onShowStatusBarChange(value) })
+            }
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '启用滑动时动画', checked: this.swipeAnimationEnabled, onChange: (value: boolean) => this.onSwipeAnimationChange(value) })
+            }
+            ThemeGroupItem() {
+              UiAction({showDivider: false, title: '顶栏与底栏', detail: this.topBottomBarSummary(), onSelect: () => { this.topBottomBarExpanded = !this.topBottomBarExpanded } })
+            }
             if (this.topBottomBarExpanded) {
               Column() {
-                ThemeSwitchRow({ title: '使用折叠应用栏', checked: this.useFlexibleTopAppBar, onChange: (value: boolean) => this.onUseFlexibleTopAppBarChange(value) })
-                ThemeItemDivider()
-                UiDropdown({showDivider: false,
-                  title: '顶栏按钮样式',
-                  option: this.topBarButtonStyle,
-                  options: TOP_BAR_BUTTON_STYLES,
-                  labelOf: (value: string) => topBarButtonStyleLabel(value),
-                  onSelect: (value: string) => this.onTopBarButtonStyleChange(value)
-                })
-                ThemeItemDivider()
+                ThemeGroupItem() {
+                  ThemeSwitchRow({ title: '使用折叠应用栏', checked: this.useFlexibleTopAppBar, onChange: (value: boolean) => this.onUseFlexibleTopAppBarChange(value) })
+                }
+                ThemeGroupItem() {
+                  UiDropdown({showDivider: false,
+                    title: '顶栏按钮样式',
+                    option: this.topBarButtonStyle,
+                    options: TOP_BAR_BUTTON_STYLES,
+                    labelOf: (value: string) => topBarButtonStyleLabel(value),
+                    onSelect: (value: string) => this.onTopBarButtonStyleChange(value)
+                  })
+                }
                 if (this.topBarButtonStyle !== 'plain') {
-                  ThemeSwitchRow({ title: '合并顶栏按钮', checked: this.mergeTopBarActions, onChange: (value: boolean) => this.onMergeTopBarActionsChange(value) })
-                    .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-                  ThemeItemDivider()
+                  ThemeGroupItem() {
+                    ThemeSwitchRow({ title: '合并顶栏按钮', checked: this.mergeTopBarActions, onChange: (value: boolean) => this.onMergeTopBarActionsChange(value) })
+                      .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+                  }
                 }
-                ThemeSwitchRow({ title: '显示导航栏', detail: '仍可滑动切换页面', checked: this.showBottomView, onChange: (value: boolean) => this.onShowBottomViewChange(value) })
-                ThemeItemDivider()
-                ThemeSwitchRow({ title: '悬浮底栏', detail: '底部导航栏使用悬浮胶囊样式', checked: this.useFloatingBottomBar, onChange: (value: boolean) => this.onUseFloatingBottomBarChange(value) })
+                ThemeGroupItem() {
+                  ThemeSwitchRow({ title: '显示导航栏', detail: '仍可滑动切换页面', checked: this.showBottomView, onChange: (value: boolean) => this.onShowBottomViewChange(value) })
+                }
+                ThemeGroupItem() {
+                  ThemeSwitchRow({ title: '悬浮底栏', detail: '底部导航栏使用悬浮胶囊样式', checked: this.useFloatingBottomBar, onChange: (value: boolean) => this.onUseFloatingBottomBarChange(value) })
+                }
                 if (this.useFloatingBottomBar) {
-                  ThemeItemDivider()
-                  ThemeSwitchRow({ title: '液态玻璃效果', detail: '为悬浮底栏启用液态玻璃高光效果', checked: this.useFloatingBottomBarLiquidGlass, onChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value) })
-                    .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-                  ThemeItemDivider()
-                  UiSlider({showDivider: false,
-                    title: '底栏模糊强度',
-                    detail: `液态玻璃扭曲程度 ${this.bottomBarLensRadius}vp`,
-                    value: this.bottomBarLensRadius,
-                    minValue: BOTTOM_BAR_LENS_RADIUS_MIN,
-                    maxValue: BOTTOM_BAR_LENS_RADIUS_MAX,
-                    onChange: (value: number) => this.onBottomBarLensRadiusChange(value)
-                  })
+                  ThemeGroupItem() {
+                    ThemeSwitchRow({ title: '液态玻璃效果', detail: '为悬浮底栏启用液态玻璃高光效果', checked: this.useFloatingBottomBarLiquidGlass, onChange: (value: boolean) => this.onUseFloatingBottomBarLiquidGlassChange(value) })
+                      .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+                  }
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '底栏模糊强度',
+                      detail: `液态玻璃扭曲程度 ${this.bottomBarLensRadius}vp`,
+                      value: this.bottomBarLensRadius,
+                      minValue: BOTTOM_BAR_LENS_RADIUS_MIN,
+                      maxValue: BOTTOM_BAR_LENS_RADIUS_MAX,
+                      onChange: (value: number) => this.onBottomBarLensRadiusChange(value)
+                    })
+                  }
                 }
-                ThemeItemDivider()
                 if (this.enableBlur) {
-                  UiSlider({showDivider: false,
-                    title: '顶栏模糊半径',
-                    detail: `采样模糊强度 ${this.topBarBlurRadius}`,
-                    value: this.topBarBlurRadius,
-                    minValue: TOP_BAR_BLUR_RADIUS_MIN,
-                    maxValue: TOP_BAR_BLUR_RADIUS_MAX,
-                    onChange: (value: number) => this.onTopBarBlurRadiusChange(value)
-                  })
-                  ThemeItemDivider()
-                  UiSlider({showDivider: false,
-                    title: '底栏模糊半径',
-                    detail: `采样模糊强度 ${this.bottomBarBlurRadius}`,
-                    value: this.bottomBarBlurRadius,
-                    minValue: BOTTOM_BAR_BLUR_RADIUS_MIN,
-                    maxValue: BOTTOM_BAR_BLUR_RADIUS_MAX,
-                    onChange: (value: number) => this.onBottomBarBlurRadiusChange(value)
-                  })
-                  ThemeItemDivider()
-                  UiSlider({showDivider: false,
-                    title: '顶栏模糊透明度',
-                    detail: `${this.topBarBlurAlpha}%`,
-                    value: this.topBarBlurAlpha,
-                    minValue: BAR_BLUR_ALPHA_MIN,
-                    maxValue: BAR_BLUR_ALPHA_MAX,
-                    onChange: (value: number) => this.onTopBarBlurAlphaChange(value)
-                  })
-                  ThemeItemDivider()
-                  UiSlider({showDivider: false,
-                    title: '底栏模糊透明度',
-                    detail: `${this.bottomBarBlurAlpha}%`,
-                    value: this.bottomBarBlurAlpha,
-                    minValue: BAR_BLUR_ALPHA_MIN,
-                    maxValue: BAR_BLUR_ALPHA_MAX,
-                    onChange: (value: number) => this.onBottomBarBlurAlphaChange(value)
-                  })
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '顶栏模糊半径',
+                      detail: `采样模糊强度 ${this.topBarBlurRadius}`,
+                      value: this.topBarBlurRadius,
+                      minValue: TOP_BAR_BLUR_RADIUS_MIN,
+                      maxValue: TOP_BAR_BLUR_RADIUS_MAX,
+                      onChange: (value: number) => this.onTopBarBlurRadiusChange(value)
+                    })
+                  }
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '底栏模糊半径',
+                      detail: `采样模糊强度 ${this.bottomBarBlurRadius}`,
+                      value: this.bottomBarBlurRadius,
+                      minValue: BOTTOM_BAR_BLUR_RADIUS_MIN,
+                      maxValue: BOTTOM_BAR_BLUR_RADIUS_MAX,
+                      onChange: (value: number) => this.onBottomBarBlurRadiusChange(value)
+                    })
+                  }
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '顶栏模糊透明度',
+                      detail: `${this.topBarBlurAlpha}%`,
+                      value: this.topBarBlurAlpha,
+                      minValue: BAR_BLUR_ALPHA_MIN,
+                      maxValue: BAR_BLUR_ALPHA_MAX,
+                      onChange: (value: number) => this.onTopBarBlurAlphaChange(value)
+                    })
+                  }
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '底栏模糊透明度',
+                      detail: `${this.bottomBarBlurAlpha}%`,
+                      value: this.bottomBarBlurAlpha,
+                      minValue: BAR_BLUR_ALPHA_MIN,
+                      maxValue: BAR_BLUR_ALPHA_MAX,
+                      onChange: (value: number) => this.onBottomBarBlurAlphaChange(value)
+                    })
+                  }
                 } else {
-                  UiSlider({showDivider: false,
-                    title: '顶栏不透明度',
-                    detail: `${this.topBarOpacity}%`,
-                    value: this.topBarOpacity,
-                    minValue: TOP_BAR_OPACITY_MIN,
-                    maxValue: TOP_BAR_OPACITY_MAX,
-                    onChange: (value: number) => this.onTopBarOpacityChange(value)
-                  })
-                  ThemeItemDivider()
-                  UiSlider({showDivider: false,
-                    title: '底栏不透明度',
-                    detail: `${this.bottomBarOpacity}%`,
-                    value: this.bottomBarOpacity,
-                    minValue: TOP_BAR_OPACITY_MIN,
-                    maxValue: TOP_BAR_OPACITY_MAX,
-                    onChange: (value: number) => this.onBottomBarOpacityChange(value)
-                  })
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '顶栏不透明度',
+                      detail: `${this.topBarOpacity}%`,
+                      value: this.topBarOpacity,
+                      minValue: TOP_BAR_OPACITY_MIN,
+                      maxValue: TOP_BAR_OPACITY_MAX,
+                      onChange: (value: number) => this.onTopBarOpacityChange(value)
+                    })
+                  }
+                  ThemeGroupItem() {
+                    UiSlider({showDivider: false,
+                      title: '底栏不透明度',
+                      detail: `${this.bottomBarOpacity}%`,
+                      value: this.bottomBarOpacity,
+                      minValue: TOP_BAR_OPACITY_MIN,
+                      maxValue: TOP_BAR_OPACITY_MAX,
+                      onChange: (value: number) => this.onBottomBarOpacityChange(value)
+                    })
+                  }
                 }
               }
               .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }
 
-          ThemeSectionTitle({ title: '书籍详情页' }).margin({ top: 20 })
-          Column() {
-            ThemeSwitchRow({ title: '界面颜色跟随封面取色', detail: '仅在显示背景封面时生效', checked: this.bookInfoFollowCoverColor, onChange: (value: boolean) => this.onBookInfoFollowCoverColorChange(value) })
-            ThemeItemDivider()
-            UiDropdown({showDivider: false, title: '网络封面背景设置', option: this.bookInfoNetworkCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
-            ThemeItemDivider()
-            UiDropdown({showDivider: false, title: '默认封面背景设置', option: this.bookInfoDefaultCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
-            ThemeItemDivider()
-            ThemeSwitchRow({
-              title: '无关联规则时按作者搜索',
-              detail: '书源未配置关联书籍（relatedBooks）规则时，用当前书源搜索作者名，把作者的其它作品显示为关联书籍',
-              checked: this.bookInfoAuthorSearchFallback,
-              onChange: (value: boolean) => this.onBookInfoAuthorSearchFallbackChange(value)
-            })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          ThemeSectionTitle({ title: '护眼模式' }).margin({ top: 20 })
-          Column() {
-            ThemeSwitchRow({ title: '启用护眼模式', detail: '使用暖色调降低蓝光', checked: this.eyeProtectionEnabled, onChange: (value: boolean) => this.onEyeProtectionEnabledChange(value) })
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => this.onEyeProtectionAutoNightChange(value) })
-            ThemeItemDivider()
-            if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
-              UiSlider({showDivider: false,
-                title: '色温',
-                detail: this.eyeProtectionActive ? `当前生效：${this.eyeProtectionIntensity}` : `强度 ${this.eyeProtectionIntensity}`,
-                value: this.eyeProtectionIntensity,
-                minValue: 0,
-                maxValue: 100,
-                onChange: (value: number) => this.onEyeProtectionIntensityChange(value)
+          ThemeGroupColumn({ title: '书籍详情页' }) {
+            ThemeGroupItem({ first: true }) {
+              ThemeSwitchRow({ title: '界面颜色跟随封面取色', detail: '仅在显示背景封面时生效', checked: this.bookInfoFollowCoverColor, onChange: (value: boolean) => this.onBookInfoFollowCoverColorChange(value) })
+            }
+            ThemeGroupItem() {
+              UiDropdown({showDivider: false, title: '网络封面背景设置', option: this.bookInfoNetworkCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(false, value) })
+            }
+            ThemeGroupItem() {
+              UiDropdown({showDivider: false, title: '默认封面背景设置', option: this.bookInfoDefaultCoverBackground, labelOf: (value: string) => this.coverBackgroundLabel(value), options: this.coverBackgroundOptions(), onSelect: (value: string) => this.onBookInfoCoverBackgroundChange(true, value) })
+            }
+            ThemeGroupItem() {
+              ThemeSwitchRow({
+                title: '无关联规则时按作者搜索',
+                detail: '书源未配置关联书籍（relatedBooks）规则时，用当前书源搜索作者名，把作者的其它作品显示为关联书籍',
+                checked: this.bookInfoAuthorSearchFallback,
+                onChange: (value: boolean) => this.onBookInfoAuthorSearchFallbackChange(value)
               })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => this.onEyeProtectionScheduleChange(value) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              if (this.eyeProtectionSchedule) {
-                UiAction({showDivider: false, title: '开始时间', detail: this.eyeProtectionStartTime, onSelect: () => this.pickEyeProtectionTime(true) })
+            }
+          }
+
+          ThemeGroupColumn({ title: '护眼模式' }) {
+            ThemeGroupItem({ first: true }) {
+              ThemeSwitchRow({ title: '启用护眼模式', detail: '使用暖色调降低蓝光', checked: this.eyeProtectionEnabled, onChange: (value: boolean) => this.onEyeProtectionEnabledChange(value) })
+            }
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '深色模式时自动开启', detail: '跟随阅读界面的深色/浅色模式自动切换', checked: this.eyeProtectionAutoNight, onChange: (value: boolean) => this.onEyeProtectionAutoNightChange(value) })
+            }
+            if (this.eyeProtectionEnabled || this.eyeProtectionAutoNight) {
+              ThemeGroupItem() {
+                UiSlider({showDivider: false,
+                  title: '色温',
+                  detail: this.eyeProtectionActive ? `当前生效：${this.eyeProtectionIntensity}` : `强度 ${this.eyeProtectionIntensity}`,
+                  value: this.eyeProtectionIntensity,
+                  minValue: 0,
+                  maxValue: 100,
+                  onChange: (value: number) => this.onEyeProtectionIntensityChange(value)
+                })
                   .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-                UiAction({showDivider: false, title: '结束时间', detail: this.eyeProtectionEndTime, onSelect: () => this.pickEyeProtectionTime(false) })
+              }
+              ThemeGroupItem() {
+                ThemeSwitchRow({ title: '定时开启', detail: '仅在设定的时间段内生效', checked: this.eyeProtectionSchedule, onChange: (value: boolean) => this.onEyeProtectionScheduleChange(value) })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+              if (this.eyeProtectionSchedule) {
+                ThemeGroupItem() {
+                  UiAction({showDivider: false, title: '开始时间', detail: this.eyeProtectionStartTime, onSelect: () => this.pickEyeProtectionTime(true) })
+                    .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+                }
+                ThemeGroupItem() {
+                  UiAction({showDivider: false, title: '结束时间', detail: this.eyeProtectionEndTime, onSelect: () => this.pickEyeProtectionTime(false) })
+                    .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+                }
+              }
+            }
+          }
+
+          ThemeGroupColumn({ title: '模糊效果' }) {
+            ThemeGroupItem({ first: true }) {
+              ThemeSwitchRow({ title: '启用控件模糊', detail: '顶栏与底栏采样背后内容做毛玻璃', checked: this.enableBlur, onChange: (value: boolean) => this.onEnableBlurChange(value) })
+            }
+            if (this.enableBlur) {
+              ThemeGroupItem() {
+                ThemeSwitchRow({ title: '启用渐变模糊', checked: this.enableProgressiveBlur, onChange: (value: boolean) => this.onEnableProgressiveBlurChange(value) })
                   .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               }
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }
 
-          ThemeSectionTitle({ title: '模糊效果' }).margin({ top: 20 })
-          Column() {
-            ThemeSwitchRow({ title: '启用控件模糊', detail: '顶栏与底栏采样背后内容做毛玻璃', checked: this.enableBlur, onChange: (value: boolean) => this.onEnableBlurChange(value) })
-            ThemeItemDivider()
-            if (this.enableBlur) {
-              ThemeSwitchRow({ title: '启用渐变模糊', checked: this.enableProgressiveBlur, onChange: (value: boolean) => this.onEnableProgressiveBlurChange(value) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+          ThemeGroupColumn({ title: '容器设置' }) {
+            ThemeGroupItem({ first: true }) {
+              ThemeSwitchRow({ title: '容器背景图', detail: '大容器和项目分别使用独立的日间/夜间图片', checked: this.enableContainerBackgroundImage, onChange: (value: boolean) => this.onEnableContainerBackgroundImageChange(value) })
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          ThemeSectionTitle({ title: '容器设置' }).margin({ top: 20 })
-          Column() {
-            ThemeSwitchRow({ title: '容器背景图', detail: '大容器和项目分别使用独立的日间/夜间图片', checked: this.enableContainerBackgroundImage, onChange: (value: boolean) => this.onEnableContainerBackgroundImageChange(value) })
-            ThemeItemDivider()
             if (this.enableContainerBackgroundImage) {
-              UiAction({showDivider: false, title: '大容器背景图片', detail: this.backgroundSummary(this.largeContainerBackgroundLight, this.largeContainerBackgroundDark), onSelect: () => this.onPickContainerBackground(true, false) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              ThemeItemDivider()
-              UiAction({showDivider: false, title: '项目背景图片', detail: this.backgroundSummary(this.itemBackgroundLight, this.itemBackgroundDark), onSelect: () => this.onPickContainerBackground(false, false) })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              ThemeGroupItem() {
+                UiAction({showDivider: false, title: '大容器背景图片', detail: this.backgroundSummary(this.largeContainerBackgroundLight, this.largeContainerBackgroundDark), onSelect: () => this.onPickContainerBackground(true, false) })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+              ThemeGroupItem() {
+                UiAction({showDivider: false, title: '项目背景图片', detail: this.backgroundSummary(this.itemBackgroundLight, this.itemBackgroundDark), onSelect: () => this.onPickContainerBackground(false, false) })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
             }
-            ThemeItemDivider()
-            UiSlider({showDivider: false,
-              title: '容器背景不透明度',
-              detail: `${this.containerOpacity}%`,
-              value: this.containerOpacity,
-              minValue: CONTAINER_OPACITY_MIN,
-              maxValue: CONTAINER_OPACITY_MAX,
-              onChange: (value: number) => this.onContainerOpacityChange(value)
-            })
-            ThemeItemDivider()
+            ThemeGroupItem() {
+              UiSlider({showDivider: false,
+                title: '容器背景不透明度',
+                detail: `${this.containerOpacity}%`,
+                value: this.containerOpacity,
+                minValue: CONTAINER_OPACITY_MIN,
+                maxValue: CONTAINER_OPACITY_MAX,
+                onChange: (value: number) => this.onContainerOpacityChange(value)
+              })
+            }
             // 上游 disable_spliced_group_corner_radius_summary 原文含内部类名「SplicedColumnGroup」，
             // 属上游文案缺陷；本地保留更可读的表述（任务书 6.2 允许偏离）。
-            ThemeSwitchRow({ title: '关闭设置分组圆角', detail: '让设置分组使用直角外轮廓', checked: this.disableGroupCorner, onChange: (value: boolean) => this.onDisableGroupCornerChange(value) })
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => this.onOverrideCardCornerChange(value) })
-            ThemeItemDivider()
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '关闭设置分组圆角', detail: '让设置分组使用直角外轮廓', checked: this.disableGroupCorner, onChange: (value: boolean) => this.onDisableGroupCornerChange(value) })
+            }
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '覆盖卡片圆角', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardCorner, onChange: (value: boolean) => this.onOverrideCardCornerChange(value) })
+            }
             if (this.overrideCardCorner) {
-              UiSlider({showDivider: false,
-                title: '卡片圆角',
-                detail: `${this.cardCornerRadius}vp`,
-                value: this.cardCornerRadius,
-                minValue: CARD_RADIUS_MIN,
-                maxValue: CARD_RADIUS_MAX,
-                onChange: (value: number) => this.onCardCornerRadiusChange(value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              ThemeGroupItem() {
+                UiSlider({showDivider: false,
+                  title: '卡片圆角',
+                  detail: `${this.cardCornerRadius}vp`,
+                  value: this.cardCornerRadius,
+                  minValue: CARD_RADIUS_MIN,
+                  maxValue: CARD_RADIUS_MAX,
+                  onChange: (value: number) => this.onCardCornerRadiusChange(value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
             }
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => this.onOverrideCardBorderChange(value) })
-            ThemeItemDivider()
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '覆盖卡片边框', detail: '关闭时保留各卡片的默认值', checked: this.overrideCardBorder, onChange: (value: boolean) => this.onOverrideCardBorderChange(value) })
+            }
             if (this.overrideCardBorder) {
-              UiSlider({showDivider: false,
-                title: '边框宽度',
-                detail: `${this.cardBorderWidth}vp`,
-                value: this.cardBorderWidth,
-                minValue: CARD_BORDER_WIDTH_MIN,
-                maxValue: CARD_BORDER_WIDTH_MAX,
-                onChange: (value: number) => this.onCardBorderWidthChange(value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              UiDropdown({showDivider: false,
-                title: '日间边框颜色',
-                option: this.cardBorderColorDay, labelOf: (value: string) => this.borderColorLabel(value),
-                options: this.cardBorderColorOptions(),
-                onSelect: (value: string) => this.onCardBorderColorChange(false, value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              UiDropdown({showDivider: false,
-                title: '夜间边框颜色',
-                option: this.cardBorderColorNight, labelOf: (value: string) => this.borderColorLabel(value),
-                options: this.cardBorderColorOptions(),
-                onSelect: (value: string) => this.onCardBorderColorChange(true, value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              ThemeGroupItem() {
+                UiSlider({showDivider: false,
+                  title: '边框宽度',
+                  detail: `${this.cardBorderWidth}vp`,
+                  value: this.cardBorderWidth,
+                  minValue: CARD_BORDER_WIDTH_MIN,
+                  maxValue: CARD_BORDER_WIDTH_MAX,
+                  onChange: (value: number) => this.onCardBorderWidthChange(value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+              ThemeGroupItem() {
+                UiDropdown({showDivider: false,
+                  title: '日间边框颜色',
+                  option: this.cardBorderColorDay, labelOf: (value: string) => this.borderColorLabel(value),
+                  options: this.cardBorderColorOptions(),
+                  onSelect: (value: string) => this.onCardBorderColorChange(false, value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+              ThemeGroupItem() {
+                UiDropdown({showDivider: false,
+                  title: '夜间边框颜色',
+                  option: this.cardBorderColorNight, labelOf: (value: string) => this.borderColorLabel(value),
+                  options: this.cardBorderColorOptions(),
+                  onSelect: (value: string) => this.onCardBorderColorChange(true, value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
             }
-            ThemeItemDivider()
-            ThemeSwitchRow({ title: '显示分隔线', checked: this.enableItemDivider, onChange: (value: boolean) => this.onEnableItemDividerChange(value) })
-            ThemeItemDivider()
+            ThemeGroupItem() {
+              ThemeSwitchRow({ title: '显示分隔线', checked: this.enableItemDivider, onChange: (value: boolean) => this.onEnableItemDividerChange(value) })
+            }
             if (this.enableItemDivider) {
-              UiSlider({showDivider: false,
-                title: '分隔线宽度', detail: `${this.dividerWidth}vp`,
-                value: this.dividerWidth, minValue: DIVIDER_WIDTH_MIN, maxValue: DIVIDER_WIDTH_MAX,
-                onChange: (value: number) => this.onDividerWidthChange(value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              UiSlider({showDivider: false,
-                title: '分隔线长度', detail: `${this.dividerLength}%`,
-                value: this.dividerLength, minValue: DIVIDER_LENGTH_MIN, maxValue: DIVIDER_LENGTH_MAX,
-                onChange: (value: number) => this.onDividerLengthChange(value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              UiDropdown({showDivider: false,
-                title: '分隔线颜色',
-                option: this.dividerColor, labelOf: (value: string) => this.borderColorLabel(value),
-                options: this.dividerColorOptions(),
-                onSelect: (value: string) => this.onDividerColorChange(value)
-              })
-                .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              ThemeGroupItem() {
+                UiSlider({showDivider: false,
+                  title: '分隔线宽度', detail: `${this.dividerWidth}vp`,
+                  value: this.dividerWidth, minValue: DIVIDER_WIDTH_MIN, maxValue: DIVIDER_WIDTH_MAX,
+                  onChange: (value: number) => this.onDividerWidthChange(value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+              ThemeGroupItem() {
+                UiSlider({showDivider: false,
+                  title: '分隔线长度', detail: `${this.dividerLength}%`,
+                  value: this.dividerLength, minValue: DIVIDER_LENGTH_MIN, maxValue: DIVIDER_LENGTH_MAX,
+                  onChange: (value: number) => this.onDividerLengthChange(value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+              ThemeGroupItem() {
+                UiDropdown({showDivider: false,
+                  title: '分隔线颜色',
+                  option: this.dividerColor, labelOf: (value: string) => this.borderColorLabel(value),
+                  options: this.dividerColorOptions(),
+                  onSelect: (value: string) => this.onDividerColorChange(value)
+                })
+                  .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
             }
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-          Column() {
-            UiAction({showDivider: false, title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.confirmResetDefaults() })
-          }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 20 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+          }
+          ThemeGroupColumn() {
+            ThemeGroupItem({ first: true }) {
+              UiAction({showDivider: false, title: '恢复默认主题配置', detail: '恢复外观页设置，不影响已保存主题和封面', onSelect: () => this.confirmResetDefaults() })
+            }
+          }
         }.width('100%').padding({ top: 4, bottom: 18 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-  }
-}
-
-@Component
-struct ThemeSectionTitle {
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @Prop title: string = '';
-  build() {
-    Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorAccent)
-      .alignSelf(ItemAlign.Start).margin({ left: 18, bottom: 9 })
   }
 }
 
