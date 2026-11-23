@@ -2175,3 +2175,59 @@ grep -c '已接\|未接\|不适用\|要接\|不接\|应该\|建议\|可以补\|�
 bash scripts/build-hap.sh
 # BUILD SUCCESSFUL in 4 s 749 ms；49 tasks（21 executed, 28 up-to-date）；无 ERROR
 ```
+
+## r362 备份与恢复页：最后 7 行 ⚠ 逐项处置（2026-11-23）
+
+### 改了哪些文件
+- `entry/src/main/ets/pages/AppBackupSettingsPage.ets`：908 行 → 917 行。
+- `tmp/settings-backup-uicheck/property-diff-backup.md`（工作区外对照表）：6 行结论改写（5 行 `✓` + 1 行 `🚫`），1 行 `⚠` 补判据；末尾追加 H.9 节。
+
+### 改了哪些行为
+- 滚动容器换 `List`：`Scroll + Column` 改成 `List({ scroller: this.backupScroller })`（`:406`）+ 两个 `ListItem`（`:407`、`:473`），一一对应上游 `BackupConfigScreen.kt:168` 与 `:232` 两个 `item {}`；垂直内边距由页面 `padding` 的 `top/bottom` 改为 `contentStartOffset(16)` / `contentEndOffset(120)`（`:508`，`list.d.ts:1054` / `:1090`），对应 `adaptiveContentPadding(top = paddingValues.calculateTopPadding(), bottom = 120.dp)`；水平 16 留在 `List` 的 `padding` 上。
+- 滚动回调换 `onDidScroll`：`Scroll.onScroll` 改为 `List.onDidScroll(() => this.updateHeader())`（`:510`），`updateHeader()` 逻辑不变（`:378-391`），顶栏折叠进度继续驱动 `collapseFraction`；`onScrollIndex` 的 `onScroll` 已被 SDK 标 `@useinstead common.ScrollableCommonMethod#onDidScroll`（`list.d.ts:1590`），故用新接口。
+- 页面底色令牌修正：根背景第三路由 `themeColorSurfacePrimary`（= `colors.surface`）改为 `themeColorBackground`（= `colors.background`，`ThemePalette.ets:1143`），与上游 `AppScaffold.kt:81-87` 取同一令牌；新增 `@StorageProp('themeColorBackground')`。
+- 弹层高度：删除 `private sheetHeight()`（三档固定 560/420/320），改 `height: SheetSize.FIT_CONTENT`（`:527`，`common.d.ts:7968-7977` since 11「The height fit content」），并由内层滚动区 `.constraintSize({ maxHeight: this.sheetScrollMaxHeight(0) })`（`:613`、`:656`）封顶屏高 80%，对应 `AppModalBottomSheet.kt:165` `heightIn(max = maxHeight)` + `:134-137` `containerHeight * 0.8f`。
+- 弹层内容内缩：内容根改 `.padding({ left: 16, right: 16, bottom: 16 })`，对齐 `AppModalBottomSheet.kt:159-164`；各分支内原有的 `left/right: 16` 全部删除，避免重复内缩。
+- 弹层头部改 `Stack({ alignContent: Alignment.Center })`（`:546`）：标题居中 + `padding({ left: 56, right: 56 })` + `maxLines(1)` + `Ellipsis`，对齐 `AppModalBottomSheet.kt:175-204` 的 `Box(contentAlignment = Center)` 与 `padding(horizontal = 56.dp)`；保存图标改用 `Blank()` 顶到右端。
+- 选项卡下沿补 24vp 空白：三个 Grid 分支（路径 1 卡 / 备份 3 卡 / 恢复 2 卡）各追加 `Row().height(24)`，对应 `OptionSheet.kt:49` `Spacer(Modifier.height(24.dp))`。
+- 忽略面板页签并入滚动区：页签条移进 `Scroll` 内（`:600-612` 一带），随列表一起滚走不吸顶，对应上游 `BackupConfigScreen.kt:407-442` 单个 `Column.verticalScroll` 内含 `CardTabRow`；页签配色改 `CardTabRow.kt:82-99`（选中 `secondaryContainer`/`onSecondaryContainer` + Bold，未选中 `surfaceContainerLow`/`onSurfaceVariant`），去掉固定 40vp 高。
+- 复选框行卡底色改 `CheckboxItem.kt:30-33` 语义：未选中 `themeColorOnSheetContent`（= `colors.surface`）、选中 `themeColorSecondaryContainer`，替换原先的 `themeColorSurfaceElevated` / 透明。
+
+### 没改什么
+- `:187` 状态层形态保留 `⚠`：ArkUI 有 `@Observed` / `@ObjectLink`，SDK 不缺，不满足 `🚫` 判据；本仓 16 个设置页统一 `@Prop` + 回调口径，改动会波及全部设置页。
+- 上游 `ChooseBackupAndRun` 分支仍无入口：`BackupConfigScreen.kt` 的 `OpenSheet` 只有 `:237` / `:244` / `:251` 三处。
+- 未连真实 WebDAV 服务；远端文件弹层、导入旧版数据选择器、测试成功/失败分支未做运行时触发。
+- 上游仓 `legado-with-MD3` 只读，未写。
+
+### 没验什么
+- 仅在 `127.0.0.1:5555`（API 26 模拟器）核对，未覆盖其它分辨率与真机。
+- `List` 换容器后的长列表惯性滚动与 `contentEndOffset` 在超长内容下的表现未单独压测（本页两组共 16 行）。
+- 主题切换后的 `themeColorBackground` 取值未在深/浅两套主题下分别截图。
+
+### 对不齐的地方
+- `:57` 滚动回弹改记 `🚫`：`enums.d.ts:1494-1526` 的 `declare enum EdgeEffect` 只有 `Spring` / `Fade` / `None`，无 Compose Android 12+ 的 stretch 档位，`StretchingOverscrollEffect` 在 `ets/` 全目录 0 命中；本地用 `Spring`。
+- `:187` 状态层形态仍是 `⚠`，理由见上节。
+
+### 上机证据（设备 127.0.0.1:5555，API 26）
+证据目录 `.hvigor/outputs/backup-verify-20261123/`。
+- `s19-list-page.jpeg`（sha256 3feb14e9…）：`List` 改造后首屏，组标题「WebDav 设置」/「备份与恢复」、八行小卡、`contentStartOffset` 顶部 16 生效。
+- `s20-list-scrolled.jpeg`（sha256 8f09ff3e…）：上滑后顶栏折成单行「← 备份与恢复」，`onDidScroll → updateHeader → collapseFraction` 链路生效；组 2 七行完整、`contentEndOffset` 底部留白正常。
+- `s21-sheet-after-list.jpeg`（sha256 2592276…）：点「备份」打开弹层，三张选项卡（备份至本地 / 备份至网络 / 备份至本地与网络）、卡片下方 24vp 空白、弹层贴合内容高度不再留大片空区。
+- 忽略面板：`s14-ignore-final.jpeg`（5c47af7c，配置 Tab 9 项）、`s17-ignore-dbtab.jpeg`（ca6e8095，数据库 Tab 19 项）、`s18-ignore-dbscrolled.jpeg`（e3f37f9e，页签随列表滚走）。
+
+### 对照表回写
+- `:47` 页面容器 / `:50` 滚动容器 / `:58` 页面背景 / `:62` 弹层容器 / `:125` 弹层高度 → `✓`；`:57` 滚动回弹 → `🚫`（带 SDK 缺口行号）；`:187` 状态层形态保留 `⚠`。
+- 回写后 A–G 区：`✓` 114 行、`⚠` 1 行、`🚫` 1 行、`❓` 0 行；对照表 312 → 328 行，BOM=False、CRLF=False。
+
+```bash
+cd /n/HarmonyProjects/legado-with-md3-harmonyos
+grep -n 'List({ scroller\|contentStartOffset\|contentEndOffset\|onDidScroll' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+grep -n 'SheetSize.FIT_CONTENT\|sheetScrollMaxHeight\|themeColorBackground' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# 禁词 0 命中
+grep -c '已接\|未接\|不适用\|要接\|不接\|应该\|建议\|可以补\|实现思路\|优先级\|工作量估计\|风险\|这是 bug' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# 对照表 A–G 区：check=114 warn=1
+sed -n '45,198p' /n/HarmonyProjects/tmp/settings-backup-uicheck/property-diff-backup.md | grep -c '✓'
+sed -n '45,198p' /n/HarmonyProjects/tmp/settings-backup-uicheck/property-diff-backup.md | grep -c '⚠'
+bash scripts/build-hap.sh
+# BUILD SUCCESSFUL in 18 s 592 ms；49 tasks（23 executed, 26 up-to-date）；无 ERROR
+```

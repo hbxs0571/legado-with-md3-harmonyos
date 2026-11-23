@@ -2,6 +2,7 @@ import { DURATION_FADE, HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } fro
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
+import { display } from '@kit.ArkUI';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ThemeGroupColumn, ThemeGroupItem } from '../components/settings/ThemeGroupColumn';
 import { UiDropdown } from '../components/settings/UiDropdown';
@@ -65,6 +66,15 @@ const BACKUP_DB_TITLES: string[] = [
   '高亮规则', '标签规则', '标签分组规则', '服务器配置'
 ];
 
+/** 弹层高度上限占屏幕高度的比例：对齐上游 `AppModalBottomSheet.kt:134-137` 的 `containerHeight * 0.8f`。 */
+const SHEET_MAX_SCREEN_RATIO: number = 0.8;
+
+/**
+ * 弹层头部占用的竖向预算：标题行高 + 头部 `padding(bottom = 16)` + 内容 `padding(bottom = 16)`。
+ * 滚动区上限要把它扣掉，否则「头部 + 滚动区」会越过屏高 80%。
+ */
+const SHEET_HEADER_BUDGET: number = 54;
+
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
 @Component
 export struct AppBackupSettingsPage {
@@ -74,6 +84,10 @@ export struct AppBackupSettingsPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @StorageProp('themeColorBackground') themeColorBackground: string = '#F9FAEF';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#F0F1F5';
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE7C8';
+  @StorageProp('themeColorOnSecondaryContainer') themeColorOnSecondaryContainer: string = '#404A33';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
@@ -246,6 +260,35 @@ export struct AppBackupSettingsPage {
     });
   }
 
+  /**
+   * 弹层整高上限。
+   *
+   * 上游 `AppModalBottomSheet.kt:134-137` 是 `containerHeight * 0.8f`，`:165` 再 `.heightIn(max = maxHeight)`。
+   * 这里不能用 `constraintSize({ maxHeight: '80%' })`：sheet 用 FIT_CONTENT 时高度由内容决定，
+   * 内容再用百分比向上要高度就成了循环依赖，实测内容整块被算成 0 —— 上机时弹层只剩遮罩、卡片区全空
+   * （`components/booksource/SourceLoginSheet.ets:713-716` 记过同一个坑）。
+   * 改成按屏高算绝对 vp，与 `components/UiMenu.ets:83-89` 的菜单上限同法。
+   */
+  private sheetMaxHeight(): number {
+    try {
+      return this.getUIContext().px2vp(display.getDefaultDisplaySync().height) * SHEET_MAX_SCREEN_RATIO;
+    } catch (_) {
+      return 560;
+    }
+  }
+
+  /**
+   * 弹层内滚动区的高度上限。
+   *
+   * 上限不能挂在弹层内容根上：FIT_CONTENT 下根节点的 `maxHeight` 会被当成测量约束，
+   * 内容于是被撑到上限值，弹层退化成固定高、卡片下方留一片空白（上机实测）。
+   * 所以挂在真正会溢出的那一层——远端文件列表与忽略列表的 Scroll 上，
+   * 并扣掉头部与页签条已占的竖向空间，等价于上游「整层 heightIn(max) + 内容区自滚」。
+   */
+  private sheetScrollMaxHeight(reserved: number): number {
+    return Math.max(120, this.sheetMaxHeight() - SHEET_HEADER_BUDGET - reserved);
+  }
+
   /** 关闭即保存：对齐上游 IgnoreItemsSheet 的 onDismissRequest = onConfirm。 */
   private dismissSheet(): void {
     if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
@@ -332,17 +375,6 @@ export struct AppBackupSettingsPage {
     this.closeDialog();
   }
 
-  private sheetHeight(): number {
-    if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
-        this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
-      return 560;
-    }
-    if (this.activeSheet === BackupSheetKind.RESTORE_FILES) {
-      return 420;
-    }
-    return 320;
-  }
-
   private updateHeader(): void {
     const offset = this.backupScroller.currentOffset().yOffset;
     const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
@@ -366,8 +398,13 @@ export struct AppBackupSettingsPage {
         collapseFraction: this.headerFraction,
         onBack: () => this.onBack()
       })
-      Scroll(this.backupScroller) {
-        Column() {
+      // 上游 BackupConfigScreen.kt:160-167 用 LazyColumn(fillMaxSize,
+      // contentPadding = adaptiveContentPadding(top = 顶栏高度, bottom = 120.dp)) 承载两组
+      // SplicedColumnGroup（该文件只有 :168 与 :232 两个 item{}，没有 items() 动态列表）。
+      // 本地改用 List + ListItem 一一对应这两个分组，垂直内边距走 contentStartOffset /
+      // contentEndOffset（list.d.ts:1054 / :1090），水平 16 由 List 自身 padding 承担。
+      List({ scroller: this.backupScroller }) {
+        ListItem() {
           ThemeGroupColumn({ title: 'WebDav 设置', surfaceFill: false }) {
             ThemeGroupItem({ first: true }) {
               BackupInputRow({ cardSurface: true, title: 'WebDav 服务器地址', detail: '输入你的WebDav服务器地址',
@@ -432,6 +469,8 @@ export struct AppBackupSettingsPage {
             }
           }
 
+        }
+        ListItem() {
           ThemeGroupColumn({ title: '备份与恢复', surfaceFill: false }) {
             ThemeGroupItem({ first: true }) {
               BackupActionRow({ cardSurface: true, title: '备份路径',
@@ -465,11 +504,27 @@ export struct AppBackupSettingsPage {
                 onChange: (value: boolean) => this.setOnlyLatestBackup(value) })
             }
           }
-        }.padding({ left: 16, right: 16, top: 16, bottom: 120 })
-      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
-    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
+        }
+      }.width('100%').padding({ left: 16, right: 16 }).contentStartOffset(16).contentEndOffset(120)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
+      .onDidScroll(() => this.updateHeader())
+    }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent
+      // 上游 AppScaffold.kt:81-87 的 containerColor 是 `if (hasImageBg) Color.Transparent else
+      // LegadoTheme.colorScheme.background`，取的是 background 令牌而不是 surface。
+      // 本地 themeColorBackground（ThemePalette.ets:1143 = colors.background）与
+      // themeColorSurfacePrimary（:1173 = colors.surface）是两个不同取值（默认浅色 #F9FAEF vs #F5F6F8），
+      // 这里必须用前者才与上游同色。整页贴图与 blur 由宿主根层
+      // （pages/Index.ets:13487-13499，对应上游 AppScaffold.kt:248-268）负责，本页只做「有背景图就透明」。
+      : (this.themePureBlack ? '#000000' : this.themeColorBackground))
       .bindSheet(this.activeSheet !== BackupSheetKind.NONE, this.backupSheetContent(), {
-        height: this.sheetHeight(),
+        // 上游 AppModalBottomSheet.kt:165 是 heightIn(max = 容器高 * 0.8) + :167 animateContentSize：
+        // 内容少时 sheet 只占内容高度，最多 80%。原先按分支写死 560/420/320 固定像素，
+        // 三卡备份弹层与两卡恢复弹层都会被拉到同一高度、卡片下面留大片空白。
+        // ArkUI 对应档位是 SheetSize.FIT_CONTENT（common.d.ts:7968-7977，since 11「The height fit content」）；
+        // 80% 上限不能挂在内容根上（FIT_CONTENT 下根节点的 maxHeight 会被当成测量约束，
+        // 内容被撑到上限值、弹层又退化成固定高），改挂在真正会溢出的内层 Scroll 上，
+        // 见 sheetScrollMaxHeight()。
+        height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: this.themeColorSurfaceTertiary,
@@ -485,7 +540,10 @@ export struct AppBackupSettingsPage {
   @Builder
   private backupSheetContent() {
     Column() {
-      Row() {
+      // 上游 AppModalBottomSheet.kt:175-204 的头是 `Box.fillMaxWidth().padding(bottom = 16.dp)`
+      // + `contentAlignment = Center`，标题带 `padding(horizontal = 56.dp)` 给两侧动作留位。
+      // 用 Box 居中而不是 Row + layoutWeight：右侧有时有保存图标、有时没有，Row 会让标题跟着左右偏。
+      Stack({ alignContent: Alignment.Center }) {
         Text(this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH ? '选择操作' :
           this.activeSheet === BackupSheetKind.BACKUP_OPTIONS ? '备份' :
           this.activeSheet === BackupSheetKind.RESTORE_OPTIONS ? '恢复' :
@@ -493,21 +551,27 @@ export struct AppBackupSettingsPage {
           this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ? '备份忽略列表' :
           this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS ? '恢复忽略列表' : '')
           .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
-          .textAlign(TextAlign.Center).maxLines(1).layoutWeight(1)
+          .textAlign(TextAlign.Center).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .padding({ left: 56, right: 56 })
         if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
             this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
-          AppGlyph({ name: 'profileSave', glyphSize: 22, tint: this.themeColorAccent })
-            .accessibilityText('保存')
-            .onClick(() => this.dismissSheet())
+          Row() {
+            Blank()
+            AppGlyph({ name: 'profileSave', glyphSize: 22, tint: this.themeColorAccent })
+              .accessibilityText('保存')
+              .onClick(() => this.dismissSheet())
+          }.width('100%')
         }
-      }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
+      }.width('100%').padding({ bottom: 16 })
       if (this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH) {
         Grid() {
           GridItem() {
             BackupOptionCard({ icon: 'folder', title: '系统文件夹选择器',
               onSelect: () => { this.dismissSheet(); this.onChooseBackupPath(); } })
           }
-        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
+        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12)
+        // 上游 OptionSheet.kt:49 在卡片流之后还有 `Spacer(modifier = Modifier.height(24.dp))`。
+        Row().width('100%').height(24)
       } else if (this.activeSheet === BackupSheetKind.BACKUP_OPTIONS) {
         Grid() {
           GridItem() {
@@ -522,7 +586,9 @@ export struct AppBackupSettingsPage {
             BackupOptionCard({ icon: 'grid', title: '备份至本地与网络',
               onSelect: () => { this.dismissSheet(); this.onCreateBackupBoth(); } })
           }
-        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
+        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12)
+        // 上游 OptionSheet.kt:49 在卡片流之后还有 `Spacer(modifier = Modifier.height(24.dp))`。
+        Row().width('100%').height(24)
       } else if (this.activeSheet === BackupSheetKind.RESTORE_OPTIONS) {
         Grid() {
           GridItem() {
@@ -533,7 +599,9 @@ export struct AppBackupSettingsPage {
             BackupOptionCard({ icon: 'cloud', title: '网络恢复',
               onSelect: () => { this.dismissSheet(); this.requestNetworkRestore(); } })
           }
-        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
+        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12)
+        // 上游 OptionSheet.kt:49 在卡片流之后还有 `Spacer(modifier = Modifier.height(24.dp))`。
+        Row().width('100%').height(24)
       } else if (this.activeSheet === BackupSheetKind.RESTORE_FILES) {
         Scroll() {
           Column({ space: 8 }) {
@@ -541,42 +609,57 @@ export struct AppBackupSettingsPage {
               BackupSheetOption({ title: name, detail: '',
                 onSelect: () => { this.dismissSheet(); this.onRestoreNetwork(name); } })
             }, (name: string) => name)
-          }.width('100%').padding({ left: 16, right: 16 })
-        }.height(360).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
+          }.width('100%').padding({ bottom: 16 })
+        }.constraintSize({ maxHeight: this.sheetScrollMaxHeight(0) }).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
       } else if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
                  this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
-        Column() {
-          Row({ space: 8 }) {
-            Column() {
-              Text('配置忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
-                .fontWeight(this.ignoreTab === 0 ? FontWeight.Bold : FontWeight.Normal)
-                .fontColor(this.ignoreTab === 0 ? this.themeColorTextPrimary : this.themeColorTextSecondary)
-                .maxLines(1).textAlign(TextAlign.Center)
-            }.layoutWeight(1).height(40).borderRadius(12)
-              .backgroundColor(this.ignoreTab === 0 ? this.themeColorSurfaceElevated : this.themeColorSurfaceTertiary)
-              .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
-              .onClick(() => this.ignoreTab = 0)
-            Column() {
-              Text('数据库忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
-                .fontWeight(this.ignoreTab === 1 ? FontWeight.Bold : FontWeight.Normal)
-                .fontColor(this.ignoreTab === 1 ? this.themeColorTextPrimary : this.themeColorTextSecondary)
-                .maxLines(1).textAlign(TextAlign.Center)
-            }.layoutWeight(1).height(40).borderRadius(12)
-              .backgroundColor(this.ignoreTab === 1 ? this.themeColorSurfaceElevated : this.themeColorSurfaceTertiary)
-              .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
-              .onClick(() => this.ignoreTab = 1)
-          }.width('100%').padding({ left: 16, right: 16, bottom: 8 })
-          Scroll() {
+        // 上游 BackupConfigScreen.kt:407-442：内容是一个 `Column.fillMaxWidth().verticalScroll(...)`，
+        // `verticalArrangement = spacedBy(4.dp)`，页签条 CardTabRow 与复选框同在这一个滚动容器里
+        // （页签会随列表一起滚走，不吸顶）。所以这里也把页签条放进 Scroll，而不是单独吸在顶部。
+        // 页签与复选框都不另加左右内缩：上游 CardTabRow 与 CheckboxItem 直接贴内容 Column 的边，
+        // 左右 16 由 AppModalBottomSheet 的内容 padding 统一给（已在内容根上设置）。
+        Scroll() {
+          Column({ space: 4 }) {
+            // 上游 CardTabRow.kt:101-139：每个页签是 NormalCard(cornerRadius 12)，
+            // 文字 padding(horizontal 8, vertical 8)，非 scrollable 时 `Modifier.weight(1f)` 均分，
+            // 选中色 secondaryContainer / 文字 onSecondaryContainer，
+            // 未选中色 surfaceContainerLow / 文字 onSurfaceVariant，选中加粗。
+            Row({ space: 8 }) {
+              Column() {
+                Text('配置忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
+                  .fontWeight(this.ignoreTab === 0 ? FontWeight.Bold : FontWeight.Normal)
+                  .fontColor(this.ignoreTab === 0 ? this.themeColorOnSecondaryContainer : this.themeColorTextSecondary)
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .textAlign(TextAlign.Center).width('100%')
+              }.layoutWeight(1).borderRadius(12)
+                .backgroundColor(this.ignoreTab === 0 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary)
+                .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
+                .onClick(() => this.ignoreTab = 0)
+              Column() {
+                Text('数据库忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
+                  .fontWeight(this.ignoreTab === 1 ? FontWeight.Bold : FontWeight.Normal)
+                  .fontColor(this.ignoreTab === 1 ? this.themeColorOnSecondaryContainer : this.themeColorTextSecondary)
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .textAlign(TextAlign.Center).width('100%')
+              }.layoutWeight(1).borderRadius(12)
+                .backgroundColor(this.ignoreTab === 1 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary)
+                .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
+                .onClick(() => this.ignoreTab = 1)
+            }.width('100%')
             Column({ space: 4 }) {
               ForEach(this.visibleIgnoreItems(), (item: BackupIgnoreItem) => {
                 BackupCheckItem({ title: item.title, checked: item.checked,
                   onChange: (checked: boolean) => this.toggleIgnoreItem(item.key, checked) })
               }, (item: BackupIgnoreItem) => item.key)
-            }.width('100%').padding({ left: 8, right: 8 })
-          }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
-        }.width('100%').layoutWeight(1)
+            }.width('100%')
+          }.width('100%')
+        }.constraintSize({ maxHeight: this.sheetScrollMaxHeight(0) })
+          .scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
       }
-    }.width('100%').padding({ bottom: 16 })
+    // 上游 AppModalBottomSheet.kt:159-164：`contentPaddingEnabled` 为真时内容 Column 统一加
+    // `padding(start = 16, end = 16, bottom = 16)`，头部与各分支都在这个缩进里。
+    // 所以左右 16 只在这里给一次，分支内不再重复。
+    }.width('100%').padding({ left: 16, right: 16, bottom: 16 })
   }
 
   @Builder
@@ -809,7 +892,12 @@ struct BackupActionRow {
 struct BackupCheckItem {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  // 上游 CheckboxItem.kt:30-33 是 `GlassCard(cornerRadius = 12.dp,
+  // containerColor = if (checked && enabled) secondaryContainer else color)`，
+  // `color` 默认值 `LegadoTheme.colorScheme.onSheetContent`（ThemePalette.ets:1165 即 colors.surface）。
+  // 所以每行都是一张独立小卡：未选中 surface、选中 secondaryContainer。
+  @StorageProp('themeColorOnSheetContent') themeColorOnSheetContent: string = '#F5F6F8';
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE7C8';
   @Prop title: string = '';
   @Prop checked: boolean = false;
   onChange: (checked: boolean) => void = (_checked: boolean) => {};
@@ -823,7 +911,7 @@ struct BackupCheckItem {
         .maxLines(1).margin({ left: 12 }).layoutWeight(1)
     }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
       .borderRadius(12)
-      .backgroundColor(this.checked ? this.themeColorSurfaceElevated : Color.Transparent)
+      .backgroundColor(this.checked ? this.themeColorSecondaryContainer : this.themeColorOnSheetContent)
       .onClick(() => this.onChange(!this.checked))
   }
 }
