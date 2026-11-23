@@ -29,6 +29,8 @@
 | UI 可用性验收 | [UI 验收口径](UI-PARITY.md) |
 | 页面还原流程 | [UI 还原流程](UI-RESTORE.md) |
 | 公共 UI 组件（统一顶栏、设置行控件与度量常量） | `entry/src/main/ets/components/TopBar.ets`、`components/settings/`、`components/UiTokens.ets` |
+| 本地前端组件清单（`components/` 与设计令牌，本地↔上游等价物，写页面前先查） | [前端组件清单](parity/COMPONENT-CATALOG-UI.md) |
+| 本地后端清单（`data/` `reader/` `bookSource/` `lib/` 四子域与按功能索引） | [后端清单](parity/COMPONENT-CATALOG-DATA.md) |
 | 构建和验证记录 | [构建说明](BUILDING.md)、[验证记录](VALIDATION.md) |
 | 模拟器启停 / 探活 / 截图（含密度掉档排查） | [模拟器使用说明](EMULATOR.md)、`scripts/emu.sh` |
 | 核对脚本（七表计数、竖线体检、Markdown 结构体检、链接体检、锚点校验、证据包 lint、上游接触面） | `scripts/parity-rows.py`、`scripts/parity-pipes.py`、`scripts/md-check.py`、`scripts/doc-links.py`、`scripts/anchor-check.py`、`scripts/evidence-lint.py`、`scripts/upstream-surface.sh`（说明见 [盘点规约](PARITY-RULES.md) 第六节） |
