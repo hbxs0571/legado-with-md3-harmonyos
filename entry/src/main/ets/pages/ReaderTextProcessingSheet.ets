@@ -197,6 +197,8 @@ export struct ReaderTextProcessingSheet {
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileFindReplace', glyphSize: 18, tint: this.themeColorTextSecondary })
             }.width(38).height(38).onClick(() => this.openFullReplaceRules())
+            // 上游取 TextProcessingSheet.kt:284 replace_purify
+            .accessibilityText('替换净化')
           }
         }.width('100%').padding({ left: 16, right: 16, bottom: 10 })
 
@@ -232,6 +234,8 @@ export struct ReaderTextProcessingSheet {
               AppGlyph({ name: 'profileFindReplace', glyphSize: 18, tint: '#A9ABB4' })
             }.width(38).height(42).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
               .onClick(() => this.onReplaceEnabledChange(!this.replaceEnabled))
+              // 上游取 TextProcessingSheet.kt:291 replace_filter
+              .accessibilityText('筛选替换规则')
             Text(this.replaceFilter).fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
               .padding({ left: 12, right: 12, top: 12, bottom: 12 })
               .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(12)

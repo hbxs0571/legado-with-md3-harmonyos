@@ -552,6 +552,8 @@ export struct AppCoverSettingsPage {
               AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
             }.width(32).height(32)
               .onClick(() => this.openNameDialog('create', '', ''))
+              // 上游取 CoverAlbumManageScreen.kt:138 cover_album_create
+              .accessibilityText('新建封面图集')
           }.width('100%').padding({ left: 18, right: 18, top: 8, bottom: 12 })
 
           if (this.albums.length === 0) {

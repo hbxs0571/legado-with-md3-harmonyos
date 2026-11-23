@@ -844,6 +844,8 @@ export struct ReaderSettingsPage {
           }.width(32).height(32).borderRadius(16)
             .backgroundColor(this.rsetChipBgAlt)
             .onClick((): void => { this.selectedSettingsTab = this.previousMainSettingsTab; })
+            // 上游取 ReadBookMenuRoutePage.kt:914-966 标题行 back
+            .accessibilityText('返回')
           Text('信息')
             .fontSize(BODY_MEDIUM).fontColor(this.rsetTextPrimary).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -867,6 +869,8 @@ export struct ReaderSettingsPage {
           }.width(32).height(32).borderRadius(16)
             .backgroundColor(this.rsetChipBgAlt)
             .onClick((): void => { this.onBack(); })
+            // 上游取 ReadBookMenuRoutePage.kt:914-966 标题行 back
+            .accessibilityText('返回')
           Text('阅读界面')
             .fontSize(BODY_MEDIUM).fontColor(this.rsetTextPrimary).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -971,18 +975,24 @@ export struct ReaderSettingsPage {
           Image($r('app.media.app_visibility')).width(18).height(18)
             .fillColor(this.eyeProtectionActive ? this.rsetAccent : this.rsetTextSecondary).margin({ left: 10 })
             .onClick(() => this.onEyeProtectionToggle())
+            // 上游取 GlobalThemePage.kt:179 eye_protection
+            .accessibilityText('护眼模式')
             .gesture(LongPressGesture({ duration: 500 }).onAction(() => {
               this.openDetailSheet('护眼模式', '护眼模式与色温参数');
             }))
           Image(this.readerNightMode ? $r('app.media.app_moon') : $r('app.media.app_daynight'))
             .width(18).height(18).fillColor(this.rsetTextSecondary).margin({ left: 9 })
             .onClick(() => this.onToggleNightMode())
+            // 上游取 GlobalThemePage.kt:188 theme_mode
+            .accessibilityText('深色模式')
         }.margin({ top: 13, bottom: 8 })
 
         Scroll(this.backgroundScroller) {
           Row() {
             BackgroundShareOption({ selected: this.shareLayout })
               .margin({ right: 8 }).onClick(() => this.onShareLayoutChange(!this.shareLayout))
+              // 上游取 GlobalThemePage.kt:247 share_layout
+              .accessibilityText('共用布局')
             ForEach(this.backgroundStyles, (style: ReaderBackgroundStyle, styleIndex: number) => {
               BackgroundOption({
                 label: this.getBackgroundStyleLabel(style),
@@ -2988,6 +2998,8 @@ export struct ReaderSettingsPage {
               }.width(40).height(40).backgroundColor(this.rsetInnerBg)
               .borderRadius(this.cardRadius(12)).margin({ left: 4 })
                 .onClick(() => this.openDetailSheet('页边距', ''))
+                // 上游取 TypographyPage.kt:190 padding
+                .accessibilityText('边距')
             }.width('100%').padding({ left: 18, right: 18, bottom: 8 })
             // 上游是 CardTabRow + HorizontalPager：点页签切页，也可以直接横滑。
             Swiper() {
@@ -3130,8 +3142,12 @@ export struct ReaderSettingsPage {
                     Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.app_reduce')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 1))
+                      // 上游取 strings.xml:2760 a11y_move_up
+                      .accessibilityText('上移')
                     Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 2))
+                      // 上游取 TextSelectMenuConfigSheet.kt:287 hidden_items
+                      .accessibilityText('隐藏项目')
                     // 批10（:1403）：删掉自造上下箭头，改行尾拖拽把手（照本文件 bottom/top 配置面板范式）。
                     Stack({ alignContent: Alignment.Center }) {
                       Image($r('app.media.reader_drag_handle')).width(24).height(24).fillColor(this.rsetTextTertiary)
@@ -3187,8 +3203,12 @@ export struct ReaderSettingsPage {
                     Text(item.title).fontSize(BODY_SMALL).fontColor(this.rsetTextPrimary).layoutWeight(1).margin({ left: 8 })
                     Image($r('app.media.app_add')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 0))
+                      // 上游取 strings.xml:2761 a11y_move_down
+                      .accessibilityText('下移')
                     Image($r('app.media.reader_visibility_off')).width(17).height(17).fillColor(this.rsetTextSecondary)
                       .padding(5).onClick(() => this.moveTextMenuEntry(item.id, 2))
+                      // 上游取 TextSelectMenuConfigSheet.kt:363 hidden_items
+                      .accessibilityText('隐藏项目')
                     // 批10（:1403）：折叠菜单同样改拖拽把手，组内换位。
                     Stack({ alignContent: Alignment.Center }) {
                       Image($r('app.media.reader_drag_handle')).width(24).height(24).fillColor(this.rsetTextTertiary)
@@ -4619,6 +4639,8 @@ struct ReaderTabRow {
         .width(36).height(36).borderRadius(12)
         .backgroundColor(this.rsetChipBgAlt)
         .onClick(() => this.onTrailing())
+        // 上游取 TypographyPage.kt:190 padding（页眉页脚行的边距键）
+        .accessibilityText('边距')
       }
     }
     .width('100%')

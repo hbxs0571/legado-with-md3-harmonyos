@@ -92,6 +92,10 @@ export struct UiSwitch {
         this.applyValue(!this.value);
       })
       .opacity(this.disabled ? 0.38 : 1)
+      // 整行合并成一个无障碍节点：上游 `ui/widget/components/settingItem/SettingItem.kt:84`
+      // 与 `TinySettingItems.kt:132` 都在整行挂 `.semantics(mergeDescendants = true)`，
+      // 读屏会把标题、说明、开关状态读成一句，而不是分成三个可聚焦节点。
+      .accessibilityGroup(true)
       if (this.showDivider) {
         ThemeItemDivider()
       }

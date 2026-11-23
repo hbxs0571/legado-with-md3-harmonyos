@@ -126,6 +126,8 @@ export struct ReadAloudConfigPanel {
           Image($r('app.media.reader_back')).width(22).height(22)
             .fillColor(this.themeColorTextPrimary)
             .onClick(() => this.onBack())
+            // 上游取 朗读设置面板返回
+            .accessibilityText('返回')
           Text('朗读设置').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
             .fontColor(this.themeColorTextPrimary).margin({ left: 10 })
           Blank()

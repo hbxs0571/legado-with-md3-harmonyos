@@ -107,7 +107,10 @@ export struct UiAction {
         pressed: { .backgroundColor(this.pressedBackground()) },
         normal: { .backgroundColor(Color.Transparent) }
       })
-      .onClick(() => this.onSelect());
+      .onClick(() => this.onSelect())
+      // 整行合并成一个无障碍节点：上游 `SettingItem.kt:84` 与 `TinySettingItems.kt:132`
+      // 都在整行挂 `.semantics(mergeDescendants = true)`，标题与右侧箭头读成一句。
+      .accessibilityGroup(true);
 
       if (this.showDivider) {
         ThemeItemDivider();

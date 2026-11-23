@@ -2151,6 +2151,8 @@ export struct ReplaceRulesPage {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).onClick(() => this.ruleActionSheet = '')
+          // 上游取 RuleEditSheet.kt:151 close
+          .accessibilityText('关闭')
         }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
         if (this.ruleActionSheet === 'manual') {
           Column() {
@@ -2339,17 +2341,23 @@ export struct ReplaceRulesPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'search', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.showSearch = !this.showSearch; if (!this.showSearch) { this.searchQuery = ''; } })
+          // 上游取 DynamicTopAppBar.kt:102 search
+          .accessibilityText('搜索')
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.replaceRuleMenuVisible = !this.replaceRuleMenuVisible; })
+          // 上游取 DynamicTopAppBar.kt:113 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.replaceRuleMenuVisible, {
   builder: this.ReplaceRuleMenu,
   placement: Placement.BottomRight,
@@ -2483,6 +2491,8 @@ export struct ReplaceRulesPage {
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .visibility(this.selectionMode ? Visibility.None : Visibility.Visible)
         .onClick(() => this.onOpenEditor())
+        // 上游取 RuleListScaffold.kt 默认 FAB add
+        .accessibilityText('添加')
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.ruleActionSheet.length > 0, this.RuleActionSheet(), {
@@ -2667,6 +2677,8 @@ export struct ReplaceRuleEditPage {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.activeSheet = '')
+        // 上游取 RuleEditSheet.kt:151 close
+        .accessibilityText('关闭')
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 8 })
       Text('只对已保存并启用的正文规则试跑，编辑中的改动需要先保存')
         .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%').padding({ left: 18, right: 18, bottom: 10 })
@@ -2851,6 +2863,8 @@ export struct ReplaceRuleEditPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         if (this.keyboardVisible) {
           Stack({ alignContent: Alignment.Center }) {
@@ -2858,12 +2872,16 @@ export struct ReplaceRuleEditPage {
             AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40).margin({ right: 8 })
             .onClick(() => this.saveRule())
+            // 上游取 ReplaceEditScreen.kt:159 action_save
+            .accessibilityText('保存')
         }
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.ruleActionsMenuVisible = !this.ruleActionsMenuVisible; })
+          // 上游取 ReplaceEditScreen.kt:165 more_actions
+          .accessibilityText('更多操作')
 .bindPopup(this.ruleActionsMenuVisible, {
   builder: this.RuleActionsMenu,
   placement: Placement.BottomRight,
@@ -2908,6 +2926,8 @@ export struct ReplaceRuleEditPage {
             Stack({ alignContent: Alignment.Center }) {
               AppGlyph({ name: 'profileSettings', glyphSize: 20, tint: this.themeColorTextSecondary })
             }.width(48).height(56).onClick(() => { this.activeSheet = 'group'; })
+            // 上游取 ReplaceEditScreen.kt:411 group_management
+            .accessibilityText('分组管理')
           }.width('100%')
           Blank().height(12)
           this.RuleField('匹配规则', this.pattern, 'pattern', '输入正则表达式或关键字')
@@ -2959,6 +2979,8 @@ export struct ReplaceRuleEditPage {
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
           .visibility(this.keyboardVisible ? Visibility.Hidden : Visibility.Visible)
           .onClick(() => this.saveRule())
+          // 上游取 ReplaceEditScreen.kt:159 action_save
+          .accessibilityText('保存')
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet.length > 0, this.EditPageSheet(), {
@@ -3049,6 +3071,8 @@ export struct ReplaceRuleGroupSheet {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onClose())
+        // 上游取 RuleEditSheet.kt:151 close
+        .accessibilityText('关闭')
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 12 })
       Scroll() {
         Column() {
@@ -3217,8 +3241,12 @@ struct RuleListBody {
               if (this.sortMode) {
                 Image($r('app.media.reader_reorder_up')).width(18).height(18).fillColor(this.themeColorAccent)
                   .margin({ right: 12 }).onClick(() => this.onMove(rule.id, -1))
+                  // 上游取 strings.xml:2760 a11y_move_up
+                  .accessibilityText('上移')
                 Image($r('app.media.reader_reorder_down')).width(18).height(18).fillColor(this.themeColorAccent)
                   .onClick(() => this.onMove(rule.id, 1))
+                  // 上游取 strings.xml:2761 a11y_move_down
+                  .accessibilityText('下移')
               } else if (!this.selectionMode) {
                 // 开关、编辑与更多图标并排；key 里带上 enabled，避免 ArkUI 复用节点导致开关不刷新。
                 UiSwitchControl({
@@ -3666,6 +3694,8 @@ export struct TxtTocRulesPage {
               this.showAddRule = false;
             }
           })
+          // 上游取 RuleEditSheet.kt:159 保存键
+          .accessibilityText('保存')
       }.width('100%').justifyContent(FlexAlign.End).padding({ left: 16, right: 16, top: 10, bottom: 18 })
     }.width('100%').height('100%')
   }
@@ -3807,6 +3837,8 @@ export struct TxtTocRulesPage {
           AppGlyph({ name: 'add', glyphSize: 24, tint: this.themeColorTextPrimary })
         }.width(56).height(56).backgroundColor(this.themeColorAccent).borderRadius(28)
           .onClick(() => this.openCreator())
+          // 上游取 RuleListScaffold.kt 默认 FAB add
+          .accessibilityText('添加')
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showAddRule, this.ruleEditorSheet(), {
@@ -4006,10 +4038,14 @@ export struct DictionaryRulesPage {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
+        // 上游取 RuleEditSheet.kt:151 close
+        .accessibilityText('关闭')
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 19, tint: this.themeColorTextSecondary })
                 }.width(40).height(40)
           .onClick(() => { this.ruleEditorMenuVisible = !this.ruleEditorMenuVisible; })
+          // 上游取 RuleEditSheet.kt:159 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.ruleEditorMenuVisible, {
   builder: this.RuleEditorMenu,
   placement: Placement.BottomRight,
@@ -4039,6 +4075,8 @@ export struct DictionaryRulesPage {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
           .onClick(() => this.onUnavailableAction('字典规则存储尚未接入，规则未保存'))
+          // 上游取 RuleEditSheet.kt:159 保存键
+          .accessibilityText('保存')
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 14 })
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
@@ -4083,6 +4121,8 @@ export struct DictionaryRulesPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
@@ -4092,11 +4132,15 @@ export struct DictionaryRulesPage {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
+          // 上游取 DynamicTopAppBar.kt:102 search
+          .accessibilityText('搜索')
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.importMenuVisible = !this.importMenuVisible; })
+          // 上游取 DynamicTopAppBar.kt:113 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.importMenuVisible, {
   builder: this.ImportMenu,
   placement: Placement.BottomRight,
@@ -4146,6 +4190,8 @@ export struct DictionaryRulesPage {
         AppGlyph({ name: 'add', glyphSize: 22, tint: this.themeColorAccent })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openRuleEditor())
+        // 上游取 RuleListScaffold.kt 默认 FAB add
+        .accessibilityText('添加')
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showRuleEditor, this.DictionaryRuleSheet(), {
@@ -4297,12 +4343,16 @@ export struct DictionaryRuleEditPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back（图标 reader_back，动作 onBack）
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
                 }.width(40).height(40)
           .onClick(() => { this.ruleActionsMenuVisible = !this.ruleActionsMenuVisible; })
+          // 上游取 RuleEditSheet.kt:159 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.ruleActionsMenuVisible, {
   builder: this.RuleActionsMenu,
   placement: Placement.BottomRight,
@@ -4332,6 +4382,8 @@ export struct DictionaryRuleEditPage {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
+        // 上游取 RuleEditSheet.kt:159 保存键
+        .accessibilityText('保存')
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
@@ -4478,10 +4530,14 @@ export struct HighlightTagRulesPage {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.showRuleEditor = false)
+        // 上游取 HighlightTagRuleEditSheet.kt:85 close
+        .accessibilityText('关闭')
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'more', glyphSize: 19, tint: this.themeColorTextSecondary })
                 }.width(40).height(40)
           .onClick(() => { this.tagEditorMenuVisible = !this.tagEditorMenuVisible; })
+          // 上游取 HighlightTagRuleEditSheet.kt:93 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.tagEditorMenuVisible, {
   builder: this.TagEditorMenu,
   placement: Placement.BottomRight,
@@ -4526,6 +4582,8 @@ export struct HighlightTagRulesPage {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
           .onClick(() => this.onUnavailableAction('标签规则存储尚未接入，规则未保存'))
+          // 上游取 HighlightRuleEditSheet.kt:345 save
+          .accessibilityText('保存')
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 14 })
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
@@ -4537,6 +4595,8 @@ export struct HighlightTagRulesPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
@@ -4546,11 +4606,15 @@ export struct HighlightTagRulesPage {
             this.showSearch = !this.showSearch;
             if (!this.showSearch) { this.searchQuery = ''; }
           })
+          // 上游取 DynamicTopAppBar.kt:102 search
+          .accessibilityText('搜索')
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
                 }.width(40).height(40)
           .onClick(() => { this.importMenuVisible = !this.importMenuVisible; })
+          // 上游取 DynamicTopAppBar.kt:113 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.importMenuVisible, {
   builder: this.ImportMenu,
   placement: Placement.BottomRight,
@@ -4599,6 +4663,8 @@ export struct HighlightTagRulesPage {
         AppGlyph({ name: 'add', glyphSize: 22, tint: this.themeColorAccent })
       }.width(50).height(50).backgroundColor('#454F70').borderRadius(14)
         .onClick(() => this.openTagRuleEditor())
+        // 上游取 RuleListScaffold.kt 默认 FAB add
+        .accessibilityText('添加')
         .margin({ right: 16, bottom: 16 }).alignSelf(ItemAlign.End)
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showRuleEditor, this.TagRuleEditorSheet(), {
@@ -4715,12 +4781,16 @@ export struct HighlightTagRuleEditPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back（图标 reader_back，动作 onBack）
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
                 }.width(40).height(40)
           .onClick(() => { this.ruleActionsMenuVisible = !this.ruleActionsMenuVisible; })
+          // 上游取 TagGroupRuleEditSheet.kt:85 more_menu
+          .accessibilityText('更多菜单')
 .bindPopup(this.ruleActionsMenuVisible, {
   builder: this.RuleActionsMenu,
   placement: Placement.BottomRight,
@@ -4768,6 +4838,8 @@ export struct HighlightTagRuleEditPage {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileSave', glyphSize: 20, tint: this.themeColorAccent })
         }.width(50).height(50).backgroundColor('#454F70').borderRadius(14).onClick(() => this.saveRule())
+        // 上游取 HighlightRuleEditSheet.kt:1243 save
+        .accessibilityText('保存')
       }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }
@@ -5117,6 +5189,8 @@ export struct AllBookmarksPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.handleBack())
+        // 上游取 AllBookmarkScreen.kt:190 back
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
@@ -5125,6 +5199,8 @@ export struct AllBookmarksPage {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
+        // 上游取 AllBookmarkScreen.kt:197-203 search
+        .accessibilityText('搜索')
         if (this.selectedBookKey.length > 0) {
           // 批5（:153）方向切换：图标用 swap，读屏念当前方向，点一下翻面后由 Index 落盘
           Stack({ alignContent: Alignment.Center }) {
@@ -5153,6 +5229,8 @@ export struct AllBookmarksPage {
             AppGlyph({ name: 'more', glyphSize: 20, tint: this.themeColorTextSecondary })
           }.width(40).height(40)
             .onClick(() => { this.exportMenuVisible = !this.exportMenuVisible; })
+            // 上游取 AllBookmarkScreen.kt:206-209 more_menu
+            .accessibilityText('更多菜单')
 .bindPopup(this.exportMenuVisible, {
   builder: this.BookmarkExportMenu,
   placement: Placement.BottomRight,
@@ -6141,27 +6219,38 @@ export struct ReadRecordsPage {
   @Builder
   private topActions() {
     if (this.isInSelectionMode()) {
+      // 上游 `ReadRecordScreen.kt:289-302`：多选态顶栏只有删除，文案取 `R.string.delete_selected`。
       TopBarButton({
         icon: 'delete',
         showDivider: false,
+        accessibilityLabel: '删除选中',
         onSelect: () => this.requestDeleteSelected()
       })
     } else {
       // 图标按当前视图取：汇总→时间线、时间线→时钟、最后阅读→列表。
+      // 文案随图标走，上游 `ReadRecordScreen.kt:305-330` 按 displayMode 三态各给一条：
+      // AGGREGATE 用 `a11y_switch_to_timeline_view`、TIMELINE 用 `a11y_switch_to_latest_view`、
+      // LATEST 用 `a11y_switch_to_aggregate_view`。
       TopBarButton({
         icon: this.displayMode === 0 ? 'profileTimeline' : (this.displayMode === 1 ? 'clock' : 'list'),
         showDivider: false,
+        accessibilityLabel: this.displayMode === 0 ? '切换到时间线视图'
+          : (this.displayMode === 1 ? '切换到最后阅读视图' : '切换到汇总视图'),
         onSelect: () => this.cycleDisplayMode()
       })
+      // 上游 `ReadRecordScreen.kt:328-331` 搜索取 `R.string.search`。
       TopBarButton({
         icon: 'search',
+        accessibilityLabel: '搜索',
         onSelect: () => {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         }
       })
+      // 上游 `ReadRecordScreen.kt:333-336` 溢出取 `R.string.more_actions`（不是 `more_menu`）。
       TopBarButton({
         icon: 'more',
+        accessibilityLabel: '更多操作',
         onSelect: () => this.showActionsSheet = true
       })
     }
@@ -7146,6 +7235,8 @@ export struct CacheManagementPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary)
         }.width(40).height(40).onClick(() => this.onBack())
+        // 上游取 BookCacheManageScreen.kt 顶栏返回
+        .accessibilityText('返回')
         Blank().layoutWeight(1)
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
@@ -7154,11 +7245,15 @@ export struct CacheManagementPage {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
         })
+        // 上游取 BookCacheManageScreen.kt 顶栏搜索
+        .accessibilityText('搜索')
         Stack({ alignContent: Alignment.Center }) {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40)
           .onClick(() => { this.cacheGroupMenuVisible = !this.cacheGroupMenuVisible; })
+          // 上游取 BookCacheManageScreen.kt:174 a11y_group_filter
+          .accessibilityText('按分组筛选')
 .bindPopup(this.cacheGroupMenuVisible, {
   builder: this.CacheGroupMenu,
   placement: Placement.BottomRight,
@@ -7172,6 +7267,8 @@ export struct CacheManagementPage {
           Row().width(32).height(32).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(16)
           AppGlyph({ name: 'profileRefresh', glyphSize: 20, tint: this.themeColorTextSecondary })
         }.width(40).height(40).onClick(() => this.refreshCacheStats())
+        // 上游取 BookCacheManageScreen.kt:195 refresh
+        .accessibilityText('刷新')
       }.width('100%').height(40).padding({ left: 11, right: 12 }).margin({ top: this.appTopInset - 8 })
 
       Text('缓存管理').fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Regular).fontColor(this.themeColorTextPrimary)
@@ -7749,6 +7846,8 @@ export struct AiChatPage {
             Image($r('app.media.app_send')).width(18).height(18).fillColor(this.draft.trim().length > 0 ? this.themeColorTextPrimary : this.themeColorTextTertiary)
               .width(40).height(40).backgroundColor(this.draft.trim().length > 0 ? this.themeColorAccent : '#303139')
               .borderRadius(20).onClick(() => this.sendDraft())
+              // 上游取 AiChatScreen.kt:1010 ai_send
+              .accessibilityText('发送')
           }.padding({ left: 14, right: 8, top: 7, bottom: 7 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(24)
           Row() {
             Text(`思考模式：${this.reasoningLabel()}`).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
@@ -7768,6 +7867,8 @@ export struct AiChatPage {
               Text('最近会话').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
               AppGlyph({ name: 'add', glyphSize: 19, tint: this.themeColorTextSecondary }).padding(8)
                 .onClick(() => { this.historyVisible = false; this.draft = ''; })
+                // 上游取 AiChatScreen.kt:576 ai_new_chat
+                .accessibilityText('新建对话')
             }.padding({ left: 18, right: 12, top: 18, bottom: 16 })
             Row() {
               AppGlyph({ name: 'search', glyphSize: 16, tint: '#C5C7D0' }).margin({ right: 8 })
@@ -7810,14 +7911,20 @@ struct ModuleHeader {
     Column() {
       Row() {
         Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.themeColorTextSecondary).width(36).onClick(() => this.onBack())
+        // 上游取 DynamicTopAppBar.kt:89 back
+        .accessibilityText('返回')
         Column() {
           Text(this.title).fontSize(PROFILE_PAGE_TITLE_SIZE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
           Text(this.subtitle).fontSize(PROFILE_PAGE_SUBTITLE_SIZE).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         AppGlyph({ name: 'search', glyphSize: 18, tint: this.themeColorTextSecondary }).padding({ left: 8, right: 8 })
           .onClick(() => this.onUnavailableAction('设置搜索尚未迁移'))
+          // 上游取 DynamicTopAppBar.kt:102 search
+          .accessibilityText('搜索')
         AppGlyph({ name: 'more', glyphSize: 17, tint: this.themeColorTextSecondary }).padding({ left: 6, right: 6 })
           .onClick(() => this.onUnavailableAction('设置更多操作尚未迁移'))
+          // 上游取 DynamicTopAppBar.kt:113 more_menu
+          .accessibilityText('更多菜单')
       }.width('100%').padding({ left: 12, right: 10, top: 11, bottom: 9 })
     }
   }

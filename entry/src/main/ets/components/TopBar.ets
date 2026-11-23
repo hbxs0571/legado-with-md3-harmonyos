@@ -416,6 +416,10 @@ export struct TopBarButton {
         })
         .opacity(this.disabled ? 0.38 : 1)
         .enabled(!this.disabled)
+        // 上游 `TopBarActionButton(contentDescription = ...)`（`TopBarButton.kt:335-380`）的
+        // 文案挂在同一个 `TopBarButton` 上，与是否 menuMode 无关；这里原先只在 menuMode
+        // 分支挂了 `.accessibilityText`，普通动作按钮漏掉，读屏只报图标。
+        .accessibilityText(this.accessibilityLabel)
         // 按下缩放：按钮 36/40vp，LIGHT 默认 0.9 只有 3-4vp 位移，观感是「按下去」。
         .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.9 })
         .onClick(() => {

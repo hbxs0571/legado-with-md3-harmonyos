@@ -139,13 +139,16 @@ export struct HomePage {
   }
 
   @Builder homeTopActions() {
+    // 上游 `HomeScreen.kt:448-452`：设置图标对应首页模块管理，文案取 `R.string.homepage_module_manage`。
     TopBarButton({
       icon: 'settings',
       showDivider: false,
+      accessibilityLabel: '首页模块管理',
       onSelect: () => { this.showHomeOptions = !this.showHomeOptions; }
     })
     // menuMode: true 让 TopBarButton 不注册自己的 onClick，点击手势交给外层 bindPopup。
-    TopBarButton({ icon: 'more', menuMode: true })
+    // 上游 `HomeScreen.kt:454-457`：溢出菜单入口取 `R.string.more_menu`。
+    TopBarButton({ icon: 'more', menuMode: true, accessibilityLabel: '更多菜单' })
       .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
       .bindPopup(this.moreMenuVisible, {
         builder: this.MoreMenu,
@@ -321,6 +324,8 @@ export struct HomePage {
                 ForEach(this.getRecentBooks(), (book: Book) => {
                   BookCover({ book: book, mini: true, displayWidth: 60, displayHeight: 84, cornerRadius: 12 })
                     .margin({ right: 8 }).onClick(() => this.openBook(book))
+                    // 上游取 HomeScreen.kt:1031 bookAccessibilityLabel(name, author)
+                    .accessibilityText(`${book.title}，${book.author}`)
                 }, (book: Book) => book.id)
               }
             }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ top: 12 })
@@ -336,6 +341,8 @@ export struct HomePage {
                   this.goalDraft = `${this.goalMinutes}`;
                   this.showGoalDialog = true;
                 })
+                // 上游取 HomeScreen.kt:1085 home_set_goal
+                .accessibilityText('设定目标')
             }.width('100%')
             Stack({ alignContent: Alignment.Bottom }) {
               Canvas(this.goalContext).width(240).height(120).onReady(() => this.drawGoalArc())

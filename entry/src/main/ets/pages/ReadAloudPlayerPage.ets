@@ -207,6 +207,8 @@ export struct ReadAloudPlayerPage {
       Image($r('app.media.reader_back')).width(22).height(22)
         .fillColor(this.fg())
         .onClick(() => this.onBack())
+        // 上游取 ReadAloudPlayerScreen.kt 顶栏返回
+        .accessibilityText('返回')
       Column() {
         Text(this.bookName).fontSize(BODY_MEDIUM).fontWeight(FontWeight.Medium)
           .fontColor(this.fg())
@@ -217,6 +219,8 @@ export struct ReadAloudPlayerPage {
       Image($r('app.media.reader_settings')).width(20).height(20)
         .fillColor(this.fg())
         .onClick(() => this.onOpenConfig())
+        // 上游取 ReadAloudPlayerScreen.kt:217 setting
+        .accessibilityText('设置')
     }
     .width('100%').padding({ left: 20, right: 20, top: 12, bottom: 12 })
   }

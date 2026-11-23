@@ -73,6 +73,9 @@ export struct UiChoice {
       }
       this.onSelect((this.selectedIndex + 1) % this.options.length);
     })
+    // 整行合并成一个无障碍节点：上游 `SettingItem.kt:84` 的 `.semantics(mergeDescendants = true)`，
+    // 标题与当前取值读成一句。
+    .accessibilityGroup(true)
       if (this.showDivider) {
         ThemeItemDivider()
       }

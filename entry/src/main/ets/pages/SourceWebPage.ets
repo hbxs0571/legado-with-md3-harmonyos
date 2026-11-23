@@ -37,7 +37,10 @@ export struct SourceWebPage {
   }
 
   @Builder webActionsSlot() {
-    TopBarButton({ icon: 'web', showDivider: false, onSelect: () => {
+    // 文案取上游 `ui/browser/WebViewRouteScreen.kt:75` 的 `refreshDescription = R.string.refresh`
+    // （中文「刷新」）。上游该页顶栏还有「浏览器打开」「拷贝 URL」「确认」三个动作
+    // （`:76-78` 的 `open_in_browser` / `copy_url` / `ok`），本地这一页只保留了刷新。
+    TopBarButton({ icon: 'web', showDivider: false, accessibilityLabel: '刷新', onSelect: () => {
       // 刷新：重新加载当前 URL。
       if (this.url.trim().length > 0) { this.controller.refresh(); }
     } })

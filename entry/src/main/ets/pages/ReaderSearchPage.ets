@@ -370,6 +370,8 @@ export struct ReaderSearchPage {
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.reader_back')).width(22).height(22).fillColor('#E4E5EA')
         }.width(40).height(40).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(22).onClick(() => this.onBack())
+        // 上游取 SearchContentScreen.kt 顶栏返回
+        .accessibilityText('返回')
         Blank()
         // 上游两个 TopBarAnimatedActionButton 都是 36×36 盒 + 20dp 图标
         // （`SeriesIconButton.kt:54-55`），选中态底色 primaryContainer。
@@ -379,12 +381,16 @@ export struct ReaderSearchPage {
         }.width(36).height(36).borderRadius(18)
           .backgroundColor(this.replaceEnabled ? this.themeColorPrimaryContainer : Color.Transparent)
           .onClick(() => this.toggleReplaceMode())
+          // 上游取 SearchContentScreen.kt:203-208 activeText/inactiveText（上游为硬编码中文）
+          .accessibilityText(this.replaceEnabled ? '替换关闭' : '替换开启')
         Stack({ alignContent: Alignment.Center }) {
           Image($r('app.media.app_code')).width(20).height(20)
             .fillColor(this.regexMode ? this.themeColorAccent : this.themeColorTextSecondary)
         }.width(36).height(36).borderRadius(18)
           .backgroundColor(this.regexMode ? this.themeColorPrimaryContainer : Color.Transparent)
           .onClick(() => this.toggleRegexMode())
+          // 上游取 SearchContentScreen.kt:203-212 activeText/inactiveText（上游为硬编码中文）
+          .accessibilityText(this.regexMode ? '正则关闭' : '正则开启')
         // 上游点击后按钮旁展开 1 秒文字；本地放在按钮右侧同一行。
         if (this.actionHint.length > 0) {
           Text(this.actionHint).fontSize(BODY_SMALL).fontColor(this.themeColorAccent).margin({ left: 4 })
@@ -411,6 +417,8 @@ export struct ReaderSearchPage {
         if (this.query.length > 0) {
           Image($r('app.media.profile_close')).width(18).height(18).fillColor('#AEB0B9')
             .width(30).onClick(() => this.scheduleSearch(''))
+            // 上游取 SearchContentScreen.kt:229-238 clear
+            .accessibilityText('清除')
         }
       }.padding({ left: 14, right: 10, top: 7, bottom: 7 }).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(24)
         .margin({ left: 16, right: 16 })

@@ -328,6 +328,13 @@ export struct DiscoverPage {
   // @BuilderParam 槽位须传 @Builder 方法引用；内联 lambda 直接实例化 struct 会
   // 在运行时变成裸构造函数调用（class constructor cannot called without 'new'）。
   @Builder discoverActionsSlot() {
+    // 无障碍文案不补：上游发现页顶栏（`feature/explore/ExploreMainRoute.kt:197-243`）用的是
+    // `DynamicTopAppBar`，它自己的动作是「直接浏览发现内容」（`R.string.explore_main_content`）
+    // 与「选择发现书源」（`R.string.explore_select_source`），没有刷新按钮；
+    // `contentDescription = R.string.refresh` 全仓只出现在缓存管理、投屏、RSS 阅读三处
+    // （`BookCacheManageScreen.kt:195`、`BookVoiceCastingScreen.kt:128`、
+    // `RssReadRouteScreen.kt:302`）。这个按钮是本地独有的「重新加载发现书源」，
+    // 上游没有同位置的 contentDescription，按任务书 B 项「不许自己编文案」留空。
     TopBarButton({
       icon: 'profileRefresh',
       showDivider: false,

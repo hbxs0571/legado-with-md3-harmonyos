@@ -291,15 +291,20 @@ export struct SearchPage {
   }
 
   @Builder searchTopActions() {
-    TopBarButton({ icon: 'settings', showDivider: false, onSelect: () => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供') })
+    // 上游 `SearchScreen.kt:320-334` 的三个顶栏动作都是 `TopBarAnimatedActionButton`，
+    // 文案取 `activeText`/`inactiveText`（同一个字符串，与选中态无关）：
+    // 设置 `R.string.setting`、精准搜索 `R.string.precision_search`、筛选 `R.string.screen`。
+    TopBarButton({ icon: 'settings', showDivider: false, accessibilityLabel: '设置', onSelect: () => this.onUnavailableAction('搜索设置将在在线书源搜索接入后提供') })
     TopBarButton({
       icon: this.exactMatch ? 'searchPrecisionOn' : 'searchPrecisionOff',
       tint: this.exactMatch ? this.themeColorAccent : '',
+      accessibilityLabel: '精准搜索',
       onSelect: () => this.onExactMatchChange(!this.exactMatch)
     })
     TopBarButton({
       icon: 'profileFilterAlt',
       tint: this.sourceScope || this.selectedGroup !== '全部书籍' ? this.themeColorAccent : '',
+      accessibilityLabel: '筛选',
       onSelect: () => { this.showScopePanel = true; }
     })
   }

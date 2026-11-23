@@ -4770,6 +4770,8 @@ export struct ReaderPage {
     .width(36).height(36).borderRadius(18)
     .backgroundColor(this.readMenuFloatingIconLiquidGlass ? this.readerMenuForegroundAlpha('1F') : '#00000000')
     .onClick(() => this.selectBottomAction(kind))
+    // 上游取 ReadBookMenuBarTool.kt:326-395 contentDescription = button.description
+    .accessibilityText(this.getBottomActionLabel(kind))
     .gesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
       this.longSelectBottomAction(kind);
     }))
@@ -6023,6 +6025,8 @@ export struct ReaderPage {
         this.onBrightnessVwPosChange(this.brightnessVwPos === '0' ? '1' : '0');
       }
     })
+    // 上游取 ReadBookMenuBarBottom.kt:392/416 brightness_follow_system / brightness_bar_position
+    .accessibilityText(kind === 'auto' ? '跟随系统' : '亮度条位置')
   }
 
   @Builder private ReaderBrightnessSlider(vertical: boolean) {
@@ -6178,6 +6182,8 @@ export struct ReaderPage {
               this.onOpenSettings();
             }
           })
+          // 上游取 TextActionSelectionMenu.kt:412 if (hasMore) more_menu else setting
+          .accessibilityText(this.hasCollapsedSelectionMenuItem() ? '更多菜单' : '设置')
         }
         .backgroundColor(this.readerSelectionCardColor())
         .borderRadius(12)
@@ -8745,6 +8751,8 @@ export struct ReaderPage {
                   Stack({ alignContent: Alignment.Center }) {
                     Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
                   }.width(this.readerTopBarButtonOuterSize()).height(this.readerTopBarButtonOuterSize()).onClick(() => this.onBack())
+                  // 上游取 ReadBookMenuBarTitle.kt 顶栏返回
+                  .accessibilityText('返回')
                   // 胶囊模式：书名 + 章节名压成一行两段，独占中间剩余宽度（上游 ReadBookMenuBarTitle.kt:198/492）。
                   if (this.readerTitleCapsuleVisible()) {
                     this.readerTitleCapsule()
@@ -8862,6 +8870,8 @@ export struct ReaderPage {
                   Image($r('app.media.reader_back')).width(20).height(20).fillColor(this.readerMenuForeground())
                 }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
                   .onClick(() => this.turnReaderChapter(-1))
+                  // 上游取 ReadBookMenuBarBottom.kt:177 previous_chapter
+                  .accessibilityText('上一章')
                 if (this.readSliderMode !== '1') {
                   // 上游 `ReadMenuSlider`（`ReadBookMenuBarTool.kt:67-113`）普通档走
                   // `AppSlider` → material3 `Slider` 默认外观，也就是 M3 的形态：
@@ -8936,6 +8946,8 @@ export struct ReaderPage {
                   Image($r('app.media.reader_arrow_forward')).width(20).height(20).fillColor(this.readerMenuForeground())
                 }.width(this.readerBottomActionOuterSize()).height(this.readerBottomActionOuterSize())
                   .onClick(() => this.turnReaderChapter(1))
+                  // 上游取 ReadBookMenuBarBottom.kt:206 next_chapter
+                  .accessibilityText('下一章')
               }.width('100%').height(this.readerBottomActionOuterSize())
                 // 上游 `ReadBookMenuBarBottom.kt:162-169`：`padding(vertical = 4.dp).padding(horizontal = 16.dp)`。
                 .padding({ left: 16, right: 16, top: 4, bottom: 4 })
@@ -9748,6 +9760,8 @@ export struct ReaderPage {
                   .width(16).height(16)
                   .fillColor(this.readerNightMode ? '#FFFFFF' : '#000000')
                   .onClick(() => this.onCapsuleStop())
+                  // 上游取 ReadAloudCapsule.kt:447 stop_read_aloud
+                  .accessibilityText('关闭朗读')
               }
               .width(36).height(36)
             }

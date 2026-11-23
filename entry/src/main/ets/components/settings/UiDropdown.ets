@@ -104,6 +104,8 @@ export struct UiDropdown {
     })
 
     .onClick(() => { this.menuVisible = !this.menuVisible; })
+    // 整行合并成一个无障碍节点：上游 `SettingItem.kt:84` 的 `.semantics(mergeDescendants = true)`。
+    .accessibilityGroup(true)
     .bindPopup(this.menuVisible, {
       builder: this.OptionMenu,
       placement: Placement.Bottom,

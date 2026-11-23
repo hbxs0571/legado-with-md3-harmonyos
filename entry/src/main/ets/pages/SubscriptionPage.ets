@@ -82,15 +82,19 @@ export struct SubscriptionPage {
 
   /** 顶栏动作区照现有代码逐个映射：搜索、更多菜单。 */
   @Builder subscriptionTopActions() {
+    // 上游 RSS 页（`ui/main/rss/RssScreen.kt:166`）走 `ListScaffold` → `DynamicTopAppBar`，
+    // 顶栏动作文案在 `ui/widget/components/topbar/DynamicTopAppBar.kt`：搜索取
+    // `R.string.search`（`:99-102`）、溢出菜单取 `R.string.more_menu`（`:110-113`）。
     TopBarButton({
       icon: 'search',
       showDivider: false,
+      accessibilityLabel: '搜索',
       onSelect: () => {
         this.showSearch = !this.showSearch;
         if (!this.showSearch) { this.searchQuery = ''; }
       }
     })
-    TopBarButton({ icon: 'more', menuMode: true })
+    TopBarButton({ icon: 'more', menuMode: true, accessibilityLabel: '更多菜单' })
       .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
       .bindPopup(this.moreMenuVisible, {
         builder: this.MoreMenu,

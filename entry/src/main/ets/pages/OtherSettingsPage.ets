@@ -301,12 +301,16 @@ export struct OtherSettingsPage {
             AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: this.themeColorAccent })
           }.width(40).height(40).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => this.onUnavailableAction('直链规则测试尚未迁移'))
+            // 上游取 DirectLinkUploadBottomSheet.kt:67 test
+            .accessibilityText('测试')
           Text('直链上传配置').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
             .layoutWeight(1).textAlign(TextAlign.Center)
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'more', glyphSize: 18, tint: this.themeColorTextSecondary })
           }.width(40).height(40).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
             .onClick(() => { this.directLinkVisible = !this.directLinkVisible; })
+            // 上游取 DirectLinkUploadBottomSheet.kt:75 more_menu
+            .accessibilityText('更多菜单')
             .bindPopup(this.directLinkVisible, {
               builder: this.DirectLinkMenu,
               placement: Placement.Bottom,

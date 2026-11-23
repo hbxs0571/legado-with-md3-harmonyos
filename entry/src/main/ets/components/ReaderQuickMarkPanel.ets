@@ -48,6 +48,8 @@ export struct ReaderQuickMarkPanel {
         Stack({ alignContent: Alignment.Center }) {
           AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.themeColorTextSecondary })
         }.width(28).height(28).onClick(() => this.onClose())
+        // 上游取 TextActionSelectionMenu.kt:491 back
+        .accessibilityText('关闭')
       }.width('100%').height(28)
 
       // 样式：七个胶囊，选中填强调色

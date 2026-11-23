@@ -114,12 +114,16 @@ struct SubscriptionListPage {
   }
 
   @Builder subTopActions() {
+    // 上游 RSS 页（`ui/main/rss/RssScreen.kt:166`）走 `ListScaffold` → `DynamicTopAppBar`，
+    // 顶栏动作的文案在 `ui/widget/components/topbar/DynamicTopAppBar.kt`：搜索取
+    // `R.string.search`（`:99-102`）、溢出菜单取 `R.string.more_menu`（`:110-113`）。
     TopBarButton({
       icon: 'search',
       showDivider: false,
+      accessibilityLabel: '搜索',
       onSelect: () => { this.searchVisible = !this.searchVisible; }
     })
-    TopBarButton({ icon: 'more', menuMode: true })
+    TopBarButton({ icon: 'more', menuMode: true, accessibilityLabel: '更多菜单' })
       .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
       .bindPopup(this.moreMenuVisible, {
         builder: this.MoreMenu,
@@ -168,6 +172,8 @@ struct SubscriptionListPage {
             AppGlyph({ name: 'add', glyphSize: 24, tint: '#DDE3FF' })
           }.width(56).height(56).backgroundColor('#4D5C8D').borderRadius(18)
             .onClick(() => this.activeSheet = 'ruleEditor')
+            // 上游取 RssSourceScreen.kt:249 RuleListScaffold 默认 FAB add
+            .accessibilityText('添加')
             .transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE, curve: Curve.EaseInOut }))
         }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, top: 8, bottom: 8 })
       }
@@ -275,12 +281,16 @@ export struct SubscriptionSourceManagePage {
   }
 
   @Builder subTopActions() {
+    // 上游 RSS 页（`ui/main/rss/RssScreen.kt:166`）走 `ListScaffold` → `DynamicTopAppBar`，
+    // 顶栏动作的文案在 `ui/widget/components/topbar/DynamicTopAppBar.kt`：搜索取
+    // `R.string.search`（`:99-102`）、溢出菜单取 `R.string.more_menu`（`:110-113`）。
     TopBarButton({
       icon: 'search',
       showDivider: false,
+      accessibilityLabel: '搜索',
       onSelect: () => { this.searchVisible = !this.searchVisible; }
     })
-    TopBarButton({ icon: 'more', menuMode: true })
+    TopBarButton({ icon: 'more', menuMode: true, accessibilityLabel: '更多菜单' })
       .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
       .bindPopup(this.moreMenuVisible, {
         builder: this.MoreMenu,
@@ -322,6 +332,8 @@ export struct SubscriptionSourceManagePage {
           AppGlyph({ name: 'add', glyphSize: 24, tint: '#DDE3FF' })
         }.width(50).height(50).backgroundColor('#4D5C8D').borderRadius(16)
           .onClick(() => this.onUnavailableAction('订阅源编辑页尚未迁移'))
+          // 上游取 RssSourceScreen.kt:249 RuleListScaffold 默认 FAB add
+          .accessibilityText('添加')
       }.width('100%').justifyContent(FlexAlign.End).padding({ right: 16, bottom: 16 })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
   }

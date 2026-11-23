@@ -72,6 +72,9 @@ export struct UiInput {
           this.expanded = !this.expanded;
         });
       })
+      // 标题行合并成一个无障碍节点：上游 `SettingItem.kt:84` 的 `.semantics(mergeDescendants = true)`。
+      // 只合并标题行不合并展开后的输入框，否则输入框会失去自己的可编辑语义。
+      .accessibilityGroup(true)
 
       if (this.expanded) {
         Column() {

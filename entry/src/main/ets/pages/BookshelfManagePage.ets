@@ -955,6 +955,8 @@ export struct BookshelfManagePage {
         AppGlyph({ name: 'profileFilterAlt', glyphSize: 20, tint: this.themeColorTextPrimary })
           .width(40).height(40)
           .onClick(() => { this.groupFilterVisible = !this.groupFilterVisible; })
+          // 上游取 BookSourceScreen.kt:916-985 分组筛选
+          .accessibilityText('按分组筛选')
           .bindPopup(this.groupFilterVisible, {
             builder: this.GroupFilterMenu,
             placement: Placement.BottomRight,

@@ -1557,11 +1557,13 @@ export struct BookInfoPage {
           TopBarBackButton({ onSelect: () => this.onBack() })
           Blank()
           Row({ space: topBarActionSpacing(this.themeTopBarButtonStyle) }) {
-            TopBarButton({ icon: 'edit', onSelect: () => this.onOpenEditPage() })
-            TopBarButton({ icon: 'share', onSelect: () => this.shareBook() })
+            // 文案对齐上游 `BookInfoScreen.kt:885-894`：编辑取 `R.string.edit`、分享取 `R.string.share`；
+            // 更多取 `R.string.more_actions`（`BookInfoScreen.kt:913`），不是 `more_menu`。
+            TopBarButton({ icon: 'edit', accessibilityLabel: '编辑', onSelect: () => this.onOpenEditPage() })
+            TopBarButton({ icon: 'share', accessibilityLabel: '分享', onSelect: () => this.shareBook() })
             // menuMode: true 让 TopBarButton 不注册自己的 onSelect（否则内层点击会被它吃掉）；
             // bindPopup 要求宿主节点可点击，所以这里补一个只翻转显隐的 onClick。
-            TopBarButton({ icon: 'more', menuMode: true })
+            TopBarButton({ icon: 'more', menuMode: true, accessibilityLabel: '更多操作' })
               .onClick(() => { this.overflowVisible = !this.overflowVisible; })
               .bindPopup(this.overflowVisible, {
                 builder: this.OverflowMenuPopup,

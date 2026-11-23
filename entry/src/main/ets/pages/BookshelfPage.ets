@@ -2545,11 +2545,17 @@ export struct BookshelfPage {
 
   @Builder bookshelfTopActions() {
     if (this.selectionMode) {
-      TopBarButton({ icon: 'profileClose', showDivider: false, onSelect: () => this.clearSelection() })
+      // 上游 `BookshelfScreen.kt:611-680` 的选择态顶栏是「全选 / 反选 / 下载 / 移入分组 /
+      // 私有标记 / 删除选中」六个动作（文案分别取 `select_all` `revert_selection`
+      // `action_download` `move_to_group` `private_mark_book`|`private_unmark_book`
+      // `delete_selected`），本地选择态只保留了退出选择这一个按钮，对应上游顶栏左侧的
+      // `onExitEditMode`，文案取 `R.string.close`。
+      TopBarButton({ icon: 'profileClose', showDivider: false, accessibilityLabel: '关闭', onSelect: () => this.clearSelection() })
     } else {
       TopBarButton({
         icon: 'search',
         showDivider: false,
+        accessibilityLabel: '搜索',
         onSelect: () => {
           if (this.layout.bookshelfSearchActionDirectToSearch) {
             this.onSearch();
@@ -2567,7 +2573,8 @@ export struct BookshelfPage {
         }
       }))
       // menuMode: true 让 TopBarButton 不注册 onClick，点击交给外层 bindPopup。
-      TopBarButton({ icon: 'more', menuMode: true })
+      // 上游书架顶栏的溢出菜单入口文案取 `R.string.more_menu`（`BookshelfScreen.kt` 的 actions 尾段）。
+      TopBarButton({ icon: 'more', menuMode: true, accessibilityLabel: '更多菜单' })
         .onClick(() => { this.moreMenuVisible = !this.moreMenuVisible; })
         .bindPopup(this.moreMenuVisible, {
           builder: this.MoreMenu,

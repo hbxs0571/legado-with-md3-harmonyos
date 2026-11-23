@@ -311,6 +311,8 @@ export struct BookInfoEditPage {
         }.width(34).height(34).borderRadius(17)
         .border({ width: 1, color: this.themeColorTextTertiary })
         .onClick(() => { this.kindList = this.originalKindList.slice(0); })
+        // 上游取 BookInfoEditScreen.kt:488 reset
+        .accessibilityText('重置')
 
         // 新增：editingIndex = -1（上游 `:493-494`）。
         Stack({ alignContent: Alignment.Center }) {
@@ -321,6 +323,8 @@ export struct BookInfoEditPage {
           this.kindEditingIndex = -1;
           this.kindEditingText = '';
         })
+        // 上游取 BookInfoEditScreen.kt:497 add
+        .accessibilityText('添加')
       }.width('100%').alignItems(VerticalAlign.Center)
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
@@ -416,7 +420,8 @@ export struct BookInfoEditPage {
   @Builder
   topActions() {
     // 保存按钮：上游是顶栏右侧一个 Save 图标，这里同样用 TopBarButton 而不是自绘圆底。
-    TopBarButton({ icon: 'profileSave', showDivider: false, onSelect: () => { this.submit(); } })
+    // 文案取 `R.string.save`（`BookInfoEditScreen.kt:107-110`）。
+    TopBarButton({ icon: 'profileSave', showDivider: false, accessibilityLabel: '保存', onSelect: () => { this.submit(); } })
   }
 
   build() {

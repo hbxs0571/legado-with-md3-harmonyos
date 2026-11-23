@@ -177,8 +177,11 @@ export struct SourceLoginPage {
 
   /** 表单态顶栏动作：对齐上游 startAction(菜单)/endAction(确认)。 */
   @Builder loginActionsSlot() {
-    TopBarButton({ icon: 'profileInfo', showDivider: false, onSelect: () => this.copyLoginHeader() })
-    TopBarButton({ icon: 'profileCheck', showDivider: false, onSelect: () => { this.submit(); } })
+    // 文案取上游 `ui/login/SourceLoginSheets.kt`：拷贝登录头是 `endAction` 的
+    // `MediumTonalButton(contentDescription = R.string.copy_text)`（`:94-99`），
+    // 确认是 `endAction` 的 `MediumTonalButton(contentDescription = R.string.ok)`（`:138-143`）。
+    TopBarButton({ icon: 'profileInfo', showDivider: false, accessibilityLabel: '拷贝内容', onSelect: () => this.copyLoginHeader() })
+    TopBarButton({ icon: 'profileCheck', showDivider: false, accessibilityLabel: '确认', onSelect: () => { this.submit(); } })
   }
 
   build() {
