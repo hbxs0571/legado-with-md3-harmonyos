@@ -380,8 +380,10 @@ export struct BookCover {
     .height(this.coverHeight())
     .backgroundColor(bookCoverColor(this.book))
     .borderRadius(this.cornerRadius)
+    // 半径 4 对齐上游 `CoilBookCover.kt:388` 的 `Modifier.shadow(4.dp, shape)`：
+    // 上游封面阴影只有一个 4.dp 值，没有第二档。
     .shadow(this.shadowEnabled
-      ? { radius: 6, color: '#66000000', offsetX: 0, offsetY: 2 }
+      ? { radius: 4, color: '#66000000', offsetX: 0, offsetY: 2 }
       : { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 })
     // 共享元素源端：空串按 `common.d.ts:21406` 的文档语义解除绑定，所以不需要 if 包裹。
     .geometryTransition(this.sharedKey)

@@ -237,7 +237,9 @@ export struct ReadAloudEnginePage {
       .width('100%').height('72%')
       .backgroundColor(this.surfacePrimary)
       .borderRadius({ topLeft: 20, topRight: 20 })
-      .shadow({ radius: 20, color: '#33000000', offsetY: -4 })
+      // 上游这一处是 `CloudTtsScreen.kt:481 CloudTtsEngineEditorSheet` → `AppModalBottomSheet.kt:100/148`，
+      // 只传 containerColor = surfaceContainer；AOSP `ModalBottomSheet.kt:105` 的 tonalElevation 默认 0.dp，
+      // 且 ModalBottomSheet 从不给 shadowElevation，所以这里不投影。
       .position({ x: 0, y: '28%' })
       .zIndex(20);
     }

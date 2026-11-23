@@ -1604,7 +1604,9 @@ export struct BookInfoPage {
         .padding({ left: 16, right: 20 })
         .borderRadius(16)
         .backgroundColor(this.themeColorAccent)
-        .shadow({ radius: 12, color: '#33000000', offsetY: 4 })
+        // 半径 6 对齐上游 `BookInfoScreen.kt:337-343 ExtendedFloatingActionButton` 不传 elevation 时的默认值：
+        // AOSP `ExtendedFabPrimaryTokens.ContainerElevation = ElevationTokens.Level3`，Level3 = 6dp。
+        .shadow({ radius: 6, color: '#33000000', offsetY: 4 })
         .margin({ right: 16, bottom: 16 })
         .onClick(() => this.onRead())
       }

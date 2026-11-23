@@ -341,7 +341,7 @@ export struct ReadAloudPlayerPage {
       Row() {
         PlayerIconBtn({ res: 'app.media.app_previous', desc: '上一句', dark: this.isDarkBg(), style: 0, onAction: () => this.onPrevious() })
         PlayerIconBtn({ res: 'app.media.reader_reorder_up', desc: '上一章', dark: this.isDarkBg(), style: 1, onAction: () => this.onPreviousChapter() })
-        PlayerIconBtn({ res: this.isPlaying ? 'app.media.reader_pause' : 'app.media.reader_play', desc: this.isPlaying ? '暂停' : '播放', dark: this.isDarkBg(), style: 2, onAction: () => this.onTogglePause() })
+        PlayerIconBtn({ res: this.isPlaying ? 'app.media.reader_pause' : 'app.media.reader_play', desc: this.isPlaying ? '暂停' : '播放', dark: this.isDarkBg(), style: 2, isPlaying: this.isPlaying, onAction: () => this.onTogglePause() })
         PlayerIconBtn({ res: 'app.media.reader_reorder_down', desc: '下一章', dark: this.isDarkBg(), style: 1, onAction: () => this.onNextChapter() })
         PlayerIconBtn({ res: 'app.media.reader_next', desc: '下一句', dark: this.isDarkBg(), style: 0, onAction: () => this.onNext() })
       }.width('100%').justifyContent(FlexAlign.SpaceEvenly).margin({ top: 6 })
@@ -485,27 +485,230 @@ struct TextCard {
   }
 }
 
+/**
+ * 播放/暂停键的容器与图标形变，对齐上游
+ * `ui/widget/components/player/AnimatedPlayPauseButton.kt:96-166`：
+ * 容器是「圆 ↔ 八瓣软爆裂」（128 点，`baseRadius = r*(1-0.055p)`、
+ * `lobeAmplitude = r*0.055p`、转 30°），图标是 play 三角 ↔ pause 双横条的
+ * 逐顶点插值（两段子路径各 5 点），容器色 `primaryContainer` ↔ `secondaryContainer`。
+ *
+ * ArkUI 这边用 `@AnimatableExtend` + `AnimatableArithmetic<PointVector>` 让引擎在
+ * 两个端点形状之间逐帧插值（探针实测 118–240 次/秒，见 docs/KNOWN-ISSUES.md
+ * 「组件级形变」一节），所以这里只给端点形状，不自己算 progress。
+ */
+class MorphPoint extends Array<number> {
+  constructor(x: number, y: number) {
+    super();
+    this.push(x);
+    this.push(y);
+  }
+}
+
+class PointVector extends Array<MorphPoint> implements AnimatableArithmetic<PointVector> {
+  constructor(points: MorphPoint[]) {
+    super();
+    for (let i = 0; i < points.length; i++) {
+      this.push(points[i]);
+    }
+  }
+
+  plus(rhs: PointVector): PointVector {
+    const n: number = Math.min(this.length, rhs.length);
+    const out: MorphPoint[] = [];
+    for (let i = 0; i < n; i++) {
+      out.push(new MorphPoint(this[i][0] + rhs[i][0], this[i][1] + rhs[i][1]));
+    }
+    return new PointVector(out);
+  }
+
+  subtract(rhs: PointVector): PointVector {
+    const n: number = Math.min(this.length, rhs.length);
+    const out: MorphPoint[] = [];
+    for (let i = 0; i < n; i++) {
+      out.push(new MorphPoint(this[i][0] - rhs[i][0], this[i][1] - rhs[i][1]));
+    }
+    return new PointVector(out);
+  }
+
+  multiply(scale: number): PointVector {
+    const out: MorphPoint[] = [];
+    for (let i = 0; i < this.length; i++) {
+      out.push(new MorphPoint(this[i][0] * scale, this[i][1] * scale));
+    }
+    return new PointVector(out);
+  }
+
+  equals(rhs: PointVector): boolean {
+    if (this.length !== rhs.length) {
+      return false;
+    }
+    for (let i = 0; i < this.length; i++) {
+      if (this[i][0] !== rhs[i][0] || this[i][1] !== rhs[i][1]) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+/** 容器顶点数，对齐上游 `BUTTON_PATH_SAMPLES = 128`。 */
+const PLAY_BUTTON_PATH_SAMPLES: number = 128;
+/** 主播放键直径（vp）：沿用本地 Transport 行原有 54vp，上游是 72dp。 */
+const PLAY_BUTTON_SIZE: number = 54;
+/** 图标尺寸（vp）：沿用本地原有 26vp。 */
+const PLAY_ICON_VP: number = 26;
+/** 图标坐标系边长，对齐上游 `size.minDimension / 24f`。 */
+const PLAY_ICON_UNIT: number = 24;
+
+/** 圆：`progress = 0` 的端点。 */
+function playButtonCirclePoints(): PointVector {
+  const center: number = PLAY_BUTTON_SIZE / 2;
+  const radius: number = center;
+  const pts: MorphPoint[] = [];
+  for (let i = 0; i < PLAY_BUTTON_PATH_SAMPLES; i++) {
+    const angle: number = Math.PI * 2 * i / PLAY_BUTTON_PATH_SAMPLES - Math.PI / 2;
+    pts.push(new MorphPoint(center + radius * Math.cos(angle), center + radius * Math.sin(angle)));
+  }
+  return new PointVector(pts);
+}
+
+/** 八瓣软爆裂：`progress = 1` 的端点，公式照上游 `playerButtonContainerPath`。 */
+function playButtonBurstPoints(): PointVector {
+  const center: number = PLAY_BUTTON_SIZE / 2;
+  const radius: number = center;
+  const progress: number = 1;
+  const baseRadius: number = radius * (1 - 0.055 * progress);
+  const lobeAmplitude: number = radius * 0.055 * progress;
+  const rotation: number = 30 * progress / 180 * Math.PI;
+  const pts: MorphPoint[] = [];
+  for (let i = 0; i < PLAY_BUTTON_PATH_SAMPLES; i++) {
+    const sourceAngle: number = Math.PI * 2 * i / PLAY_BUTTON_PATH_SAMPLES - Math.PI / 2;
+    const angle: number = sourceAngle + rotation;
+    const animatedRadius: number = baseRadius + lobeAmplitude * Math.cos(8 * sourceAngle);
+    pts.push(new MorphPoint(center + animatedRadius * Math.cos(angle),
+      center + animatedRadius * Math.sin(angle)));
+  }
+  return new PointVector(pts);
+}
+
+/** 24 单位坐标 → vp 绝对坐标（`Polygon.points` 不吃相对坐标）。 */
+function playIconPoints(points: number[][]): PointVector {
+  const k: number = PLAY_ICON_VP / PLAY_ICON_UNIT;
+  const pts: MorphPoint[] = [];
+  for (let i = 0; i < points.length; i++) {
+    pts.push(new MorphPoint(points[i][0] * k, points[i][1] * k));
+  }
+  return new PointVector(pts);
+}
+
+/** play 三角上半段，对齐上游 `PLAY_ICON_POINTS[0]`。 */
+const PLAY_ICON_UPPER: number[][] = [[8, 5], [8, 12], [19, 12], [19, 12], [8, 5]];
+/** play 三角下半段，对齐上游 `PLAY_ICON_POINTS[1]`。 */
+const PLAY_ICON_LOWER: number[][] = [[8, 12], [8, 19], [19, 12], [19, 12], [8, 12]];
+/** pause 双横条上半段，对齐上游 `PAUSE_ICON_POINTS[0]`。 */
+const PAUSE_ICON_UPPER: number[][] = [[5, 6], [5, 10], [19, 10], [19, 6], [5, 6]];
+/** pause 双横条下半段，对齐上游 `PAUSE_ICON_POINTS[1]`。 */
+const PAUSE_ICON_LOWER: number[][] = [[5, 14], [5, 18], [19, 18], [19, 14], [5, 14]];
+
+// `@AnimatableExtend` 的函数表是文件级的（ets-loader 按当前文件重建 Map），
+// 所以这三个函数必须与使用它们的 `build()` 在同一个 .ets 文件里，不能抽到 components/。
+@AnimatableExtend(Polygon)
+function playButtonShape(points: PointVector) {
+  .points(points);
+}
+
+@AnimatableExtend(Polygon)
+function playIconUpperShape(points: PointVector) {
+  .points(points);
+}
+
+@AnimatableExtend(Polygon)
+function playIconLowerShape(points: PointVector) {
+  .points(points);
+}
+
 @Component
 struct PlayerIconBtn {
   @StorageProp('themeColorTextPrimary') textPrimary: string = '#1B1C22';
+  @StorageProp('themeColorPrimaryContainer') primaryContainer: string = '#DCE1FF';
+  @StorageProp('themeColorOnPrimaryContainer') onPrimaryContainer: string = '#00174B';
+  @StorageProp('themeColorSecondaryContainer') secondaryContainer: string = '#DCE7C8';
+  @StorageProp('themeColorOnSecondaryContainer') onSecondaryContainer: string = '#2A3311';
   @Prop res: string = 'app.media.reader_play';
   @Prop desc: string = '';
   @Prop dark: boolean = false;
-  // 0=普通(透明) 1=tonal(半透明底) 2=主播放键(accent 底)。
+  // 0=普通(透明) 1=tonal(半透明底) 2=主播放键(形变按钮)。
   @Prop style: number = 0;
+  @Prop @Watch('onPlayingChanged') isPlaying: boolean = false;
   onAction: () => void = () => {};
+
+  // 端点形状与颜色：`isPlaying` 一变就换成另一端，引擎在两端之间逐帧插值。
+  @State containerVec: PointVector = playButtonCirclePoints();
+  @State iconUpperVec: PointVector = playIconPoints(PLAY_ICON_UPPER);
+  @State iconLowerVec: PointVector = playIconPoints(PLAY_ICON_LOWER);
+  @State containerFill: string = '#DCE1FF';
+  @State iconFill: string = '#00174B';
+
+  aboutToAppear(): void {
+    this.applyPlaying(this.isPlaying);
+  }
+
+  onPlayingChanged(): void {
+    this.applyPlaying(this.isPlaying);
+  }
+
+  /**
+   * 切换端点。上游 `AnimatedPlayPauseButton.kt:44-68` 的过渡是
+   * `tween(300, FastOutSlowIn)`，容器色 `secondaryContainer → primaryContainer`、
+   * 图标色 `onSecondaryContainer → onPrimaryContainer`。
+   */
+  private applyPlaying(playing: boolean): void {
+    this.containerVec = playing ? playButtonBurstPoints() : playButtonCirclePoints();
+    this.iconUpperVec = playIconPoints(playing ? PAUSE_ICON_UPPER : PLAY_ICON_UPPER);
+    this.iconLowerVec = playIconPoints(playing ? PAUSE_ICON_LOWER : PLAY_ICON_LOWER);
+    this.containerFill = playing ? this.primaryContainer : this.secondaryContainer;
+    this.iconFill = playing ? this.onPrimaryContainer : this.onSecondaryContainer;
+  }
+
   build() {
-    Stack({ alignContent: Alignment.Center }) {
-      Image($r(this.res)).width(this.style === 2 ? 26 : 20).height(this.style === 2 ? 26 : 20)
-        .fillColor(this.style === 2 ? '#FFFFFF'
-          : (this.dark ? '#F0F0F2' : this.textPrimary))
+    if (this.style === 2) {
+      Stack({ alignContent: Alignment.Center }) {
+        Polygon()
+          .width(PLAY_BUTTON_SIZE).height(PLAY_BUTTON_SIZE)
+          .playButtonShape(this.containerVec)
+          .fill(this.containerFill)
+          .animation({ duration: 300, curve: Curve.FastOutSlowIn })
+        Stack({ alignContent: Alignment.Center }) {
+          Polygon()
+            .width(PLAY_ICON_VP).height(PLAY_ICON_VP)
+            .playIconUpperShape(this.iconUpperVec)
+            .fill(this.iconFill)
+            .animation({ duration: 300, curve: Curve.FastOutSlowIn })
+          Polygon()
+            .width(PLAY_ICON_VP).height(PLAY_ICON_VP)
+            .playIconLowerShape(this.iconLowerVec)
+            .fill(this.iconFill)
+            .animation({ duration: 300, curve: Curve.FastOutSlowIn })
+        }
+        .width(PLAY_ICON_VP).height(PLAY_ICON_VP)
+        // 上游 `Canvas { rotate(degrees = 90f * morphProgress) }`：图标随形变同步转 90°。
+        .rotate({ angle: this.isPlaying ? 90 : 0 })
+        .animation({ duration: 300, curve: Curve.FastOutSlowIn })
+      }
+      .width(PLAY_BUTTON_SIZE).height(PLAY_BUTTON_SIZE)
+      .onClick(() => this.onAction())
+      .accessibilityText(this.desc)
+    } else {
+      Stack({ alignContent: Alignment.Center }) {
+        Image($r(this.res)).width(20).height(20)
+          .fillColor(this.dark ? '#F0F0F2' : this.textPrimary)
+      }
+      .width(44).height(44)
+      .borderRadius(22)
+      .backgroundColor(this.style === 1 ? (this.dark ? '#33FFFFFF' : '#E8E9ED') : Color.Transparent)
+      .onClick(() => this.onAction())
+      .accessibilityText(this.desc)
     }
-    .width(this.style === 2 ? 54 : 44).height(this.style === 2 ? 54 : 44)
-    .borderRadius(this.style === 2 ? 27 : 22)
-    .backgroundColor(this.style === 2 ? '#CF3E40'
-      : (this.style === 1 ? (this.dark ? '#33FFFFFF' : '#E8E9ED') : Color.Transparent))
-    .onClick(() => this.onAction())
-    .accessibilityText(this.desc)
   }
 }
 

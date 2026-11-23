@@ -29,6 +29,21 @@ import { readCardStyleSnapshot, resolveCardCornerRadius } from '../data/ThemeCar
 import { ReaderSheetShell } from '../components/ReaderSheetShell';
 import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED } from '../components/typography/TypographyTokens';
 
+/**
+ * 拖拽抬升：把「阴影半径」做成可插值属性。
+ * 上游 `ui/widget/components/ReorderableConfigList.kt:89` 与
+ * `ui/book/read/sheet/TextSelectMenuConfigSheet.kt:183/237` 都用
+ * `val elevation by animateDpAsState(if (dragging) 4.dp else 0.dp)`——按下开始拖拽后
+ * 阴影不是瞬间出现/消失，而是逐帧从 0 长到 4dp、松手再逐帧退回。
+ * ArkUI 的 `.shadow()` 参数变化默认是跳变，所以用 `@AnimatableExtend` 声明成可动画属性，
+ * 配合 `.animation({ duration: 120, curve: Curve.EaseOut })` 逐帧重算半径。
+ * 颜色与偏移不参与插值：上游只插值 elevation，颜色是固定的黑。
+ */
+@AnimatableExtend(Row)
+function dragLiftShadowRadius(radius: number) {
+  .shadow({ radius: radius, color: radius > 0 ? '#66000000' : '#00000000', offsetX: 0, offsetY: 4 })
+}
+
 
 type ReaderInfoSlot = 'headerLeft' | 'headerMiddle' | 'headerRight' | 'footerLeft' | 'footerMiddle' | 'footerRight';
 type ReaderFontTarget = 'body' | 'title' | 'header' | 'footer';
@@ -3152,8 +3167,10 @@ export struct ReaderSettingsPage {
                       )
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
                     .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
-                    .shadow(this.textMenuDragGroup === 0 && this.textMenuDragIndex === index
-                      ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
+                    // 拖拽抬升用可插值属性：上游 `TextSelectMenuConfigSheet.kt:183` 是
+                    // `animateDpAsState(if (isDragging) 4.dp else 0.dp)`，逐帧过渡而不是跳变。
+                    .dragLiftShadowRadius(this.textMenuDragGroup === 0 && this.textMenuDragIndex === index ? 4 : 0)
+                    .animation({ duration: 120, curve: Curve.EaseOut })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
@@ -3207,8 +3224,9 @@ export struct ReaderSettingsPage {
                       )
                   }.width('100%').padding({ left: 10, right: 5, top: 5, bottom: 5 })
                     .backgroundColor(this.rsetCardBg).borderRadius(9).margin({ bottom: 4 })
-                    .shadow(this.textMenuDragGroup === 1 && this.textMenuDragIndex === index
-                      ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
+                    // 折叠菜单组同理（上游 `TextSelectMenuConfigSheet.kt:237`）。
+                    .dragLiftShadowRadius(this.textMenuDragGroup === 1 && this.textMenuDragIndex === index ? 4 : 0)
+                    .animation({ duration: 120, curve: Curve.EaseOut })
                 }, (item: ReaderTextMenuEntry) => item.id)
               }
               Row() {
@@ -3756,8 +3774,10 @@ export struct ReaderSettingsPage {
                 .opacity(item.enabled ? 1 : 0.38)
                 // 拖动中的行抬升 4dp。
                 .translate({ y: this.bottomDragIndex === index ? 0 : 0 })
-                .shadow(this.bottomDragIndex === index
-                  ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
+                // 拖拽抬升用可插值属性：上游 `ReorderableConfigList.kt:89` 是
+                // `animateDpAsState(if (dragging) 4.dp else 0.dp)`。
+                .dragLiftShadowRadius(this.bottomDragIndex === index ? 4 : 0)
+                .animation({ duration: 120, curve: Curve.EaseOut })
             }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off)
@@ -3980,9 +4000,9 @@ export struct ReaderSettingsPage {
               .backgroundColor(this.rsetCardBg).borderRadius(12).margin({ bottom: 8 })
               // 关闭态整行透明度 0.38（上游 ReorderableConfigList 关态口径）。
               .opacity(item.enabled ? 1 : 0.38)
-              // 拖动中的行抬升 4dp。
-              .shadow(this.topDragIndex === index
-                ? { radius: 8, color: '#66000000', offsetY: 4 } : { radius: 0, color: '#00000000', offsetY: 0 })
+              // 拖动中的行抬升 4dp，逐帧插值（上游 `ReorderableConfigList.kt:89`）。
+              .dragLiftShadowRadius(this.topDragIndex === index ? 4 : 0)
+              .animation({ duration: 120, curve: Curve.EaseOut })
           }, (item: ReaderBottomActionConfig) => item.id)
           }.width('100%').padding({ left: 14, right: 14, bottom: 12 })
         }.edgeEffect(EdgeEffect.None).width('100%').layoutWeight(1).scrollBar(BarState.Off)

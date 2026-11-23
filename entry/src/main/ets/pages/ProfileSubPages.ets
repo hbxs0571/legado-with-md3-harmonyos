@@ -1882,7 +1882,9 @@ export struct BookSourceManagePage {
               })
           }.padding({ left: 8, right: 8, top: 8, bottom: 8 })
             .backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
-            .shadow({ radius: 12, color: '#33000000', offsetY: 2 })
+            // 上游这一处是 `SelectionBottomBar.kt:171 HorizontalFloatingToolbar(expanded = true)`，
+            // 走 `FloatingToolbarDefaults.ContainerExpandedElevation`，AOSP 里该值是
+            // `ElevationTokens.Level0`（0dp），即不投影。所以这里不挂阴影。
             // 上游 SelectionBottomBar 的 safeModifier 含 windowInsetsPadding(navigationBars)，
             // 底栏要抬到系统导航区之上；上游 ListScaffold 的 padding(bottom = 16.dp + ScreenOffset) 也一并照做。
             .margin({ bottom: 16 + this.appBottomInset })

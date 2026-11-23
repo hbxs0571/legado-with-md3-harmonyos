@@ -99,8 +99,8 @@ export struct BookGroupCard {
               })
             }.layoutWeight(1).alignItems(HorizontalAlign.Center)
             .borderRadius(4)
-            // 阴影挂在每个封面的外层 Column 上（不是整排）：挂整排会把空位也算进阴影框。
-            .shadow(this.coverShadowOptions())
+            // 横排多封面分支不挂阴影：它对应上游 `BookItem.kt:558-660 BookGroupItemHorizontalCovers`，
+            // 那个函数既不接收 `coverShadow` 参数，封面也只有 `.clip(RoundedCornerShape(4.dp))`。
           }, (book: Book) => `cover_${book.id}`)
           ForEach(this.emptySlots(), (index: number) => {
             Row().layoutWeight(1);
