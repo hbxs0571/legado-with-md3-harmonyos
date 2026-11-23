@@ -2,7 +2,7 @@
 
 本文件回答一个问题：**这套移植在原理上和上游一致吗。** 答案分两半——数据与算法那半是刻意保真的，代码怎么组织那半是有意不同的。两半都给出实测数字和复核命令，避免日后凭印象争论。
 
-适用范围：`entry/src/main/ets`（本地）与 `app/src/main/java/io/legado/app`（上游，仓库 `legado-with-MD3`）。所有数字按 2026-11-11 的 HEAD 实测，复核命令见末节。
+适用范围：`entry/src/main/ets`（本地）与 `app/src/main/java/io/legado/app`（上游，仓库 `legado-with-MD3`）。所有数字按 2026-11-11 的 HEAD 实测，复核命令见末节；5.5 与第八节的 UDF 分布按 2026-11-23 实测。
 
 ## 一、结论
 
@@ -62,7 +62,7 @@ onIntent = viewModel::onIntent,
 
 数据由 `pages/Index.ets` 取好塞进来，操作靠回调抛回去。
 
-## 五、四条具体差异
+## 五、五条具体差异
 
 ### 5.1 `Index.ets` 事实上是一个 ViewModel 兼 God Object
 
@@ -98,6 +98,18 @@ onIntent = viewModel::onIntent,
 
 上游 Room 用 87 个 `AutoMigration` 加显式迁移管理 133 个版本（65 个实体）。本地 `data/RdbSchema.ets` 是「`IF NOT EXISTS` 全量重跑 + 手写 `ALTER TABLE` + try/catch 吞掉重复列」（`data/RdbSchema.ets:590` 是唯一一条 `ALTER TABLE`）。能用，但没有版本化的升级路径；每加一列都要同时改建表语句、`select` 列序、`insert` 占位符三处，漏一处就是静默错位。
 
+### 5.5 设置页里只有备份页补了 ViewModel
+
+上游设置页的标准结构是 Contract + ViewModel（UDF）：`ui/config/` 下 16 个 `*Contract.kt`（`ai/` 5 个；`backupConfig/`、`customTheme/`、`downloadCacheConfig/`、`labConfig/`、`otherConfig/`、`privateConfig/`、`readConfig/`、`themeConfig/`、`translation/` 各 1 个；`coverConfig/` 2 个），全仓 `*Contract.kt` 共 60 个；`di/` 下 `viewModelOf(` 注册 74 处，而 `di/` 只有 `appModule.kt` 与 `appDatabaseModule.kt` 两个文件。
+
+本地到 2026-11-23 只有一个：`entry/src/main/ets/viewmodel/BackupConfigViewModel.ets`。12 个 `*SettingsPage.ets` 里，除备份页外其余 11 个仍是 `@Prop` + 回调上抛，形态与 5.2 相同。
+
+**别把这条读反：UDF 不是本地该批量补的一层。** 上游的 ViewModel 也不跨页复用——`BackupConfigViewModel` 全仓只有 4 行引用（`di/appModule.kt:287` 的 import、`di/appModule.kt:644` 的 `viewModelOf(::BackupConfigViewModel)`、`ui/config/backupConfig/BackupConfigScreen.kt:74` 的 `viewModel: BackupConfigViewModel = koinViewModel(),`、`ui/config/backupConfig/BackupConfigViewModel.kt:22` 的类定义），单页面专用，删掉它没有任何别的调用点受影响。所以「上游 99 个 ViewModel」不是 99 份可共享的层，而是每个页面各一份的编排类：本地只能一页一页补，补一个公共 ViewModel 框架不会让 `Index.ets` 少一行。
+
+7.2 表里「ViewModel 该搬」的准确含义因此是**每个需要 IO 编排的页面自己那一份**，不是搬一层框架。备份页是第一个落地的页面。
+
+（引用面只对 `BackupConfigViewModel` 逐一核过；其余 98 个未逐个核。）
+
 ## 六、会影响什么
 
 **不受影响**：备份包的读写与往返、TXT/EPUB 正文解析与排版、目录规则、替换净化、书签与阅读记录——这些都不经过中间层，两边行为等价。
@@ -130,7 +142,7 @@ onIntent = viewModel::onIntent,
 | Koin 依赖注入 | **没有**，生态也没有 | 不搬 | 本地 `new XxxRepository(` 全仓 **0 处**，仓储本来就是静态方法，没有需要注入的东西 |
 | Gateway 接口层（上游 59 个） | 没有接口实现切换的诉求 | 不搬 | 没有多实现与测试替身场景 |
 | UseCase（上游 51 个） | 无框架依赖 | 选择性搬 | 本地 `UseCase` 命中 6 处，**全是注释里引用上游** |
-| **ViewModel（上游 99 个）** | **有**：`@ObservedV2` 类 + `AppStorageV2.connect` | **该搬，唯一真有价值的一层** | 见 7.3 |
+| **ViewModel（上游 99 个）** | **有**：`@ObservedV2` 类 + `AppStorageV2.connect` | **该搬，唯一真有价值的一层** | 见 7.3、5.5 |
 | Flow / StateFlow | 无 | 用 `@Trace` + `@Monitor` 顶 | 能观察属性变化，补不回背压与组合子（见语义对照 3.2） |
 
 ### 7.3 混用怎么写：V2 类当普通成员
@@ -197,6 +209,10 @@ grep -rho 'Repository\.' pages/*.ets | wc -l
 cd /n/HarmonyProjects/legado-with-MD3/app/src/main/java/io/legado/app
 for d in ui domain data help; do printf '%-8s %s\n' "$d" "$(find $d -name '*.kt' | wc -l)"; done
 find ui -name '*ViewModel.kt' | wc -l; find domain -name '*UseCase.kt' | wc -l
+# UDF 分布（5.5，2026-11-23 实测）
+find ui/config -name '*Contract.kt' | wc -l               # 16
+grep -rh 'viewModelOf(' di/*.kt | wc -l                   # 74
+cd /n/HarmonyProjects/legado-with-md3-harmonyos/entry/src/main/ets && ls viewmodel/
 ```
 
 相关：[模块概览](MODULES.md)只讲入口与责任范围，[功能交付清单](FEATURES.md)讲每个功能到哪算做完，[编码规约](CODE-CONVENTIONS.md)讲改代码时要避的坑。本文件只讲结构，不重复那三份。[Compose 与 ArkUI 语义对照](COMPOSE-ARKUI-MAP.md)讲语言层的搬代码规则。
