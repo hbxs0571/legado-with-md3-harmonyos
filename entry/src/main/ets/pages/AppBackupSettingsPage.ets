@@ -87,9 +87,9 @@ export struct AppBackupSettingsPage {
   @Prop backupIgnoreKeys: string[] = [];
   @Prop restoreIgnoreKeys: string[] = [];
   @Prop statusMessage: string = '';
-  @Prop busy: boolean = false;
+  @Prop @Watch('syncDialog') busy: boolean = false;
   @Prop webDavSettings: WebDavSettings = defaultWebDavSettings();
-  @Prop webDavTesting: boolean = false;
+  @Prop @Watch('syncDialog') webDavTesting: boolean = false;
   @Prop webDavConfigured: boolean = false;
   onBack: () => void = () => {};
   onCreateBackup: () => void = () => {};
@@ -120,7 +120,8 @@ export struct AppBackupSettingsPage {
   /** 忽略面板关闭时一次性写盘，side 为 backup 或 restore。 */
   onSaveIgnoreItems: (side: string, keys: string[]) => void = (_side: string, _keys: string[]) => {};
   @State activeSheet: BackupSheetKind = BackupSheetKind.NONE;
-  @State activeDialog: BackupDialogKind = BackupDialogKind.NONE;
+  /** 对话框改由 openCustomDialog 承载：独立弹层形态对齐上游 AppAlertDialog。 */
+  @State @Watch('syncDialog') activeDialog: BackupDialogKind = BackupDialogKind.NONE;
   @State collapsedHeader: boolean = false;
   /** 三个行内输入行的草稿：editingKey 为空表示没有行在编辑。 */
   @State editingKey: string = '';
@@ -137,6 +138,9 @@ export struct AppBackupSettingsPage {
   @State networkNames: string[] = [];
   @State fallbackError: string = '';
   private backupScroller: Scroller = new Scroller();
+  /** openCustomDialog 的 builder 需存成成员，且每次重开重建以刷新内部输入态。 */
+  private dialogBuilder: CustomBuilder | undefined = undefined;
+  private dialogId: number = -1;
 
   private openSettingInput(key: string, draft: string): void {
     this.editingKey = key;
@@ -283,6 +287,46 @@ export struct AppBackupSettingsPage {
     return this.activeDialog !== BackupDialogKind.NONE || this.busy || this.webDavTesting;
   }
 
+  /**
+   * activeDialog / busy / webDavTesting 任一变化时同步独立对话框开合。
+   * 用 openCustomDialog 而非 bindContentCover：后者在此 SDK 版本首次 false→true 不重建 Builder，
+   * 对话框内容（连最小结构）都不挂载；openCustomDialog 的 builder 在本仓三处页面已验证可用。
+   */
+  private syncDialog(): void {
+    if (!this.dialogVisible()) {
+      this.closeDialog();
+      return;
+    }
+    if (this.dialogId < 0) {
+      this.dialogBuilder = (): void => { this.dialogContent(); };
+      this.getUIContext().getPromptAction().openCustomDialog({
+        builder: this.dialogBuilder,
+        autoCancel: false,
+        alignment: DialogAlignment.Center,
+        onWillDismiss: () => {
+          this.dialogId = -1;
+          this.activeDialog = BackupDialogKind.NONE;
+        }
+      }).then((id: number) => {
+        this.dialogId = id;
+      }).catch((error: Error) => {
+        console.warn('打开备份对话框失败:', error);
+      });
+    }
+  }
+
+  /** 关闭独立对话框；重复关闭是安全调用。 */
+  private closeDialog(): void {
+    if (this.dialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.dialogId);
+      this.dialogId = -1;
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.closeDialog();
+  }
+
   private sheetHeight(): number {
     if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
         this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
@@ -422,10 +466,7 @@ export struct AppBackupSettingsPage {
           }
         }
       })
-      .bindContentCover(this.dialogVisible(), this.dialogContent(), {
-        backgroundColor: '#99000000',
-        onDisappear: () => {}
-      })
+      .onAppear(() => this.syncDialog())
   }
 
   @Builder
@@ -549,6 +590,8 @@ export struct AppBackupSettingsPage {
                 .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .type(this.passwordVisible ? InputType.Normal : InputType.Password)
+                // 关掉 ArkUI 自带的密码可见图标，只保留下面与上游 trailingIcon 对应的那一个。
+                .showPasswordIcon(false)
                 .layoutWeight(1)
                 .onChange((value: string) => this.passwordDraft = value)
               AppGlyph({ name: this.passwordVisible ? 'visibility' : 'visibilityOff', glyphSize: 20,
@@ -563,7 +606,7 @@ export struct AppBackupSettingsPage {
               .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
               .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(20)
               .onClick(() => this.activeDialog = BackupDialogKind.NONE)
-            Button('确定').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
+            Button('确认').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
               .backgroundColor(this.themeColorAccent).borderRadius(20)
               .onClick(() => {
                 this.activeDialog = BackupDialogKind.NONE;
@@ -581,7 +624,7 @@ export struct AppBackupSettingsPage {
               .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
               .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(20)
               .onClick(() => this.activeDialog = BackupDialogKind.NONE)
-            Button('确定').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
+            Button('确认').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
               .backgroundColor(this.themeColorAccent).borderRadius(20)
               .onClick(() => {
                 this.activeDialog = BackupDialogKind.NONE;
@@ -597,7 +640,7 @@ export struct AppBackupSettingsPage {
         }.width(240).padding(28).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       }
-    }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    }
   }
 }
 

@@ -2061,3 +2061,50 @@ bash scripts/build-hap.sh
 ```
 
 上游引用数核查（`cd /n/HarmonyProjects/legado-with-MD3`，逐项 `grep -rn "R.string.$k\b" app/src/main/java/ | wc -l`）：`backup_confirmation 0`、`restore_fail 0`、`backup_success 2`、`backup_fail 1`、`restore_success 4`、`restore_fail_with_error 1`、`webdav_restore_fallback_message 1`、`select_restore_file 2`、`restore_default 3`。备份包基线条目（`unzip -l tmp/cover-shots/backup-changed.zip | head`）：11 个根目录 JSON/XML 条目，`txtTocRule.json` / `bookmark.json` / `config.xml` / `bookGroup.json` / `bookMarking.json` / `readConfig.json` / `bookshelf.json` / `themeConfig.json` / `replaceRule.json` / `shareReadConfig.json` / `highlightRule.json`。
+
+## r360 备份与恢复页：账号对话框承载方式修正与上机核对（2026-11-23）
+
+### 改了哪些文件
+- `entry/src/main/ets/pages/AppBackupSettingsPage.ets`（本轮唯一改动的源码文件）：三个对话框的承载方式由 `.bindContentCover(...)` 换成 `openCustomDialog`，新增 `@Watch('syncDialog')` 生命周期同步；密码输入框加 `.showPasswordIcon(false)`；两个对话框确认按钮文案由「确定」改为「确认」。
+
+### 改了哪些行为
+- 根因：`bindContentCover(this.dialogVisible(), this.dialogContent(), ...)` 在本机 SDK 版本首次 `false→true` 切换帧不重建 @Builder。白盒实验证据——在 `openWebDavAuth()` 内加诊断赋值后点击「WebDav 账号」行，layout 出现诊断文本、页面状态显示 `dlg=webDavAuth vis=true`，但 `dialogContent()` 的分支连最小结构都不挂载；同一机制下回退对话框此前能显示，是因先前点击已让 isShow 变过 true。实验改动已从 `.orig` 备份回滚。
+- 对照上游 `BackupConfigScreen.kt:453` 的 `AppAlertDialog(show = auth != null, ...)`：对话框是独立弹层组件，不依附页面内容覆盖层；改用 `openCustomDialog` 后与其形态一致。
+- `syncDialog()`（`AppBackupSettingsPage.ets:295`）在 `activeDialog` / `busy` / `webDavTesting` 任一变化时开合独立对话框；`closeDialog()`（:319）幂等关闭；`aboutToDisappear()`（:327）在页面消失时收口。
+- 密码框（:589-595）只留一个与上游 `trailingIcon`（`BackupConfigScreen.kt:482-499`）对应的可见性切换图标，关掉 ArkUI 自带图标。
+- 确认按钮（:609/:627）文案对齐上游 `R.string.ok`，中文真值「确认」（`values-zh-rCN/strings.xml:163`）。
+
+### 没改什么
+- 未动后端：`pages/Index.ets`、`data/BackupRepository.ets`、`lib/WebDavConfig.ets`、`lib/WebDavSync.ets` 本轮零改动。
+- 未连真实 WebDAV 服务；账号密码对话框点「取消」收口，未写设备配置。
+- 上游仓 `legado-with-MD3` 保持只读。
+- 未动并行会话文件（`docs/parity/ZIP-THEME.md`、`cur.jpeg`）。
+
+### 没验什么
+- 仅在 `127.0.0.1:5555`（API 26 模拟器）核对，未在其它分辨率或真机型号重复。
+- 「确认」按钮的保存链路（写配置并串连接测试）本轮未触发，避免污染设备配置；该链路在 r359 做过静态核对。
+- Loading 对话框在慢网络下的实际呈现未验。
+
+### 对不齐的地方
+- 无新增。r359 已记的四项差异保持原状。
+
+### 上机证据（设备 127.0.0.1:5555，API 26）
+导航路径：书架 →「我的」(896,2626) →「设置」(640,2326) →「备份与恢复」(640,1858)。证据目录 `.hvigor/outputs/backup-verify-20261123/`。
+- 账号对话框：点 (640,1059) 弹出；`layout-custom.json` 25 个节点，含「WebDav 账号」「取消」「确认」；截图 `screen-custom.png`（sha256 7d9fcf03…）。
+- 视觉修正后：截图 `screen-custom2.png`（sha256 8a7ce7bb…）显示密码框单个眼睛图标、无背景大灰块、按钮为「确认」。
+- 密码可见切换：点眼睛图标 (1064,1475) 后输入 `VISIBLE_PW_TEST`，`screen-pw-visible.png`（sha256 d9fe6953…）显示明文与睁开图标；再点一次后 `screen-pw-hidden.png`（sha256 c3777b9c…），两张截图 hash 不同，切换生效。
+- 回退对话框：滚到组2点「恢复」(640,1900) →「网络恢复」(942,2130)，`layout-fb2.json` 含「恢复」与「WebDAV 出错 / 账号或密码为空，请先在设置里填写 / 将从本地备份恢复。」（上游 `values-zh-rCN/strings.xml:177`），以及「取消」「确认」；截图 `screen-fb2.png`（sha256 0fb2f545…）。
+- 取消关闭：点 (398,1613) 后 `texts-closed.json` 对话框残留节点 0。
+
+```bash
+cd /n/HarmonyProjects/legado-with-md3-harmonyos
+# 对话框承载方式
+grep -n 'openCustomDialog\|syncDialog\|closeDialog\|showPasswordIcon(false)' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# 90:busy @Watch / 92:webDavTesting @Watch / 124:activeDialog @Watch / 295:syncDialog / 319:closeDialog / 469:onAppear / 594:showPasswordIcon
+grep -n 'bindContentCover' entry/src/main/ets/pages/AppBackupSettingsPage.ets   # 0 命中
+# 禁词与编码
+grep -c '已接\|未接\|不适用\|要接\|不接\|应该\|建议\|可以补\|实现思路\|优先级\|工作量估计\|风险\|这是 bug' entry/src/main/ets/pages/AppBackupSettingsPage.ets   # 0
+# BOM=False CRLF=0 LF=794
+bash scripts/build-hap.sh
+# BUILD SUCCESSFUL in 17 s 689 ms；既有 WARN :321:45 / :456:105
+```
