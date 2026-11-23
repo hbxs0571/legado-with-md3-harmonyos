@@ -7,64 +7,26 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ThemeGroupColumn, ThemeGroupItem } from '../components/settings/ThemeGroupColumn';
 import { UiDropdown } from '../components/settings/UiDropdown';
 import { BackupCategoryOption } from '../data/BackupRepository';
-import { WebDavSettings, defaultWebDavSettings, cloneWebDavSettings } from '../lib/WebDavConfig';
+import { WebDavSettings, defaultWebDavSettings } from '../lib/WebDavConfig';
 import { WebDavSync } from '../lib/WebDavSync';
+import {
+  BACKUP_CONFIG_KEYS,
+  BACKUP_CONFIG_TITLES,
+  BACKUP_DB_KEYS,
+  BACKUP_DB_TITLES,
+  BackupConfigDialogKind,
+  BackupConfigEffect,
+  BackupConfigEffectKind,
+  BackupConfigIntent,
+  BackupConfigIntentKind,
+  BackupConfigSheet,
+  BackupConfigUiState,
+  BackupConfigViewModel,
+  BackupIgnoreItem,
+  BackupLoadingTitle,
+  buildIgnoreItems
+} from '../viewmodel/BackupConfigViewModel';
 import { BODY_MEDIUM_EMPHASIZED, BODY_SMALL, BODY_SMALL_EMPHASIZED, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_EMPHASIZED, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
-
-/** 弹层分支：对应上游 BackupConfigSheet 七项（BackupConfigContract.kt:28-36）。 */
-enum BackupSheetKind {
-  NONE = 'none',
-  CHOOSE_BACKUP_PATH = 'chooseBackupPath',
-  CHOOSE_BACKUP_AND_RUN = 'chooseBackupAndRun',
-  BACKUP_OPTIONS = 'backupOptions',
-  RESTORE_OPTIONS = 'restoreOptions',
-  RESTORE_FILES = 'restoreFiles',
-  IGNORE_RESTORE_ITEMS = 'ignoreRestoreItems',
-  IGNORE_BACKUP_ITEMS = 'ignoreBackupItems'
-}
-
-/** 对话框分支：对应上游 BackupConfigDialog 三项（BackupConfigContract.kt:38-47）。 */
-enum BackupDialogKind {
-  NONE = 'none',
-  WEBDAV_AUTH = 'webDavAuth',
-  CONFIRM_LOCAL_RESTORE_FALLBACK = 'confirmLocalRestoreFallback',
-  LOADING = 'loading'
-}
-
-/** 忽略项：对应上游 BackupIgnoreItem 三字段（BackupConfigContract.kt:22-26）。 */
-interface BackupIgnoreItem {
-  key: string;
-  title: string;
-  checked: boolean;
-}
-
-/** 配置维度九项顺序：照 help/storage/BackupConfig.kt:145-155。 */
-const BACKUP_CONFIG_KEYS: string[] = [
-  'readConfig', 'themeMode', 'themeConfig', 'coverConfig', 'bookshelfLayout',
-  'showRss', 'threadCount', 'localBook', 'mangaConfig'
-];
-
-/** 数据库维度十九项顺序：照 help/storage/BackupConfig.kt:96-102。 */
-const BACKUP_DB_KEYS: string[] = [
-  'bookmark', 'bookGroup', 'bookSource', 'rssSource', 'rssStar', 'replaceRule',
-  'readRecord', 'searchHistory', 'sourceSub', 'txtTocRule', 'httpTTS',
-  'keyboardAssists', 'dictRule', 'homepageModules', 'homepageCustomSets',
-  'highlightRule', 'highlightTagRule', 'tagGroupRule', 'server'
-];
-
-/** 配置维度标题：照 help/storage/BackupConfig.kt:158-168 的 strings 真值。 */
-const BACKUP_CONFIG_TITLES: string[] = [
-  '阅读界面', '深色模式', '主题配置', '封面设置', '书架布局',
-  '显示订阅', '线程数', '本地书籍', '漫画设置'
-];
-
-/** 数据库维度标题：照 help/storage/BackupConfig.kt:104-124 的 strings 真值。 */
-const BACKUP_DB_TITLES: string[] = [
-  '书签', '书架分组', '书源', '订阅源', 'RSS 收藏', '替换规则',
-  '阅读记录', '搜索历史', '书源订阅', 'TXT 目录规则', 'HTTP TTS',
-  '键盘辅助', '字典规则', '首页模块 (JSON)', '首页自定义',
-  '高亮规则', '标签规则', '标签分组规则', '服务器配置'
-];
 
 /** 弹层高度上限占屏幕高度的比例：对齐上游 `AppModalBottomSheet.kt:134-137` 的 `containerHeight * 0.8f`。 */
 const SHEET_MAX_SCREEN_RATIO: number = 0.8;
@@ -93,12 +55,12 @@ export struct AppBackupSettingsPage {
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop localBookCount: number = 0;
   @Prop categoryOptions: BackupCategoryOption[] = [];
-  @Prop backupIgnoreKeys: string[] = [];
-  @Prop restoreIgnoreKeys: string[] = [];
+  @Prop @Watch('onHostIgnoreKeys') backupIgnoreKeys: string[] = [];
+  @Prop @Watch('onHostIgnoreKeys') restoreIgnoreKeys: string[] = [];
   /** 状态消息改走 showToast（对齐上游 Snackbar），不再在页内常驻成条。 */
   @Prop @Watch('syncStatusMessage') statusMessage: string = '';
   @Prop @Watch('syncDialog') busy: boolean = false;
-  @Prop webDavSettings: WebDavSettings = defaultWebDavSettings();
+  @Prop @Watch('onHostSettings') webDavSettings: WebDavSettings = defaultWebDavSettings();
   @Prop @Watch('syncDialog') webDavTesting: boolean = false;
   @Prop webDavConfigured: boolean = false;
   onBack: () => void = () => {};
@@ -129,41 +91,199 @@ export struct AppBackupSettingsPage {
   onConfirmLocalRestoreFallback: () => void = () => {};
   /** 忽略面板关闭时一次性写盘，side 为 backup 或 restore。 */
   onSaveIgnoreItems: (side: string, keys: string[]) => void = (_side: string, _keys: string[]) => {};
-  @State activeSheet: BackupSheetKind = BackupSheetKind.NONE;
-  /** 对话框改由 openCustomDialog 承载：独立弹层形态对齐上游 AppAlertDialog。 */
-  @State @Watch('syncDialog') activeDialog: BackupDialogKind = BackupDialogKind.NONE;
+  /**
+   * 页面唯一状态对象：对应上游 `BackupConfigUiState`（BackupConfigContract.kt:9-19）。
+   *
+   * 上游是 `MutableStateFlow<BackupConfigUiState>`，Composable 只读这一份状态；
+   * 本地用 `@State` 装同一个类实例，每次 intent 转移后由状态层整体替换，触发重绘。
+   */
+  @State state: BackupConfigUiState = new BackupConfigUiState();
   @State collapsedHeader: boolean = false;
-  /** 顶栏连续折叠进度，对齐上游 TopAppBarState.collapsedFraction。 */
+  /** 顶栏连续折叠进度，对齐上游 TopAppBarState.collapsedFraction（不在 UiState 里）。 */
   @State headerFraction: number = 0;
-  /** 三个行内输入行的草稿：editingKey 为空表示没有行在编辑。 */
-  @State editingKey: string = '';
-  @State inputDraft: string = '';
-  /** WebDAV 账号密码对话框草稿。 */
-  @State accountDraft: string = '';
-  @State passwordDraft: string = '';
-  @State passwordVisible: boolean = false;
-  /** 忽略面板内存态：只在面板内改，关闭时统一提交。 */
-  @State ignoreDraft: BackupIgnoreItem[] = [];
-  @State ignoreSide: string = 'backup';
-  @State ignoreTab: number = 0;
-  /** 网络恢复拉到的文件名列表与失败原因。 */
-  @State networkNames: string[] = [];
-  @State fallbackError: string = '';
   private backupScroller: Scroller = new Scroller();
+  /** 状态层：intent 入口 + effect 出队，对应上游 BackupConfigViewModel。 */
+  private viewModel: BackupConfigViewModel = new BackupConfigViewModel([], []);
   /** openCustomDialog 的 builder 需存成成员，且每次重开重建以刷新内部输入态。 */
   private dialogBuilder: CustomBuilder | undefined = undefined;
   private dialogId: number = -1;
 
-  private openSettingInput(key: string, draft: string): void {
-    this.editingKey = key;
-    this.inputDraft = draft;
+  aboutToAppear(): void {
+    this.viewModel = new BackupConfigViewModel(this.backupIgnoreKeys, this.restoreIgnoreKeys);
+    this.viewModel.bindStateSink((next: BackupConfigUiState): void => {
+      this.state = next;
+      this.syncDialog();
+    });
+    this.viewModel.bindEffectSink((effect: BackupConfigEffect): void => this.handleEffect(effect));
+    this.viewModel.syncSettings(this.webDavSettings);
   }
 
-  private openWebDavAuth(): void {
-    this.accountDraft = this.webDavSettings.account;
-    this.passwordDraft = this.webDavSettings.password;
-    this.passwordVisible = false;
-    this.activeDialog = BackupDialogKind.WEBDAV_AUTH;
+  /** 宿主设置变化（含宿主自己写盘后回灌）→ 同步进状态层，保持单一真相。 */
+  private onHostSettings(): void {
+    this.viewModel.syncSettings(this.webDavSettings);
+  }
+
+  /** 宿主忽略键变化 → 按上游四张配置表重建忽略项。 */
+  private onHostIgnoreKeys(): void {
+    this.viewModel.rebuildIgnoreItems(this.backupIgnoreKeys, this.restoreIgnoreKeys);
+  }
+
+  /** 发一个 intent：唯一入口，对应上游 `viewModel.onIntent(...)`。 */
+  private send(kind: BackupConfigIntentKind): void {
+    this.viewModel.onIntent(new BackupConfigIntent(kind));
+  }
+
+  private sendValue(kind: BackupConfigIntentKind, value: string): void {
+    const intent = new BackupConfigIntent(kind);
+    intent.value = value;
+    this.viewModel.onIntent(intent);
+  }
+
+  /** 请求备份：mode 走独立字段（上游 RequestBackup(mode) 的 mode 语义）。 */
+  private sendMode(kind: BackupConfigIntentKind, mode: string): void {
+    const intent = new BackupConfigIntent(kind);
+    intent.mode = mode;
+    this.viewModel.onIntent(intent);
+  }
+
+  private sendBool(kind: BackupConfigIntentKind, value: boolean): void {
+    const intent = new BackupConfigIntent(kind);
+    intent.boolValue = value;
+    this.viewModel.onIntent(intent);
+  }
+
+  private sendSheet(kind: BackupConfigIntentKind, sheet: BackupConfigSheet): void {
+    const intent = new BackupConfigIntent(kind);
+    intent.sheet = sheet;
+    this.viewModel.onIntent(intent);
+  }
+
+  /** 行内输入：开始编辑（键 + 当前值作为草稿）。 */
+  private beginEdit(key: string, draft: string): void {
+    const intent = new BackupConfigIntent(BackupConfigIntentKind.BeginEditField);
+    intent.value = key;
+    intent.path = draft;
+    this.viewModel.onIntent(intent);
+  }
+
+  /** 行内输入：提交（键 + 新值）。 */
+  private commitEdit(key: string, value: string): void {
+    const intent = new BackupConfigIntent(BackupConfigIntentKind.CommitEditField);
+    intent.value = key;
+    intent.path = value;
+    this.viewModel.onIntent(intent);
+  }
+
+  /** 行内输入：点「默认」把草稿改回默认值（不提交）。 */
+  private resetDraft(value: string): void {
+    const intent = new BackupConfigIntent(BackupConfigIntentKind.ResetEditField);
+    intent.path = value;
+    this.viewModel.onIntent(intent);
+  }
+
+  /**
+   * effect 执行：状态层只决定「要做什么」，真正的 IO 在页面这一层
+   * （页面持有 context 与宿主回调，与上游 ViewModel 持 useCase 同层）。
+   */
+  private handleEffect(effect: BackupConfigEffect): void {
+    switch (effect.kind) {
+      case BackupConfigEffectKind.PersistSettings:
+        this.onWebDavSettingsChange(this.state.settings);
+        break;
+      case BackupConfigEffectKind.ShowMessage:
+        this.onUnavailableAction(effect.value);
+        break;
+      case BackupConfigEffectKind.LaunchBackupDirectoryPicker:
+        this.onChooseBackupPath();
+        break;
+      case BackupConfigEffectKind.LaunchBackupAndRunDirectoryPicker:
+        this.onChooseBackupPath();
+        break;
+      case BackupConfigEffectKind.LaunchRestoreFilePicker:
+        this.onSelectRestore();
+        break;
+      case BackupConfigEffectKind.LaunchImportOldDataPicker:
+        this.onImportOldShelf();
+        break;
+      case BackupConfigEffectKind.RequestStoragePermission:
+        // 上游在这里向系统要存储权限、回调再走 PerformBackup；本地目录访问由宿主的
+        // DocumentViewPicker + persistPermission 在选目录时已拿到，这里直接执行备份。
+        this.runBackupByMode(effect.path, effect.mode);
+        break;
+      case BackupConfigEffectKind.RunBackup:
+        this.runBackupByMode(effect.path, effect.mode);
+        break;
+      case BackupConfigEffectKind.RunLocalRestore:
+        this.onSelectRestore();
+        break;
+      case BackupConfigEffectKind.RunNetworkRestore:
+        this.onRestoreNetwork(effect.name);
+        break;
+      case BackupConfigEffectKind.RunWebDavTest:
+        this.onTestWebDav();
+        break;
+      case BackupConfigEffectKind.LoadNetworkBackupNames:
+        this.loadNetworkBackupNames();
+        break;
+      case BackupConfigEffectKind.PersistIgnoreItems:
+        this.persistIgnoreItems(effect.scope);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** 按上游 mode 三态分派到宿主的三个备份入口（'local' / 'webdav' / 'both'）。 */
+  private runBackupByMode(path: string, mode: string): void {
+    if (mode === 'webdav') {
+      this.onBackupToWebDav();
+    } else if (mode === 'both') {
+      this.onCreateBackupBoth();
+    } else {
+      this.onCreateBackup();
+    }
+  }
+
+  /** 拉远端备份列表：成功回 NetworkNamesLoaded，失败回 NetworkNamesFailed（ViewModel :311-340）。 */
+  private async loadNetworkBackupNames(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const names: string[] = await WebDavSync.listBackups(context);
+      if (names.length > 0) {
+        const intent = new BackupConfigIntent(BackupConfigIntentKind.NetworkNamesLoaded);
+        intent.names = names;
+        this.viewModel.onIntent(intent);
+      } else {
+        const intent = new BackupConfigIntent(BackupConfigIntentKind.NetworkNamesFailed);
+        intent.error = '没有找到远端备份文件';
+        this.viewModel.onIntent(intent);
+      }
+    } catch (error) {
+      const intent = new BackupConfigIntent(BackupConfigIntentKind.NetworkNamesFailed);
+      intent.error = error instanceof Error ? error.message : String(error);
+      this.viewModel.onIntent(intent);
+    }
+  }
+
+  /**
+   * 把某一侧的忽略项交给宿主写盘。
+   *
+   * 上游 `saveIgnoreItems`（ViewModel :180-190）把配置维度与数据库维度一起写进
+   * `ignoreConfig` / `dbIgnoreConfig`；本地宿主的忽略列表按「侧」扁平存一份数组
+   * （配置键与数据库键同在这个数组里），所以这里取两个页签的并集一次提交。
+   */
+  private persistIgnoreItems(scope: string): void {
+    const backupSide: boolean = scope === 'backup';
+    const configItems: BackupIgnoreItem[] = backupSide ? this.state.backupIgnoreItems : this.state.ignoreItems;
+    const dbItems: BackupIgnoreItem[] = backupSide ? this.state.backupDbIgnoreItems : this.state.dbIgnoreItems;
+    const keys: string[] = configItems
+      .concat(dbItems)
+      .filter((item: BackupIgnoreItem): boolean => item.checked)
+      .map((item: BackupIgnoreItem): string => item.key);
+    this.onSaveIgnoreItems(backupSide ? 'backup' : 'restore', keys);
   }
 
   /** 账号行描述固定为 web_dav_account_d（strings.xml:805），账号值只在对话框内呈现。 */
@@ -181,83 +301,35 @@ export struct AppBackupSettingsPage {
     return this.describeSyncMode(value);
   }
 
-  /** 关总开关时把增强一起关掉，对齐上游 syncBookProgressPlus = plus && value。 */
-  private setSyncBookProgress(value: boolean): void {
-    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    next.syncBookProgress = value;
-    if (!value) {
-      next.syncBookProgressPlus = false;
-    }
-    this.onWebDavSettingsChange(next);
-  }
-
-  private setWebDavField(field: string, value: string): void {
-    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    if (field === 'url') {
-      next.url = value.trim();
-    } else if (field === 'dir') {
-      next.dir = value.trim();
-    } else if (field === 'deviceName') {
-      next.deviceName = value.trim();
-    }
-    this.editingKey = '';
-    this.onWebDavSettingsChange(next);
-  }
-
-  private setBackupSyncMode(mode: string): void {
-    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    next.backupSyncMode = mode;
-    this.onWebDavSettingsChange(next);
-  }
-
-  private setOnlyLatestBackup(value: boolean): void {
-    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    next.onlyLatestBackup = value;
-    this.onWebDavSettingsChange(next);
-  }
-
-  private setAutoCheckNewBackup(value: boolean): void {
-    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    next.autoCheckNewBackup = value;
-    this.onWebDavSettingsChange(next);
-  }
-
-  private setSyncBookProgressPlus(value: boolean): void {
-    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    next.syncBookProgressPlus = value;
-    this.onWebDavSettingsChange(next);
-  }
-
-  /** 打开忽略面板时按上游键序构建内存副本，checked 取当前该侧的键集合。 */
-  private openIgnoreSheet(sheet: BackupSheetKind): void {
-    const side: string = sheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ? 'backup' : 'restore';
-    const source: string[] = side === 'backup' ? this.backupIgnoreKeys : this.restoreIgnoreKeys;
-    const draft: BackupIgnoreItem[] = [];
-    for (let i = 0; i < BACKUP_CONFIG_KEYS.length; i++) {
-      draft.push({ key: BACKUP_CONFIG_KEYS[i], title: BACKUP_CONFIG_TITLES[i], checked: source.includes(BACKUP_CONFIG_KEYS[i]) });
-    }
-    for (let i = 0; i < BACKUP_DB_KEYS.length; i++) {
-      draft.push({ key: BACKUP_DB_KEYS[i], title: BACKUP_DB_TITLES[i], checked: source.includes(BACKUP_DB_KEYS[i]) });
-    }
-    this.ignoreDraft = draft;
-    this.ignoreSide = side;
-    this.ignoreTab = 0;
-    this.activeSheet = sheet;
-  }
-
-  private toggleIgnoreItem(key: string, checked: boolean): void {
-    this.ignoreDraft = this.ignoreDraft.map((item: BackupIgnoreItem): BackupIgnoreItem => {
-      if (item.key === key) {
-        return { key: item.key, title: item.title, checked: checked };
-      }
-      return item;
-    });
+  /** 打开忽略面板时按上游键序构建该侧的内存副本（checked 取当前该侧键集合）。 */
+  private openIgnoreSheet(sheet: BackupConfigSheet): void {
+    this.viewModel.rebuildIgnoreItems(this.backupIgnoreKeys, this.restoreIgnoreKeys);
+    this.sendSheet(BackupConfigIntentKind.OpenSheet, sheet);
   }
 
   private visibleIgnoreItems(): BackupIgnoreItem[] {
-    return this.ignoreDraft.filter((item: BackupIgnoreItem, index: number): boolean => {
-      return this.ignoreTab === 0 ? index < BACKUP_CONFIG_KEYS.length : index >= BACKUP_CONFIG_KEYS.length;
-    });
+    return this.viewModel.ignoreItemsOf(this.state.activeSheet, this.state.ignoreTab);
+  }
+
+  /**
+   * 勾选一个忽略项：按「哪一侧 + 哪个页签」派发到上游四个 toggle intent
+   * （ToggleIgnoreItem / ToggleDbIgnoreItem / ToggleBackupIgnoreItem / ToggleBackupDbIgnoreItem）。
+   */
+  private sendIgnoreToggle(key: string, checked: boolean): void {
+    const backupSide: boolean = this.state.activeSheet === BackupConfigSheet.IGNORE_BACKUP_ITEMS;
+    const dbTab: boolean = this.state.ignoreTab === 1;
+    let kind: BackupConfigIntentKind = BackupConfigIntentKind.ToggleIgnoreItem;
+    if (backupSide && dbTab) {
+      kind = BackupConfigIntentKind.ToggleBackupDbIgnoreItem;
+    } else if (backupSide) {
+      kind = BackupConfigIntentKind.ToggleBackupIgnoreItem;
+    } else if (dbTab) {
+      kind = BackupConfigIntentKind.ToggleDbIgnoreItem;
+    }
+    const intent = new BackupConfigIntent(kind);
+    intent.value = key;
+    intent.boolValue = checked;
+    this.viewModel.onIntent(intent);
   }
 
   /**
@@ -291,41 +363,11 @@ export struct AppBackupSettingsPage {
 
   /** 关闭即保存：对齐上游 IgnoreItemsSheet 的 onDismissRequest = onConfirm。 */
   private dismissSheet(): void {
-    if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
-        this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
-      const keys: string[] = this.ignoreDraft
-        .filter((item: BackupIgnoreItem): boolean => item.checked)
-        .map((item: BackupIgnoreItem): string => item.key);
-      this.onSaveIgnoreItems(this.ignoreSide, keys);
-    }
-    this.activeSheet = BackupSheetKind.NONE;
-  }
-
-  /** 从网络恢复：先拉全部文件名，非空弹选择层，空或失败弹回退对话框。 */
-  private async requestNetworkRestore(): Promise<void> {
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) {
-      return;
-    }
-    this.activeDialog = BackupDialogKind.LOADING;
-    try {
-      const names: string[] = await WebDavSync.listBackups(context);
-      this.activeDialog = BackupDialogKind.NONE;
-      if (names.length > 0) {
-        this.networkNames = names;
-        this.activeSheet = BackupSheetKind.RESTORE_FILES;
-      } else {
-        this.fallbackError = '没有找到远端备份文件';
-        this.activeDialog = BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK;
-      }
-    } catch (error) {
-      this.activeDialog = BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK;
-      this.fallbackError = error instanceof Error ? error.message : String(error);
-    }
+    this.send(BackupConfigIntentKind.DismissSheet);
   }
 
   private dialogVisible(): boolean {
-    return this.activeDialog !== BackupDialogKind.NONE || this.busy || this.webDavTesting;
+    return this.state.activeDialog !== BackupConfigDialogKind.NONE || this.busy || this.webDavTesting;
   }
 
   /** 状态变化走 toast，对齐上游 Snackbar 的浮层 + 自动消失。 */
@@ -353,7 +395,7 @@ export struct AppBackupSettingsPage {
         alignment: DialogAlignment.Center,
         onWillDismiss: () => {
           this.dialogId = -1;
-          this.activeDialog = BackupDialogKind.NONE;
+          this.send(BackupConfigIntentKind.DismissDialog);
         }
       }).then((id: number) => {
         this.dialogId = id;
@@ -408,64 +450,64 @@ export struct AppBackupSettingsPage {
           ThemeGroupColumn({ title: 'WebDav 设置', surfaceFill: false }) {
             ThemeGroupItem({ first: true }) {
               BackupInputRow({ cardSurface: true, title: 'WebDav 服务器地址', detail: '输入你的WebDav服务器地址',
-                value: this.webDavSettings.url, defaultValue: '', editing: this.editingKey === 'url',
-                draft: this.inputDraft,
-                onBegin: () => this.openSettingInput('url', this.webDavSettings.url),
-                onDraft: (value: string) => this.inputDraft = value,
-                onConfirm: (value: string) => this.setWebDavField('url', value) })
+                value: this.state.settings.url, defaultValue: '', editing: this.state.editingKey === 'url',
+                draft: this.state.inputDraft,
+                onBegin: () => this.beginEdit('url', this.state.settings.url),
+                onDraft: (value: string) => this.sendValue(BackupConfigIntentKind.UpdateInputDraft, value),
+                onConfirm: (value: string) => this.commitEdit('url', value) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: 'WebDav 账号', detail: this.webDavAuthDetail(),
-                onSelect: () => this.openWebDavAuth() })
+                onSelect: () => this.send(BackupConfigIntentKind.OpenWebDavAuth) })
             }
             ThemeGroupItem() {
               BackupInputRow({ cardSurface: true, title: '子文件夹', detail: '',
-                value: this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado',
-                defaultValue: 'legado', editing: this.editingKey === 'dir',
-                draft: this.inputDraft,
-                onBegin: () => this.openSettingInput('dir', this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado'),
-                onDraft: (value: string) => this.inputDraft = value,
-                onConfirm: (value: string) => this.setWebDavField('dir', value) })
+                value: this.state.settings.dir.length > 0 ? this.state.settings.dir : 'legado',
+                defaultValue: 'legado', editing: this.state.editingKey === 'dir',
+                draft: this.state.inputDraft,
+                onBegin: () => this.beginEdit('dir', this.state.settings.dir.length > 0 ? this.state.settings.dir : 'legado'),
+                onDraft: (value: string) => this.sendValue(BackupConfigIntentKind.UpdateInputDraft, value),
+                onConfirm: (value: string) => this.commitEdit('dir', value) })
             }
             ThemeGroupItem() {
               BackupInputRow({ cardSurface: true, title: '设备名称', detail: '',
-                value: this.webDavSettings.deviceName, defaultValue: '', editing: this.editingKey === 'deviceName',
-                draft: this.inputDraft,
-                onBegin: () => this.openSettingInput('deviceName', this.webDavSettings.deviceName),
-                onDraft: (value: string) => this.inputDraft = value,
-                onConfirm: (value: string) => this.setWebDavField('deviceName', value) })
+                value: this.state.settings.deviceName, defaultValue: '', editing: this.state.editingKey === 'deviceName',
+                draft: this.state.inputDraft,
+                onBegin: () => this.beginEdit('deviceName', this.state.settings.deviceName),
+                onDraft: (value: string) => this.sendValue(BackupConfigIntentKind.UpdateInputDraft, value),
+                onConfirm: (value: string) => this.commitEdit('deviceName', value) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: '测试 WebDav 配置', detail: '测试 WebDav 服务工作状态',
-                onSelect: () => this.onTestWebDav() })
+                onSelect: () => this.send(BackupConfigIntentKind.TestWebDav) })
             }
             ThemeGroupItem() {
               BackupPreviewSwitchRow({ cardSurface: true, title: '同步阅读进度',
                 detail: '进入退出阅读界面时同步阅读进度',
-                checked: this.webDavSettings.syncBookProgress,
-                onChange: (value: boolean) => this.setSyncBookProgress(value) })
+                checked: this.state.settings.syncBookProgress,
+                onChange: (value: boolean) => this.sendBool(BackupConfigIntentKind.SetSyncBookProgress, value) })
             }
-            if (this.webDavSettings.syncBookProgress) {
+            if (this.state.settings.syncBookProgress) {
               ThemeGroupItem() {
                 BackupPreviewSwitchRow({ cardSurface: true, title: '同步增强',
                   detail: '重新进入页面（息屏、后台返回等）或者网络变为可用时同步云端进度',
-                  checked: this.webDavSettings.syncBookProgressPlus,
-                  onChange: (value: boolean) => this.setSyncBookProgressPlus(value)
+                  checked: this.state.settings.syncBookProgressPlus,
+                  onChange: (value: boolean) => this.sendBool(BackupConfigIntentKind.SetSyncBookProgressPlus, value)
                 }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
               }
             }
             ThemeGroupItem() {
               BackupPreviewSwitchRow({ cardSurface: true, title: '自动检查新备份',
                 detail: '打开软件时检查是否有新备份，有新备份时提示是否更新',
-                checked: this.webDavSettings.autoCheckNewBackup,
-                onChange: (value: boolean) => this.setAutoCheckNewBackup(value) })
+                checked: this.state.settings.autoCheckNewBackup,
+                onChange: (value: boolean) => this.sendBool(BackupConfigIntentKind.SetAutoCheckNewBackup, value) })
             }
             ThemeGroupItem() {
               UiDropdown({ cardSurface: true, title: '自动备份同步', detail: '选择自动备份时的同步行为',
-                option: this.webDavSettings.backupSyncMode,
+                option: this.state.settings.backupSyncMode,
                 options: ['both', 'local', 'webdav'],
                 labelOf: (value: string) => this.syncModeLabel(value),
-                onSelect: (value: string) => this.setBackupSyncMode(value), showDivider: false })
+                onSelect: (value: string) => this.sendValue(BackupConfigIntentKind.SetBackupSyncMode, value), showDivider: false })
             }
           }
 
@@ -474,34 +516,34 @@ export struct AppBackupSettingsPage {
           ThemeGroupColumn({ title: '备份与恢复', surfaceFill: false }) {
             ThemeGroupItem({ first: true }) {
               BackupActionRow({ cardSurface: true, title: '备份路径',
-                detail: this.webDavSettings.backupPath.trim().length === 0 ? '请选择备份路径' : this.webDavSettings.backupPath,
-                onSelect: () => this.activeSheet = BackupSheetKind.CHOOSE_BACKUP_PATH })
+                detail: this.state.settings.backupPath.trim().length === 0 ? '请选择备份路径' : this.state.settings.backupPath,
+                onSelect: () => this.send(BackupConfigIntentKind.SelectBackupDirectory) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: '备份', detail: '本地和 WebDav 一起备份',
-                onSelect: () => this.activeSheet = BackupSheetKind.BACKUP_OPTIONS })
+                onSelect: () => this.sendSheet(BackupConfigIntentKind.OpenSheet, BackupConfigSheet.BACKUP_OPTIONS) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: '恢复', detail: '选择从本地或网络恢复备份',
-                onSelect: () => this.activeSheet = BackupSheetKind.RESTORE_OPTIONS })
+                onSelect: () => this.sendSheet(BackupConfigIntentKind.OpenSheet, BackupConfigSheet.RESTORE_OPTIONS) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: '恢复忽略列表', detail: '选择恢复忽略内容',
-                onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_RESTORE_ITEMS) })
+                onSelect: () => this.openIgnoreSheet(BackupConfigSheet.IGNORE_RESTORE_ITEMS) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: '备份忽略列表', detail: '选择备份忽略内容',
-                onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_BACKUP_ITEMS) })
+                onSelect: () => this.openIgnoreSheet(BackupConfigSheet.IGNORE_BACKUP_ITEMS) })
             }
             ThemeGroupItem() {
               BackupActionRow({ cardSurface: true, title: '导入旧版数据', detail: '选择旧版备份文件夹',
-                onSelect: () => this.onImportOldShelf() })
+                onSelect: () => this.send(BackupConfigIntentKind.RequestImportOldData) })
             }
             ThemeGroupItem() {
               BackupPreviewSwitchRow({ cardSurface: true, title: '仅保留最新备份',
                 detail: '本地备份仅保留最新备份文件',
-                checked: this.webDavSettings.onlyLatestBackup,
-                onChange: (value: boolean) => this.setOnlyLatestBackup(value) })
+                checked: this.state.settings.onlyLatestBackup,
+                onChange: (value: boolean) => this.sendBool(BackupConfigIntentKind.SetOnlyLatestBackup, value) })
             }
           }
         }
@@ -516,7 +558,7 @@ export struct AppBackupSettingsPage {
       // 这里必须用前者才与上游同色。整页贴图与 blur 由宿主根层
       // （pages/Index.ets:13487-13499，对应上游 AppScaffold.kt:248-268）负责，本页只做「有背景图就透明」。
       : (this.themePureBlack ? '#000000' : this.themeColorBackground))
-      .bindSheet(this.activeSheet !== BackupSheetKind.NONE, this.backupSheetContent(), {
+      .bindSheet(this.state.activeSheet !== BackupConfigSheet.NONE, this.backupSheetContent(), {
         // 上游 AppModalBottomSheet.kt:165 是 heightIn(max = 容器高 * 0.8) + :167 animateContentSize：
         // 内容少时 sheet 只占内容高度，最多 80%。原先按分支写死 560/420/320 固定像素，
         // 三卡备份弹层与两卡恢复弹层都会被拉到同一高度、卡片下面留大片空白。
@@ -529,7 +571,7 @@ export struct AppBackupSettingsPage {
         showClose: false,
         backgroundColor: this.themeColorSurfaceTertiary,
         onDisappear: () => {
-          if (this.activeSheet !== BackupSheetKind.NONE) {
+          if (this.state.activeSheet !== BackupConfigSheet.NONE) {
             this.dismissSheet();
           }
         }
@@ -544,17 +586,17 @@ export struct AppBackupSettingsPage {
       // + `contentAlignment = Center`，标题带 `padding(horizontal = 56.dp)` 给两侧动作留位。
       // 用 Box 居中而不是 Row + layoutWeight：右侧有时有保存图标、有时没有，Row 会让标题跟着左右偏。
       Stack({ alignContent: Alignment.Center }) {
-        Text(this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH ? '选择操作' :
-          this.activeSheet === BackupSheetKind.BACKUP_OPTIONS ? '备份' :
-          this.activeSheet === BackupSheetKind.RESTORE_OPTIONS ? '恢复' :
-          this.activeSheet === BackupSheetKind.RESTORE_FILES ? '选择恢复文件' :
-          this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ? '备份忽略列表' :
-          this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS ? '恢复忽略列表' : '')
+        Text(this.state.activeSheet === BackupConfigSheet.CHOOSE_BACKUP_PATH ? '选择操作' :
+          this.state.activeSheet === BackupConfigSheet.BACKUP_OPTIONS ? '备份' :
+          this.state.activeSheet === BackupConfigSheet.RESTORE_OPTIONS ? '恢复' :
+          this.state.activeSheet === BackupConfigSheet.RESTORE_FILES ? '选择恢复文件' :
+          this.state.activeSheet === BackupConfigSheet.IGNORE_BACKUP_ITEMS ? '备份忽略列表' :
+          this.state.activeSheet === BackupConfigSheet.IGNORE_RESTORE_ITEMS ? '恢复忽略列表' : '')
           .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
           .textAlign(TextAlign.Center).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .padding({ left: 56, right: 56 })
-        if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
-            this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
+        if (this.state.activeSheet === BackupConfigSheet.IGNORE_BACKUP_ITEMS ||
+            this.state.activeSheet === BackupConfigSheet.IGNORE_RESTORE_ITEMS) {
           Row() {
             Blank()
             AppGlyph({ name: 'profileSave', glyphSize: 22, tint: this.themeColorAccent })
@@ -563,56 +605,56 @@ export struct AppBackupSettingsPage {
           }.width('100%')
         }
       }.width('100%').padding({ bottom: 16 })
-      if (this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH) {
+      if (this.state.activeSheet === BackupConfigSheet.CHOOSE_BACKUP_PATH) {
         Grid() {
           GridItem() {
             BackupOptionCard({ icon: 'folder', title: '系统文件夹选择器',
-              onSelect: () => { this.dismissSheet(); this.onChooseBackupPath(); } })
+              onSelect: () => this.send(BackupConfigIntentKind.SelectBackupDirectory) })
           }
         }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12)
         // 上游 OptionSheet.kt:49 在卡片流之后还有 `Spacer(modifier = Modifier.height(24.dp))`。
         Row().width('100%').height(24)
-      } else if (this.activeSheet === BackupSheetKind.BACKUP_OPTIONS) {
+      } else if (this.state.activeSheet === BackupConfigSheet.BACKUP_OPTIONS) {
         Grid() {
           GridItem() {
             BackupOptionCard({ icon: 'folder', title: '备份至本地',
-              onSelect: () => { this.dismissSheet(); this.onCreateBackup(); } })
+              onSelect: () => this.sendMode(BackupConfigIntentKind.RequestBackup, 'local') })
           }
           GridItem() {
             BackupOptionCard({ icon: 'cloud', title: '备份至网络',
-              onSelect: () => { this.dismissSheet(); this.onBackupToWebDav(); } })
+              onSelect: () => this.sendMode(BackupConfigIntentKind.RequestBackup, 'webdav') })
           }
           GridItem() {
             BackupOptionCard({ icon: 'grid', title: '备份至本地与网络',
-              onSelect: () => { this.dismissSheet(); this.onCreateBackupBoth(); } })
+              onSelect: () => this.sendMode(BackupConfigIntentKind.RequestBackup, 'both') })
           }
         }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12)
         // 上游 OptionSheet.kt:49 在卡片流之后还有 `Spacer(modifier = Modifier.height(24.dp))`。
         Row().width('100%').height(24)
-      } else if (this.activeSheet === BackupSheetKind.RESTORE_OPTIONS) {
+      } else if (this.state.activeSheet === BackupConfigSheet.RESTORE_OPTIONS) {
         Grid() {
           GridItem() {
             BackupOptionCard({ icon: 'folder', title: '本地恢复',
-              onSelect: () => { this.dismissSheet(); this.onSelectRestore(); } })
+              onSelect: () => this.send(BackupConfigIntentKind.RequestLocalRestore) })
           }
           GridItem() {
             BackupOptionCard({ icon: 'cloud', title: '网络恢复',
-              onSelect: () => { this.dismissSheet(); this.requestNetworkRestore(); } })
+              onSelect: () => this.send(BackupConfigIntentKind.RequestNetworkRestore) })
           }
         }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12)
         // 上游 OptionSheet.kt:49 在卡片流之后还有 `Spacer(modifier = Modifier.height(24.dp))`。
         Row().width('100%').height(24)
-      } else if (this.activeSheet === BackupSheetKind.RESTORE_FILES) {
+      } else if (this.state.activeSheet === BackupConfigSheet.RESTORE_FILES) {
         Scroll() {
           Column({ space: 8 }) {
-            ForEach(this.networkNames, (name: string) => {
+            ForEach(this.state.backupNames, (name: string) => {
               BackupSheetOption({ title: name, detail: '',
-                onSelect: () => { this.dismissSheet(); this.onRestoreNetwork(name); } })
+                onSelect: () => this.sendValue(BackupConfigIntentKind.RestoreNetwork, name) })
             }, (name: string) => name)
           }.width('100%').padding({ bottom: 16 })
         }.constraintSize({ maxHeight: this.sheetScrollMaxHeight(0) }).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
-      } else if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
-                 this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
+      } else if (this.state.activeSheet === BackupConfigSheet.IGNORE_BACKUP_ITEMS ||
+                 this.state.activeSheet === BackupConfigSheet.IGNORE_RESTORE_ITEMS) {
         // 上游 BackupConfigScreen.kt:407-442：内容是一个 `Column.fillMaxWidth().verticalScroll(...)`，
         // `verticalArrangement = spacedBy(4.dp)`，页签条 CardTabRow 与复选框同在这一个滚动容器里
         // （页签会随列表一起滚走，不吸顶）。所以这里也把页签条放进 Scroll，而不是单独吸在顶部。
@@ -627,30 +669,34 @@ export struct AppBackupSettingsPage {
             Row({ space: 8 }) {
               Column() {
                 Text('配置忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
-                  .fontWeight(this.ignoreTab === 0 ? FontWeight.Bold : FontWeight.Normal)
-                  .fontColor(this.ignoreTab === 0 ? this.themeColorOnSecondaryContainer : this.themeColorTextSecondary)
+                  .fontWeight(this.state.ignoreTab === 0 ? FontWeight.Bold : FontWeight.Normal)
+                  .fontColor(this.state.ignoreTab === 0 ? this.themeColorOnSecondaryContainer : this.themeColorTextSecondary)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .textAlign(TextAlign.Center).width('100%')
               }.layoutWeight(1).borderRadius(12)
-                .backgroundColor(this.ignoreTab === 0 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary)
+                .backgroundColor(this.state.ignoreTab === 0 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary)
                 .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
-                .onClick(() => this.ignoreTab = 0)
+                .onClick(() => this.sendValue(BackupConfigIntentKind.SelectIgnoreTab, '0'))
               Column() {
                 Text('数据库忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
-                  .fontWeight(this.ignoreTab === 1 ? FontWeight.Bold : FontWeight.Normal)
-                  .fontColor(this.ignoreTab === 1 ? this.themeColorOnSecondaryContainer : this.themeColorTextSecondary)
+                  .fontWeight(this.state.ignoreTab === 1 ? FontWeight.Bold : FontWeight.Normal)
+                  .fontColor(this.state.ignoreTab === 1 ? this.themeColorOnSecondaryContainer : this.themeColorTextSecondary)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .textAlign(TextAlign.Center).width('100%')
               }.layoutWeight(1).borderRadius(12)
-                .backgroundColor(this.ignoreTab === 1 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary)
+                .backgroundColor(this.state.ignoreTab === 1 ? this.themeColorSecondaryContainer : this.themeColorSurfaceSecondary)
                 .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
-                .onClick(() => this.ignoreTab = 1)
+                .onClick(() => this.sendValue(BackupConfigIntentKind.SelectIgnoreTab, '1'))
             }.width('100%')
             Column({ space: 4 }) {
               ForEach(this.visibleIgnoreItems(), (item: BackupIgnoreItem) => {
                 BackupCheckItem({ title: item.title, checked: item.checked,
-                  onChange: (checked: boolean) => this.toggleIgnoreItem(item.key, checked) })
-              }, (item: BackupIgnoreItem) => item.key)
+                  onChange: (checked: boolean) => this.sendIgnoreToggle(item.key, checked) })
+                // key 里带上 checked：ArkUI 的 ForEach 在 key 不变时直接复用子组件，
+                // 不会重新计算 @Prop，于是「勾了但行底色不变」（上机实测）。
+                // 上游 Compose 侧靠不可变列表 + 重组，每次勾选都拿到新 BackupIgnoreItem，
+                // 这里把 checked 并进 key，等价于让该行重新构建一次。
+              }, (item: BackupIgnoreItem) => `${item.key}:${item.checked}`)
             }.width('100%')
           }.width('100%')
         }.constraintSize({ maxHeight: this.sheetScrollMaxHeight(0) })
@@ -665,66 +711,60 @@ export struct AppBackupSettingsPage {
   @Builder
   private dialogContent() {
     Column() {
-      if (this.activeDialog === BackupDialogKind.WEBDAV_AUTH) {
+      if (this.state.activeDialog === BackupConfigDialogKind.WEBDAV_AUTH) {
         Column() {
           Text('WebDav 账号').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
           Column({ space: 12 }) {
-            TextInput({ placeholder: 'WebDav 账号', text: this.accountDraft })
+            TextInput({ placeholder: 'WebDav 账号', text: this.state.authAccount })
               .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
               .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .onChange((value: string) => this.accountDraft = value)
+              .onChange((value: string) => this.sendValue(BackupConfigIntentKind.EditWebDavAccount, value))
               .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(4)
             Row() {
-              TextInput({ placeholder: 'WebDav 密码', text: this.passwordDraft })
+              TextInput({ placeholder: 'WebDav 密码', text: this.state.authPassword })
                 .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                .type(this.passwordVisible ? InputType.Normal : InputType.Password)
+                .type(this.state.authPasswordVisible ? InputType.Normal : InputType.Password)
                 // 关掉 ArkUI 自带的密码可见图标，只保留下面与上游 trailingIcon 对应的那一个。
                 .showPasswordIcon(false)
                 .layoutWeight(1)
-                .onChange((value: string) => this.passwordDraft = value)
-              AppGlyph({ name: this.passwordVisible ? 'visibility' : 'visibilityOff', glyphSize: 20,
+                .onChange((value: string) => this.sendValue(BackupConfigIntentKind.EditWebDavPassword, value))
+              AppGlyph({ name: this.state.authPasswordVisible ? 'visibility' : 'visibilityOff', glyphSize: 20,
                 tint: this.themeColorTextSecondary })
                 .margin({ left: 12 })
-                .accessibilityText(this.passwordVisible ? '隐藏密码' : '显示密码')
-                .onClick(() => { this.passwordVisible = !this.passwordVisible; })
+                .accessibilityText(this.state.authPasswordVisible ? '隐藏密码' : '显示密码')
+                .onClick(() => this.send(BackupConfigIntentKind.TogglePasswordVisibility))
             }.width('100%').border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(4)
           }.width('100%').margin({ top: 16 })
           Row({ space: 12 }) {
             Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
               .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
               .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(20)
-              .onClick(() => this.activeDialog = BackupDialogKind.NONE)
+              .onClick(() => this.send(BackupConfigIntentKind.DismissDialog))
             Button('确认').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
               .backgroundColor(this.themeColorAccent).borderRadius(20)
-              .onClick(() => {
-                this.activeDialog = BackupDialogKind.NONE;
-                this.onSaveWebDavAuth(this.accountDraft, this.passwordDraft);
-              })
+              .onClick(() => this.send(BackupConfigIntentKind.SaveWebDavAuth))
           }.width('100%').margin({ top: 24 })
         }.width(312).padding(24).backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
-      } else if (this.activeDialog === BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK) {
+      } else if (this.state.activeDialog === BackupConfigDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK) {
         Column() {
           Text('恢复').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
-          Text(`WebDAV 出错\n${this.fallbackError}\n将从本地备份恢复。`)
+          Text(`WebDAV 出错\n${this.state.fallbackError}\n将从本地备份恢复。`)
             .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 16 }).width('100%')
           Row({ space: 12 }) {
             Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
               .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
               .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(20)
-              .onClick(() => this.activeDialog = BackupDialogKind.NONE)
+              .onClick(() => this.send(BackupConfigIntentKind.DismissDialog))
             Button('确认').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
               .backgroundColor(this.themeColorAccent).borderRadius(20)
-              .onClick(() => {
-                this.activeDialog = BackupDialogKind.NONE;
-                this.onConfirmLocalRestoreFallback();
-              })
+              .onClick(() => this.send(BackupConfigIntentKind.ConfirmLocalRestoreFallback))
           }.width('100%').margin({ top: 24 })
         }.width(312).padding(24).backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
       } else {
         Column() {
           LoadingProgress().width(40).height(40).color(this.themeColorAccent)
-          Text(this.webDavTesting ? '测试中…' : '加载中…')
+          Text(this.state.loadingTitle.length > 0 ? this.state.loadingTitle : '加载中…')
             .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 12 })
         }.width(240).padding(28).backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
@@ -903,10 +943,15 @@ struct BackupCheckItem {
   onChange: (checked: boolean) => void = (_checked: boolean) => {};
   build() {
     Row() {
+      // 上游 CheckboxItem.kt:30-43 是 `Row.fillMaxWidth().toggleable(...)` 整行可点，
+      // 里面的 `AppCheckbox(checked, onCheckedChange = null)` 自身不处理事件，选中态完全由外部
+      // checked 驱动。ArkUI 的 Checkbox 默认会自己吃掉点击并翻转内部视觉，导致「复选框打了勾、
+      // 但行底色和状态都没变」（上机实测），所以这里把它的命中测试关掉，点击统一交给整行。
       Checkbox({ name: this.title })
         .shape(CheckBoxShape.ROUNDED_SQUARE)
         .select(this.checked)
         .selectedColor(this.themeColorAccent)
+        .hitTestBehavior(HitTestMode.None)
       Text(this.title).fontSize(BODY_MEDIUM_EMPHASIZED).fontColor(this.themeColorTextPrimary)
         .maxLines(1).margin({ left: 12 }).layoutWeight(1)
     }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })

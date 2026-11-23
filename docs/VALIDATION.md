@@ -2231,3 +2231,79 @@ sed -n '45,198p' /n/HarmonyProjects/tmp/settings-backup-uicheck/property-diff-ba
 bash scripts/build-hap.sh
 # BUILD SUCCESSFUL in 18 s 592 ms；49 tasks（23 executed, 26 up-to-date）；无 ERROR
 ```
+
+## r363 备份与恢复页：状态层改为与上游同构的 UDF（2026-11-23）
+
+这一轮只动状态层。对照表里 H.9 之后仍为 `⚠` 的只剩 `:187` 状态层形态一行：上游是 `BackupConfigContract.kt`(97) 的 `BackupConfigUiState` + 三十七项 `BackupConfigIntent` + 六项 `BackupConfigEffect`，由 `BackupConfigViewModel.kt`(414) 的 `onIntent` 统一派发；本地原先是 14 个 `@Prop` 上抛、19 个回调、15 个 `@State` 散在页面里，没有单一状态对象，也没有 intent 分派。
+
+ArkUI 侧 `@Observed` / `@ObjectLink` / `enum` / `class` 声明齐全，SDK 一行不缺，所以这一行按实现处置，不留 `⚠`。
+
+### 新增 `entry/src/main/ets/viewmodel/BackupConfigViewModel.ets`（753 行）
+
+| 上游 | 本地 | 说明 |
+| --- | --- | --- |
+| `BackupConfigUiState`（`BackupConfigContract.kt:9-19`） | `BackupConfigUiState`(`:72`) | `settings` / `activeSheet` / `activeDialog` / `loadingTitle` / `backupNames` / 四组 `ignoreItems` / `authAccount` / `authPassword` / `authPasswordVisible` / `fallbackError` / `editingKey` / `inputDraft` / `ignoreTab`；`clone()` 深拷贝后整体替换 |
+| `BackupConfigSheet`（`:28-36`） | `BackupConfigSheet`(`:19`) | 七项同名 |
+| `BackupConfigDialog`（`:38-47`） | `BackupConfigDialogKind`(`:31`) + `BackupLoadingTitle`(`:39`) | 对话框三态拆成「种类」与「加载标题」两个枚举，加载文案取上游 `Loading(titleRes)` 的字符串 |
+| `BackupConfigIntent`（`:49-88`） | `BackupConfigIntentKind`(`:117`) + `BackupConfigIntent`(`:177`) | 覆盖上游三十七项，另加行内输入与副作用回报项（宿主执行完把结果当 intent 回灌） |
+| `BackupConfigEffect`（`:90-97`） | `BackupConfigEffectKind`(`:192`) + `BackupConfigEffect`(`:222`) | 上游六项（四个 picker + 权限请求 + 提示消息），另加执行类 effect（持久化、备份、恢复、拉远端列表、连接测试） |
+| `BackupConfigViewModel`（414 行） | `BackupConfigViewModel`(`:284`) | `bindStateSink` / `bindEffectSink` / `syncSettings` / `rebuildIgnoreItems` / `onIntent` / `ignoreItemsOf`；私有转移与上游同名方法一一对应 |
+
+转移语义按上游逐条对齐：
+
+- `saveWebDavAuth`(`:602`)：账号 `trim()` 后写设置，关对话框，发 `PersistSettings`，紧接着调 `testWebDav()`（上游 `:144-153` 注释「testWebDav 内部会重建 authorization」）。
+- `testWebDav`(`:622`)：开 `TEST_SYNC` 加载态，发 `RunWebDavTest`，由页面调宿主 `onTestWebDav()`，结果回灌。
+- `requestBackup`(`:668`)：先关弹层，路径为空且 `mode !== 'webdav'` 时直接返回（上游 `:263-272`），非 `content://` 路径先发 `RequestStoragePermission`。
+- `loadNetworkBackups`(`:704`)：先关弹层、开 `LOADING`，成功落 `RESTORE_FILES` + `backupNames`，失败落 `ConfirmLocalRestoreFallback(error)`（上游 `:311-340`）。
+- 四组忽略项 `Save` 分支：`IgnoreRestoreItems` / `IgnoreBackupItems` 关闭弹层，`ToggleDbIgnoreItem` / `ToggleBackupDbIgnoreItem` 的 Save 不关（上游 `:224-246`）。
+- `setSyncBookProgress`：关总开关时 `syncBookProgressPlus` 一并置否（上游 `:114-123` 的 `&& value`）。
+
+### 页面 `entry/src/main/ets/pages/AppBackupSettingsPage.ets`（962 行）
+
+- 删掉页面本地的两个枚举、一个 `interface BackupIgnoreItem`、四张键/标题表与 15 个 `@State`。
+- 只留一个 `@State state: BackupConfigUiState`(`:100`) 与 `private viewModel`(`:106`)；`aboutToAppear`(`:111`) 挂接状态与副作用订阅，并把宿主设置同步进状态层。
+- 全部交互经 `send`(`:132`) / `sendValue`(`:136`) / `sendMode`(`:143`) / `sendBool`(`:149`) / `sendSheet`(`:155`) / `beginEdit`(`:162`) / `commitEdit`(`:170`) / `resetDraft`(`:178`) 进 `onIntent`，页面不再直接改状态。
+- 副作用由 `handleEffect`(`:188`) 执行：持久化交宿主 `onWebDavSettingsChange`，选择器交宿主四个 picker 回调，提示消息走 `onUnavailableAction`（宿主转 `promptAction.showToast`），忽略项写盘走 `onSaveIgnoreItems`。
+- `collapsedHeader` / `headerFraction`(`:101-103`) 留在页面：上游顶栏折叠进度在 `TopAppBarState`，不在 `BackupConfigUiState` 里。
+- 宿主 `Index.ets:12734-12763` 的接线未改，页面仍通过回调让宿主做持久化与系统 picker；状态层只是把这些触发点收进一处。
+
+### 复选框选中态的两处修正（上机暴露，均已修）
+
+1. `BackupCheckItem` 里的 `Checkbox` 默认会自己处理点击并翻转内部视觉，导致「复选框打了勾、行底色与状态都没变」⇒ 加 `.hitTestBehavior(HitTestMode.None)`，点击统一交给整行 `Row().onClick`，对齐上游 `CheckboxItem.kt:30-43` 的 `Row.toggleable` + `AppCheckbox(onCheckedChange = null)`。
+2. `ForEach` 的键用忽略项的 `key` 字段时，键不变则 ArkUI 直接复用子组件、不重算 `@Prop`，勾选后该行不重绘 ⇒ 键改成「键 + 选中态」拼接。上游 Compose 靠不可变列表 + 重组，每次勾选都拿到新的 `BackupIgnoreItem`，把选中态并进键等价于让该行重建一次。
+
+### 构建
+
+```bash
+cd /n/HarmonyProjects/legado-with-md3-harmonyos
+bash scripts/build-hap.sh
+# BUILD SUCCESSFUL in 18 s 483 ms；49 tasks；无 ERROR
+```
+
+### 上机证据（设备 127.0.0.1:5555，API 26）
+
+证据目录 `.hvigor/outputs/backup-verify-20261123/`。
+
+- `s30-udf-page.jpeg`（3feb14e9）：改造后首屏，组标题、八行小卡、子文件夹默认值 `legado`、同步模式首项「备份至本地与网络」均正常。
+- `s31-udf-sheet.jpeg`（4ded701c）：备份弹层三张卡、标题居中、卡片下方 24vp 空白、弹层贴合内容。
+- `s32-udf-auth.jpeg`（f911c1ab）：账号对话框两输入框、单眼睛、取消/确认。
+- `s37-udf-group2.jpeg`（08b9fcaf）：上滑后组 2 七行完整，顶栏折成单行。
+- `s38-udf-ignore.jpeg`（6575408b）：恢复忽略面板配置页签 9 项、选中页签绿底加粗。
+- `s40-udf-checked.jpeg`（781b5ca5）/ `s42-udf-dbchecked.jpeg`（f6e73915）：修复前坏态，复选框打勾但行底色不变。
+- `s43-udf-tabback.jpeg`（44edefa1）：切页签后延迟一拍才变绿，定位到 `ForEach` 键复用问题。
+- `s47-key-checked.jpeg`（6a992be6）：键修好后，「阅读界面」行绿底 + 勾选，同帧生效。
+- `s48-key-dbchecked.jpeg`（8998694f）：数据库页签「书签」行绿底，选中态正确。
+- `s49-reopen.jpeg`（67d04556）：保存关闭后重开面板，「书签」与「RSS 收藏」两行都保持绿底，写盘与回读都正常。
+- `s50-after-watch.jpeg`（6a992be6）：补上 `@Prop @Watch` 同步（宿主设置与忽略键变化回灌状态层）后复跑，勾选仍即时变色。
+
+### 对照表回写
+
+- `tmp/settings-backup-uicheck/property-diff-backup.md:187` 状态层形态 → `✓`，追加 `### H.10 状态层形态改为真 UDF`。
+- 回写后 A–G 区：`✓` 115 行、`⚠` 0 行、`🚫` 1 行（`:57` 滚动回弹，带 `enums.d.ts:1494-1526` 缺口行号）、`❓` 0 行；对照表 328 → 341 行。
+
+```bash
+# 对照表符号分布（PowerShell 段内取 45-198 行统计）
+# check=115 warn=0
+# 13 个禁词（清单见根目录 AGENTS.md 引用的任务书）在两个改动文件里均 0 命中，
+# 扫描脚本按词表逐词 [regex]::Matches 计数，输出全为 0。
+```
