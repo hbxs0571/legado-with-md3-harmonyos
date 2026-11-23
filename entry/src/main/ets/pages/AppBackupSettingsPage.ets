@@ -55,8 +55,12 @@ export struct AppBackupSettingsPage {
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @Prop localBookCount: number = 0;
   @Prop categoryOptions: BackupCategoryOption[] = [];
+  // 四份忽略键：与上游 BackupConfig.kt:41-67 的四个文件对应。
+  // backupIgnore/backupDbIgnore 管备份侧，restoreIgnore/dbIgnore 管恢复侧；配置维度与数据库维度分开。
   @Prop @Watch('onHostIgnoreKeys') backupIgnoreKeys: string[] = [];
+  @Prop @Watch('onHostIgnoreKeys') backupDbIgnoreKeys: string[] = [];
   @Prop @Watch('onHostIgnoreKeys') restoreIgnoreKeys: string[] = [];
+  @Prop @Watch('onHostIgnoreKeys') restoreDbIgnoreKeys: string[] = [];
   /** 状态消息改走 showToast（对齐上游 Snackbar），不再在页内常驻成条。 */
   @Prop @Watch('syncStatusMessage') statusMessage: string = '';
   @Prop @Watch('syncDialog') busy: boolean = false;
@@ -89,8 +93,13 @@ export struct AppBackupSettingsPage {
   onRestoreNetwork: (name: string) => void = (_name: string) => {};
   /** 网络恢复失败回退：确认后开本地文件选择器。 */
   onConfirmLocalRestoreFallback: () => void = () => {};
-  /** 忽略面板关闭时一次性写盘，side 为 backup 或 restore。 */
-  onSaveIgnoreItems: (side: string, keys: string[]) => void = (_side: string, _keys: string[]) => {};
+  /**
+   * 忽略面板关闭时一次性写盘。
+   * scope 取上游四个 intent 的名字（ignore / backupIgnore / dbIgnore / backupDbIgnore），
+   * 宿主据此决定写哪一份；不涉及的维度传空数组表示「保持原值」。
+   */
+  onSaveIgnoreItems: (scope: string, configKeys: string[], dbKeys: string[]) => void =
+    (_scope: string, _configKeys: string[], _dbKeys: string[]) => {};
   /**
    * 页面唯一状态对象：对应上游 `BackupConfigUiState`（BackupConfigContract.kt:9-19）。
    *
@@ -103,13 +112,13 @@ export struct AppBackupSettingsPage {
   @State headerFraction: number = 0;
   private backupScroller: Scroller = new Scroller();
   /** 状态层：intent 入口 + effect 出队，对应上游 BackupConfigViewModel。 */
-  private viewModel: BackupConfigViewModel = new BackupConfigViewModel([], []);
+  private viewModel: BackupConfigViewModel = new BackupConfigViewModel([], [], [], []);
   /** openCustomDialog 的 builder 需存成成员，且每次重开重建以刷新内部输入态。 */
   private dialogBuilder: CustomBuilder | undefined = undefined;
   private dialogId: number = -1;
 
   aboutToAppear(): void {
-    this.viewModel = new BackupConfigViewModel(this.backupIgnoreKeys, this.restoreIgnoreKeys);
+    this.viewModel = new BackupConfigViewModel(this.backupIgnoreKeys, this.backupDbIgnoreKeys, this.restoreIgnoreKeys, this.restoreDbIgnoreKeys);
     this.viewModel.bindStateSink((next: BackupConfigUiState): void => {
       this.state = next;
       this.syncDialog();
@@ -125,7 +134,7 @@ export struct AppBackupSettingsPage {
 
   /** 宿主忽略键变化 → 按上游四张配置表重建忽略项。 */
   private onHostIgnoreKeys(): void {
-    this.viewModel.rebuildIgnoreItems(this.backupIgnoreKeys, this.restoreIgnoreKeys);
+    this.viewModel.rebuildIgnoreItems(this.backupIgnoreKeys, this.backupDbIgnoreKeys, this.restoreIgnoreKeys, this.restoreDbIgnoreKeys);
   }
 
   /** 发一个 intent：唯一入口，对应上游 `viewModel.onIntent(...)`。 */
@@ -269,21 +278,31 @@ export struct AppBackupSettingsPage {
   }
 
   /**
-   * 把某一侧的忽略项交给宿主写盘。
+   * 把某一维度的忽略项交给宿主写盘。
    *
-   * 上游 `saveIgnoreItems`（ViewModel :180-190）把配置维度与数据库维度一起写进
-   * `ignoreConfig` / `dbIgnoreConfig`；本地宿主的忽略列表按「侧」扁平存一份数组
-   * （配置键与数据库键同在这个数组里），所以这里取两个页签的并集一次提交。
+   * 上游四个 intent 各自只写自己那份配置（ViewModel :180-190 写 ignoreConfig + dbIgnoreConfig、
+   * :202-212 写 backupIgnoreConfig + backupDbIgnoreConfig、:224-229 只写 dbIgnoreConfig、
+   * :241-246 只写 backupDbIgnoreConfig），所以这里按 scope 决定交哪几组键，
+   * 不涉及的维度交空数组，由宿主保持原值。
    */
   private persistIgnoreItems(scope: string): void {
-    const backupSide: boolean = scope === 'backup';
-    const configItems: BackupIgnoreItem[] = backupSide ? this.state.backupIgnoreItems : this.state.ignoreItems;
-    const dbItems: BackupIgnoreItem[] = backupSide ? this.state.backupDbIgnoreItems : this.state.dbIgnoreItems;
-    const keys: string[] = configItems
-      .concat(dbItems)
-      .filter((item: BackupIgnoreItem): boolean => item.checked)
-      .map((item: BackupIgnoreItem): string => item.key);
-    this.onSaveIgnoreItems(backupSide ? 'backup' : 'restore', keys);
+    const checkedOf = (items: BackupIgnoreItem[]): string[] =>
+      items.filter((item: BackupIgnoreItem): boolean => item.checked)
+        .map((item: BackupIgnoreItem): string => item.key);
+    let configKeys: string[] = [];
+    let dbKeys: string[] = [];
+    if (scope === 'ignore') {
+      configKeys = checkedOf(this.state.ignoreItems);
+      dbKeys = checkedOf(this.state.dbIgnoreItems);
+    } else if (scope === 'backupIgnore') {
+      configKeys = checkedOf(this.state.backupIgnoreItems);
+      dbKeys = checkedOf(this.state.backupDbIgnoreItems);
+    } else if (scope === 'dbIgnore') {
+      dbKeys = checkedOf(this.state.dbIgnoreItems);
+    } else if (scope === 'backupDbIgnore') {
+      dbKeys = checkedOf(this.state.backupDbIgnoreItems);
+    }
+    this.onSaveIgnoreItems(scope, configKeys, dbKeys);
   }
 
   /** 账号行描述固定为 web_dav_account_d（strings.xml:805），账号值只在对话框内呈现。 */
@@ -303,7 +322,7 @@ export struct AppBackupSettingsPage {
 
   /** 打开忽略面板时按上游键序构建该侧的内存副本（checked 取当前该侧键集合）。 */
   private openIgnoreSheet(sheet: BackupConfigSheet): void {
-    this.viewModel.rebuildIgnoreItems(this.backupIgnoreKeys, this.restoreIgnoreKeys);
+    this.viewModel.rebuildIgnoreItems(this.backupIgnoreKeys, this.backupDbIgnoreKeys, this.restoreIgnoreKeys, this.restoreDbIgnoreKeys);
     this.sendSheet(BackupConfigIntentKind.OpenSheet, sheet);
   }
 

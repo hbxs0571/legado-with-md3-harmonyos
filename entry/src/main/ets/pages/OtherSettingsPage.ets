@@ -9,7 +9,12 @@ import { UiAction } from '../components/settings/UiAction';
 import { UiInput } from '../components/settings/UiInput';
 import { AppGlyph } from '../components/AppGlyph';
 import { picker } from '@kit.CoreFileKit';
+import { pasteboard } from '@kit.BasicServicesKit';
+import {
+  DEFAULT_DIRECT_LINK_RULES, DirectLinkError, DirectLinkRule, DirectLinkUpload, DirectLinkUploadStore
+} from '../lib/DirectLinkUpload';
 import { OtherSettingsRepository, OtherSettings, DEFAULT_OTHER_SETTINGS } from '../data/OtherSettingsRepository';
+import { AppLocaleRepository, APP_LANGUAGE_VALUES, appLanguageLabel } from '../lib/AppLocaleRepository';
 import { HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
@@ -30,7 +35,7 @@ export struct OtherSettingsPage {
   @Prop replaceEnableDefault: boolean = true;
   onReplaceEnableDefaultChange: (enabled: boolean) => void = (_enabled: boolean) => {};
 
-  @State language: string = '跟随系统';
+  @State language: string = 'auto';
   @State variant: string = '正式版';
   @State autoCheckUpdate: boolean = false;
   @State webAutoStart: boolean = false;
@@ -68,14 +73,140 @@ export struct OtherSettingsPage {
         // 「记录日志」开关是落盘偏好，进页时把真实值同步到 @State，
         // 否则开关永远显示 false，用户以为没打开（对齐上游 recordLog 持久化）。
         this.recordLog = settings.recordLog;
+        // 「记录堆转储」同样是落盘偏好（上游 PreferKey.recordHeapDump），进页同步真实值，
+        // 否则开关永远显示 false，用户以为没打开，OOM 时也不会抓堆转储。
+        this.recordHeapDump = settings.recordHeapDump;
+      });
+      // 语言是独立偏好（上游 PreferKey.language），进页读一次让下拉显示落盘值。
+      AppLocaleRepository.load(context).then((language: string) => {
+        this.language = language;
+      });
+      // 直链规则是独立一份偏好（上游 ACache 的 directLinkUploadRule.json），进页读一次
+      // 让面板里显示的是落盘值而不是空框（对齐 OtherConfigViewModel.kt:257-266）。
+      DirectLinkUploadStore.loadRule(context).then((rule: DirectLinkRule) => {
+        this.directUploadUrl = rule.uploadUrl;
+        this.directDownloadRule = rule.downloadUrlRule;
+        this.directRuleSummary = rule.summary;
+        this.directCompress = rule.compress;
       });
     }
+  }
+
+  /** 把四个输入框组装成一条规则。 */
+  private currentDirectLinkRule(): DirectLinkRule {
+    return {
+      uploadUrl: this.directUploadUrl,
+      downloadUrlRule: this.directDownloadRule,
+      summary: this.directRuleSummary,
+      compress: this.directCompress
+    };
+  }
+
+  /** 导入默认规则：取第一条填进四个输入框（上游 import_default_rule 选中的那条）。 */
+  private importDefaultDirectRule(): void {
+    if (DEFAULT_DIRECT_LINK_RULES.length === 0) {
+      return;
+    }
+    const rule = DEFAULT_DIRECT_LINK_RULES[0];
+    this.directUploadUrl = rule.uploadUrl;
+    this.directDownloadRule = rule.downloadUrlRule;
+    this.directRuleSummary = rule.summary;
+    this.directCompress = rule.compress;
+  }
+
+  /** 拷贝规则：把四个字段写成 JSON 放剪贴板（上游 copy_rule 的 GSON.toJson(DirectLinkRuleUi)）。 */
+  private copyDirectLinkRule(): void {
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, JSON.stringify(this.currentDirectLinkRule()));
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      this.onUnavailableAction('规则已复制到剪贴板');
+    }).catch((error: Error) => {
+      this.onUnavailableAction(`复制失败：${error.message}`);
+    });
+  }
+
+  /** 粘贴规则：读剪贴板解析成四个字段，坏 JSON 保持原样并提示（上游 clipboard_empty_or_invalid）。 */
+  private async pasteDirectLinkRule(): Promise<void> {
+    try {
+      const data = await pasteboard.getSystemPasteboard().getData();
+      const text = data.getPrimaryText();
+      const rule = DirectLinkUploadStore.parse(text);
+      if (rule === undefined) {
+        this.onUnavailableAction('剪贴板内容为空或不是合法规则');
+        return;
+      }
+      this.directUploadUrl = rule.uploadUrl;
+      this.directDownloadRule = rule.downloadUrlRule;
+      this.directRuleSummary = rule.summary;
+      this.directCompress = rule.compress;
+    } catch (error) {
+      this.onUnavailableAction(`粘贴失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 保存：三项必填校验后落盘（对齐 OtherConfigViewModel.kt:275-291 saveDirectLinkRule）。 */
+  private async saveDirectLinkRule(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    if (this.directUploadUrl.trim().length === 0
+      || this.directDownloadRule.trim().length === 0
+      || this.directRuleSummary.trim().length === 0) {
+      this.onUnavailableAction('上传 URL、下载 URL 规则、注释都不能为空');
+      return;
+    }
+    try {
+      await DirectLinkUploadStore.saveRule(context, this.currentDirectLinkRule());
+      this.activeSheet = '';
+    } catch (error) {
+      this.onUnavailableAction(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 测试：拿当前四个字段上传一份 "{}"（test.json / application/json），
+   * 把返回的直链或错误显示在对话框里（对齐上游 testRule 与 AppAlertDialog title=Result）。
+   */
+  private async testDirectLinkRule(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    let message = '';
+    try {
+      message = await DirectLinkUpload.upload(context, 'test.json', '{}', 'application/json', this.currentDirectLinkRule());
+    } catch (error) {
+      message = error instanceof DirectLinkError
+        ? error.message
+        : `测试失败：${error instanceof Error ? error.message : String(error)}`;
+    }
+    this.getUIContext().showAlertDialog({
+      title: 'Result',
+      message: message,
+      primaryButton: {
+        value: '关闭',
+        action: () => {}
+      }
+    });
   }
 
   private saveOtherSettings(): void {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
     OtherSettingsRepository.save(context, this.otherSettings);
+  }
+
+  /**
+   * 切换应用语言：落盘 + 交给平台，下一次冷启动按新语言加载资源。
+   * 对齐上游 `OtherConfigViewModel.kt:84` 的 `appLocaleGateway.setLanguage(intent.value)`。
+   */
+  private changeLanguage(value: string): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    this.language = value;
+    AppLocaleRepository.setLanguage(context, value).catch((error: Error) => {
+      this.onUnavailableAction(`切换语言失败：${error.message}`);
+    });
   }
 
   private confirmSourceEditMaxLine(text: string): void {
@@ -85,6 +216,7 @@ export struct OtherSettingsPage {
       sourceEditMaxLine: isNaN(value) ? DEFAULT_OTHER_SETTINGS.sourceEditMaxLine : Math.max(1, value),
       webPort: this.otherSettings.webPort,
       recordLog: this.otherSettings.recordLog,
+      recordHeapDump: this.otherSettings.recordHeapDump,
       fontSort: this.otherSettings.fontSort
     };
     this.saveOtherSettings();
@@ -99,6 +231,7 @@ export struct OtherSettingsPage {
       sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
       webPort: port,
       recordLog: this.otherSettings.recordLog,
+      recordHeapDump: this.otherSettings.recordHeapDump,
       fontSort: this.otherSettings.fontSort
     };
     this.saveOtherSettings();
@@ -112,6 +245,21 @@ export struct OtherSettingsPage {
       sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
       webPort: this.otherSettings.webPort,
       recordLog: value,
+      recordHeapDump: this.otherSettings.recordHeapDump,
+      fontSort: this.otherSettings.fontSort
+    };
+    this.saveOtherSettings();
+  }
+
+  /** 「记录堆转储」开关：写回偏好（上游 PreferKey.recordHeapDump），OOM 崩溃与关于页按它门控。 */
+  private confirmRecordHeapDump(value: boolean): void {
+    this.recordHeapDump = value;
+    this.otherSettings = {
+      defaultBookTreeUri: this.otherSettings.defaultBookTreeUri,
+      sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
+      webPort: this.otherSettings.webPort,
+      recordLog: this.otherSettings.recordLog,
+      recordHeapDump: value,
       fontSort: this.otherSettings.fontSort
     };
     this.saveOtherSettings();
@@ -134,6 +282,7 @@ export struct OtherSettingsPage {
         sourceEditMaxLine: this.otherSettings.sourceEditMaxLine,
         webPort: this.otherSettings.webPort,
         recordLog: this.otherSettings.recordLog,
+        recordHeapDump: this.otherSettings.recordHeapDump,
         fontSort: this.otherSettings.fontSort
       };
       this.saveOtherSettings();
@@ -170,8 +319,9 @@ export struct OtherSettingsPage {
           UiSection() {
             UiDropdown({
               title: '语言', option: this.language,
-              options: ['跟随系统', '简体中文', '繁体中文', '英文'],
-              onSelect: (value: string) => this.language = value
+              options: APP_LANGUAGE_VALUES,
+              labelOf: (value: string) => appLanguageLabel(value),
+              onSelect: (value: string) => this.changeLanguage(value)
             })
             UiDropdown({
               title: '检查更新查找版本', detail: '检查更新时查找其他签名版本', option: this.variant,
@@ -209,7 +359,7 @@ export struct OtherSettingsPage {
             UiSwitch({ title: '阻止书源打开内置浏览器', detail: '开启后，书源无法通过 java.startBrowser 等接口弹出内置浏览器，等待网页结果的调用会直接报错', value: this.blockSourceBrowser, onChange: (value: boolean) => this.blockSourceBrowser = value })
             UiSwitch({ title: '文字操作显示搜索', detail: '长按文字在操作菜单中显示阅读 · 搜索', value: this.processText, onChange: (value: boolean) => this.processText = value })
             UiSwitch({ title: '记录日志', detail: '记录调试日志', value: this.recordLog, onChange: (value: boolean) => this.confirmRecordLog(value) })
-            UiSwitch({showDivider: false, title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.recordHeapDump = value })
+            UiSwitch({showDivider: false, title: '记录堆转储', detail: '当应用发生OOM崩溃时保存堆转储', value: this.recordHeapDump, onChange: (value: boolean) => this.confirmRecordHeapDump(value) })
           }
         }.width('100%').padding({ top: 4, bottom: 120 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
@@ -270,11 +420,11 @@ export struct OtherSettingsPage {
       onSelect: (key: string) => {
         this.directLinkVisible = false;
         if (key === 'import_default') {
-          this.onUnavailableAction('默认直链规则尚未接入');
+          this.importDefaultDirectRule();
         } else if (key === 'copy_rule') {
-          this.onUnavailableAction('规则复制尚未接入');
+          this.copyDirectLinkRule();
         } else if (key === 'paste_rule') {
-          this.onUnavailableAction('规则粘贴尚未接入');
+          this.pasteDirectLinkRule();
         }
       }
     })
@@ -300,7 +450,7 @@ export struct OtherSettingsPage {
           Stack({ alignContent: Alignment.Center }) {
             AppGlyph({ name: 'profileCheck', glyphSize: 20, tint: this.themeColorAccent })
           }.width(40).height(40).backgroundColor(this.themeColorSurfaceElevated).borderRadius(20)
-            .onClick(() => this.onUnavailableAction('直链规则测试尚未迁移'))
+            .onClick(() => { void this.testDirectLinkRule(); })
             // 上游取 DirectLinkUploadBottomSheet.kt:67 test
             .accessibilityText('测试')
           Text('直链上传配置').fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
@@ -341,8 +491,7 @@ export struct OtherSettingsPage {
           Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary).layoutWeight(1).textAlign(TextAlign.Center)
             .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorAccent).borderRadius(20).margin({ left: 10 })
             .onClick(() => {
-              this.onUnavailableAction('直链上传规则尚未保存');
-              this.activeSheet = '';
+              this.saveDirectLinkRule();
             })
         }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 22 })
       }

@@ -49,14 +49,17 @@ import { HighlightTagRuleRepository } from './HighlightTagRuleRepository';
 import { HighlightTagRuleImporter } from './HighlightTagRuleImporter';
 import { TagGroupRuleRepository } from './TagGroupRuleRepository';
 import { TagGroupRuleImporter } from './TagGroupRuleImporter';
-import { HttpTtsRepository } from './HttpTtsRepository';
+import { HttpTtsCatalogEntry, HttpTtsRepository } from './HttpTtsRepository';
 import { ReadAloudVoiceRepository } from './ReadAloudVoiceRepository';
+import { ReadAloudVoice } from '../model/ReadAloudVoice';
 import {
   READ_ALOUD_SETTINGS_ANDROID_TYPES, ReadAloudSettingsRepository, ReadAloudSettingsSnapshot
 } from './ReadAloudSettingsRepository';
-import { HttpTtsImporter } from './HttpTtsImporter';
+import { HttpTtsCatalogDraft, HttpTtsImporter } from './HttpTtsImporter';
 import { BookSourceRepository } from './BookSourceRepository';
 import { BookSourceImporter } from './BookSourceImporter';
+import { BookSource } from '../model/BookSource';
+import { OldDataImporter } from './OldDataImporter';
 import { RssSourceRepository } from './RssSourceRepository';
 import { RssSourceImporter } from './RssSourceImporter';
 import { RssStarRepository } from './RssStarRepository';
@@ -64,8 +67,16 @@ import { RssStarImporter } from './RssStarImporter';
 import { RuleSubRepository } from './RuleSubRepository';
 import { RuleSubImporter } from './RuleSubImporter';
 import { aesEcbEncryptToBase64, aesEcbDecryptFromBase64, aesEcKeyFromPassword } from './BackupCrypto';
+import { LocalPasswordStore } from '../lib/LocalPasswordStore';
+import { AppLocaleRepository } from '../lib/AppLocaleRepository';
+import { WebDavConfigStore, cloneWebDavSettings } from '../lib/WebDavConfig';
 import { ServerRepository } from './ServerRepository';
 import { KeyboardAssist, KeyboardAssistRepository } from './KeyboardAssistRepository';
+import { SearchKeywordRepository } from './SearchKeywordRepository';
+import {
+  DEFAULT_DIRECT_LINK_RULES, DIRECT_LINK_RULE_FILE_NAME, DirectLinkRule, DirectLinkUploadStore
+} from '../lib/DirectLinkUpload';
+import { normalizeFileName } from '../model/BookProgress';
 
 /** 上游 readRecordSession.json 的字段：words 对应本地 chapterIndex。 */
 interface AndroidReadRecordSessionRecord {
@@ -94,9 +105,32 @@ export interface BackupSelection {
   entries: BackupArchiveEntry[];
 }
 
+/**
+ * 四份忽略配置，与上游 BackupConfig.kt:41-67 的四个文件一一对应：
+ * restoreIgnore.json / backupIgnore.json / dbIgnore.json / backupDbIgnore.json。
+ * 上游把「偏好层」与「数据库层」分开存（ignoreKeys 9 项 / dbIgnoreKeys 19 项），
+ * 这里同样四份分开，键名沿用上游。
+ */
 export interface BackupIgnoreLists {
-  backup: string[];
-  restore: string[];
+  /** 恢复偏好层：上游 restoreIgnore.json，对应 ignoreKeys 9 项。 */
+  restoreIgnore: string[];
+  /** 备份偏好层：上游 backupIgnore.json，对应 backupIgnoreKeys 9 项。 */
+  backupIgnore: string[];
+  /** 恢复数据库层：上游 dbIgnore.json，对应 dbIgnoreKeys 19 项。 */
+  dbIgnore: string[];
+  /** 备份数据库层：上游 backupDbIgnore.json，对应 backupDbIgnoreKeys 19 项。 */
+  backupDbIgnore: string[];
+}
+
+/**
+ * 备份/恢复某一侧生效的忽略名单：偏好层与数据库层分开传，
+ * 与上游 BackupConfig.keyIsNotIgnore(key, isBackup) 和 dbIsNotIgnored(key, isBackup) 两支对应。
+ */
+export interface BackupIgnoreScope {
+  /** 偏好层被忽略的类别键。 */
+  preferences: string[];
+  /** 数据库层被忽略的类别键。 */
+  databases: string[];
 }
 
 export interface BackupCategoryOption {
@@ -487,7 +521,14 @@ export class BackupRepository {
     'swipeToAddBookmark', 'system_typefaces', 'textBottomJustify', 'textFullJustify',
     'textSelectMenuConfig', 'themeMode', 'titleBarCompact', 'tocCountWords',
     'tocUiUseReplace', 'underlineExtend', 'underlinePadding', 'useDefaultCover',
-    'useZhLayout', 'customTagColors', 'enableCustomTagColors'
+    'useZhLayout', 'customTagColors', 'enableCustomTagColors',
+    // WebDAV 九个键：上游把整个 preferences 全量导出（Backup.kt:258-303），WebDAV 设置也在其中，
+    // 只有 web_dav_password 单独 AES 加密（:291-293）；webDavDeviceName 与 backupUri 属
+    // alwaysIgnoredPreferenceKeys 被排除。本地 WebDAV 设置存在独立 preferences
+    // （lib/WebDavConfig.ets 的 legado_webdav_settings），这里按上游键名双向映射。
+    'web_dav_url', 'web_dav_account', 'web_dav_password', 'webDavDir',
+    'syncBookProgress', 'syncBookProgressPlus', 'autoCheckNewBackup', 'onlyLatestBackup',
+    'backupSyncMode'
   ]);
   /**
    * 97 个本地有真值、但从不写进 config.xml 的键，对应的上游 XML 标签类型。
@@ -680,9 +721,9 @@ export class BackupRepository {
    */
   private static restoreThemeMode(
     directory: string,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): string | undefined {
-    if (ignoredCategories.includes('themeMode')) { return undefined; }
+    if (BackupRepository.isCategoryIgnored('themeMode', scope)) { return undefined; }
     const path = `${directory}/config.xml`;
     const raw = BackupRepository.readXmlString(path, 'themeMode');
     if (raw === undefined) { return undefined; }
@@ -699,9 +740,9 @@ export class BackupRepository {
    */
   private static restoreShowRss(
     directory: string,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): boolean | undefined {
-    if (ignoredCategories.includes('showRss')) { return undefined; }
+    if (BackupRepository.isCategoryIgnored('showRss', scope)) { return undefined; }
     return BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showRss');
   }
 
@@ -718,14 +759,19 @@ export class BackupRepository {
   }
 
   static async loadIgnoreLists(context: Context): Promise<BackupIgnoreLists> {
-    const defaults: BackupIgnoreLists = { backup: [], restore: [] };
+    const defaults: BackupIgnoreLists = { restoreIgnore: [], backupIgnore: [], dbIgnore: [], backupDbIgnore: [] };
     try {
       const store = await preferences.getPreferences(context, BackupRepository.preferenceName);
-      const backupValue = await store.get('backupIgnore', '');
+      // 四份分别落在与上游同名的四个偏好键上（上游写四个 json 文件，见 BackupConfig.kt:41-67）。
       const restoreValue = await store.get('restoreIgnore', '');
+      const backupValue = await store.get('backupIgnore', '');
+      const dbValue = await store.get('dbIgnore', '');
+      const backupDbValue = await store.get('backupDbIgnore', '');
       return {
-        backup: typeof backupValue === 'string' ? BackupRepository.parseIgnoreList(backupValue) : [],
-        restore: typeof restoreValue === 'string' ? BackupRepository.parseIgnoreList(restoreValue) : []
+        restoreIgnore: typeof restoreValue === 'string' ? BackupRepository.parseIgnoreList(restoreValue) : [],
+        backupIgnore: typeof backupValue === 'string' ? BackupRepository.parseIgnoreList(backupValue) : [],
+        dbIgnore: typeof dbValue === 'string' ? BackupRepository.parseIgnoreList(dbValue) : [],
+        backupDbIgnore: typeof backupDbValue === 'string' ? BackupRepository.parseIgnoreList(backupDbValue) : []
       };
     } catch (error) {
       console.error(`[BackupRepository] 读取忽略名单失败: ${error}`);
@@ -735,9 +781,51 @@ export class BackupRepository {
 
   static async saveIgnoreLists(context: Context, value: BackupIgnoreLists): Promise<void> {
     const store = await preferences.getPreferences(context, BackupRepository.preferenceName);
-    await store.put('backupIgnore', value.backup.join('\n'));
-    await store.put('restoreIgnore', value.restore.join('\n'));
+    await store.put('restoreIgnore', value.restoreIgnore.join('\n'));
+    await store.put('backupIgnore', value.backupIgnore.join('\n'));
+    await store.put('dbIgnore', value.dbIgnore.join('\n'));
+    await store.put('backupDbIgnore', value.backupDbIgnore.join('\n'));
     await store.flush();
+  }
+
+  /**
+   * 取某一侧生效的忽略名单：备份侧取 backupIgnore/backupDbIgnore，恢复侧取 restoreIgnore/dbIgnore。
+   * 对应上游 BackupConfig.keyIsNotIgnore(key, isBackup) 与 dbIsNotIgnored(key, isBackup) 的两支。
+   */
+  static ignoreScopeOf(lists: BackupIgnoreLists, backupSide: boolean): BackupIgnoreScope {
+    return {
+      preferences: backupSide ? lists.backupIgnore : lists.restoreIgnore,
+      databases: backupSide ? lists.backupDbIgnore : lists.dbIgnore
+    };
+  }
+
+  /** 偏好层类别（上游 ignoreKeys 9 项，BackupConfig.kt:145-155）。 */
+  private static readonly preferenceIgnoreKeys: string[] = [
+    'readConfig', 'themeMode', 'themeConfig', 'coverConfig', 'bookshelfLayout',
+    'showRss', 'threadCount', 'localBook', 'mangaConfig'
+  ];
+
+  /** 数据库层类别（上游 dbIgnoreKeys 19 项，BackupConfig.kt:96-102）。 */
+  private static readonly databaseIgnoreKeys: string[] = [
+    'bookmark', 'bookGroup', 'bookSource', 'rssSource', 'rssStar', 'replaceRule',
+    'readRecord', 'searchHistory', 'sourceSub', 'txtTocRule', 'httpTTS', 'keyboardAssists',
+    'dictRule', 'homepageModules', 'homepageCustomSets', 'highlightRule', 'highlightTagRule',
+    'tagGroupRule', 'server'
+  ];
+
+  /**
+   * 判断某个类别在给定一侧是否被忽略。
+   * 类别归属按上游分两层查：偏好层查 scope.preferences，数据库层查 scope.databases。
+   */
+  private static isCategoryIgnored(key: string, scope: BackupIgnoreScope): boolean {
+    if (BackupRepository.preferenceIgnoreKeys.includes(key)) {
+      return scope.preferences.includes(key);
+    }
+    if (BackupRepository.databaseIgnoreKeys.includes(key)) {
+      return scope.databases.includes(key);
+    }
+    // 不在两张表里的类别（如 coverText 之类）按未忽略处理，与上游 keyIsNotIgnore 的 else -> true 一致。
+    return false;
   }
 
   /**
@@ -750,14 +838,14 @@ export class BackupRepository {
     books: Book[],
     settings: ReaderSettingsSnapshot,
     bookshelfLayout: BookshelfLayoutSettings,
-    ignoredCategories: string[],
+    scope: BackupIgnoreScope,
     themeMode: string,
     paletteIndex: number,
     customTheme: CustomThemeSnapshot,
     onlyLatest: boolean = false
   ): Promise<boolean> {
     const zipPath = await BackupRepository.buildBackupArchive(context, books, settings,
-      bookshelfLayout, ignoredCategories, themeMode, paletteIndex, customTheme);
+      bookshelfLayout, scope, themeMode, paletteIndex, customTheme);
     try {
       const options = new picker.DocumentSaveOptions();
       options.newFileNames = [BackupRepository.backupFileName(onlyLatest)];
@@ -793,7 +881,7 @@ export class BackupRepository {
     books: Book[],
     settings: ReaderSettingsSnapshot,
     bookshelfLayout: BookshelfLayoutSettings,
-    ignoredCategories: string[],
+    scope: BackupIgnoreScope,
     themeMode: string,
     paletteIndex: number,
     customTheme: CustomThemeSnapshot
@@ -804,10 +892,10 @@ export class BackupRepository {
     let handedOff = false;
     try {
       await BookGroupRepository.load(context);
-      await BackupRepository.copyPreservedEntries(context, stagingDirectory, ignoredCategories);
+      await BackupRepository.copyPreservedEntries(context, stagingDirectory, scope);
       // 与上游 Backup.kt:150-154 一致：bookshelf.json 总是写，忽略 localBook 时只滤掉本地书，
       // 其余书照写；滤完为空才不写（上游 writeListToJson 只在 list.isNotEmpty() 时落盘）。
-      const ignoreLocalBook = ignoredCategories.includes('localBook');
+      const ignoreLocalBook = BackupRepository.isCategoryIgnored('localBook', scope);
       const shelfBooks = books
         .filter((book: Book) => BookRepository.isPersistableBook(book))
         .filter((book: Book) => !(ignoreLocalBook && book.isLocal));
@@ -822,11 +910,11 @@ export class BackupRepository {
         BackupRepository.writeTextFile(oldPath, combined);
       }
 
-      if (!ignoredCategories.includes('bookGroup')) {
+      if (!BackupRepository.isCategoryIgnored('bookGroup', scope)) {
         BackupRepository.writeTextFile(`${stagingDirectory}/bookGroup.json`, BookGroupRepository.exportAndroidGroups());
       }
       // 书源：上游 Backup.kt:163-164 的 writeListToJson 只在 list 非空时建文件，本地照抄。
-      if (!ignoredCategories.includes('bookSource')) {
+      if (!BackupRepository.isCategoryIgnored('bookSource', scope)) {
         const rules = await BookSourceRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/bookSource.json`,
@@ -834,7 +922,7 @@ export class BackupRepository {
         }
       }
       // RSS 订阅源：同上。
-      if (!ignoredCategories.includes('rssSource')) {
+      if (!BackupRepository.isCategoryIgnored('rssSource', scope)) {
         const rules = await RssSourceRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/rssSources.json`,
@@ -842,7 +930,7 @@ export class BackupRepository {
         }
       }
       // RSS 收藏：同上。
-      if (!ignoredCategories.includes('rssStar')) {
+      if (!BackupRepository.isCategoryIgnored('rssStar', scope)) {
         const rules = await RssStarRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/rssStar.json`,
@@ -850,7 +938,7 @@ export class BackupRepository {
         }
       }
       // 规则订阅：上游 Backup.kt:183-185 写出 sourceSub.json，内容来自 ruleSubs 表。
-      if (!ignoredCategories.includes('sourceSub')) {
+      if (!BackupRepository.isCategoryIgnored('sourceSub', scope)) {
         const rules = await RuleSubRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/sourceSub.json`,
@@ -863,13 +951,15 @@ export class BackupRepository {
       // aes.runCatching { encryptBase64(it) }.getOrDefault(it)，语义就是「加密环境坏了也别丢备份」。
       // 注意：copyPreservedEntries 会先把保留目录里的旧 servers.json 拷进 staging，
       // 这里表非空时用 writeTextFile(TRUNC) 覆盖；表空则不写，让旧密文原样带走。
-      if (!ignoredCategories.includes('server')) {
+      if (!BackupRepository.isCategoryIgnored('server', scope)) {
         const servers = await ServerRepository.load(context);
         if (servers.length > 0) {
           const plain = ServerRepository.exportServers(servers);
           let payload = plain;
           try {
-            payload = aesEcbEncryptToBase64(plain, aesEcKeyFromPassword(''));
+            // 上游 BackupAES.kt:9 的密钥来自应用访问密码（LocalConfig.password），不是空串。
+            const backupPassword = await LocalPasswordStore.load(context);
+            payload = aesEcbEncryptToBase64(plain, aesEcKeyFromPassword(backupPassword));
           } catch (error) {
             console.error(`[BackupRepository] 服务器配置加密失败，回退明文写出: ${error}`);
           }
@@ -879,7 +969,7 @@ export class BackupRepository {
 
       // 批8 C 组（:383）：按键映射全表序列化。上游 Backup.kt:195-197 的 writeListToJson
       // 只在 list 非空时建文件——空表不写，让 copyPreservedEntries 带进来的旧副本原样带走。
-      if (!ignoredCategories.includes('keyboardAssists')) {
+      if (!BackupRepository.isCategoryIgnored('keyboardAssists', scope)) {
         const assists = await KeyboardAssistRepository.loadAll(context);
         if (assists.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/keyboardAssists.json`,
@@ -887,7 +977,7 @@ export class BackupRepository {
         }
       }
 
-      if (!ignoredCategories.includes('readConfig')) {
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
         const config = BackupRepository.toAndroidReadConfig(settings);
         const readerConfigPath = `${stagingDirectory}/readConfig.json`;
         const sharedConfigPath = `${stagingDirectory}/shareReadConfig.json`;
@@ -918,7 +1008,7 @@ export class BackupRepository {
       unconditionalText = BackupRepository.upsertAndroidPreference(unconditionalText, 'int', 'explore_filter_state', `${coverSettings.exploreFilterState}`);
       BackupRepository.writeTextFile(configPath, unconditionalText);
 
-      if (!ignoredCategories.includes('bookshelfLayout')) {
+      if (!BackupRepository.isCategoryIgnored('bookshelfLayout', scope)) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfSort', `${bookshelfLayout.bookshelfSort}`);
         configText = BackupRepository.upsertAndroidPreference(configText, 'int', 'bookshelfSortOrder', `${bookshelfLayout.bookshelfSortOrder}`);
@@ -977,26 +1067,26 @@ export class BackupRepository {
       // 替换净化规则是本地权威数据（存在 preferences 里），归档目录里不会有，
       // 所以未忽略该分类时由这里生成，格式与上游 replaceRule.json 一致，可被 Android 直接读回。
       // 始终写出当前规则快照，包括空数组，避免旧归档残留已删除规则。
-      if (!ignoredCategories.includes('replaceRule')) {
+      if (!BackupRepository.isCategoryIgnored('replaceRule', scope)) {
         const rules = ReplaceRuleRepository.getAll();
         BackupRepository.writeTextFile(`${stagingDirectory}/replaceRule.json`,
           ReplaceRuleRepository.exportRules(rules));
       }
-      if (!ignoredCategories.includes('txtTocRule')) {
+      if (!BackupRepository.isCategoryIgnored('txtTocRule', scope)) {
         const rules = TxtTocRuleRepository.getAll();
         BackupRepository.writeTextFile(`${stagingDirectory}/txtTocRule.json`,
           TxtTocRuleRepository.exportRules(rules));
       }
       // 高亮规则同样只存在 preferences 里。缓存要先进过阅读页才会填充，
       // 备份前必须 await load()，否则没读过书的用户会导出一份空数组。
-      if (!ignoredCategories.includes('highlightRule')) {
+      if (!BackupRepository.isCategoryIgnored('highlightRule', scope)) {
         const highlightRules = await ReaderHighlightRuleRepository.load(context);
         BackupRepository.writeTextFile(`${stagingDirectory}/highlightRule.json`,
           ReaderHighlightRuleRepository.exportRules(highlightRules));
       }
       // G2 字典规则：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
       // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
-      if (!ignoredCategories.includes('dictRule')) {
+      if (!BackupRepository.isCategoryIgnored('dictRule', scope)) {
         const rules = await DictRuleRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/dictRule.json`,
@@ -1005,7 +1095,7 @@ export class BackupRepository {
       }
       // G2 首页模块：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
       // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
-      if (!ignoredCategories.includes('homepageModules')) {
+      if (!BackupRepository.isCategoryIgnored('homepageModules', scope)) {
         const rules = await HomepageModuleRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/homepageModules.json`,
@@ -1014,7 +1104,7 @@ export class BackupRepository {
       }
       // G2 首页自定义集：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
       // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
-      if (!ignoredCategories.includes('homepageCustomSets')) {
+      if (!BackupRepository.isCategoryIgnored('homepageCustomSets', scope)) {
         const rules = await HomepageCustomSetRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/homepageCustomSets.json`,
@@ -1023,7 +1113,7 @@ export class BackupRepository {
       }
       // G2 标签高亮规则：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
       // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
-      if (!ignoredCategories.includes('highlightTagRule')) {
+      if (!BackupRepository.isCategoryIgnored('highlightTagRule', scope)) {
         const rules = await HighlightTagRuleRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/highlightTagRule.json`,
@@ -1032,7 +1122,7 @@ export class BackupRepository {
       }
       // G2 标签分组规则：上游 Backup.kt 的 writeListToJson 只在 list 非空时建文件，
       // 本地照抄——空表不写，避免多产一个自己没内容的空文件，也让上次透传件原样带走。
-      if (!ignoredCategories.includes('tagGroupRule')) {
+      if (!BackupRepository.isCategoryIgnored('tagGroupRule', scope)) {
         const rules = await TagGroupRuleRepository.load(context);
         if (rules.length > 0) {
           BackupRepository.writeTextFile(`${stagingDirectory}/tagGroupRule.json`,
@@ -1042,7 +1132,7 @@ export class BackupRepository {
       // 书签与笔记同样只存在 preferences 里。上游 Backup.kt 在 bookmark 分类下
       // 一次写出 bookmark.json 与 bookMarking.json 两份，这里保持同名同结构，
       // 让 Android 版恢复时能直接 insert 进 bookmarks / book_marks 两张表。
-      if (!ignoredCategories.includes('bookmark')) {
+      if (!BackupRepository.isCategoryIgnored('bookmark', scope)) {
         const bookmarks = await ReaderBookmarkRepository.load(context);
         const markings = await ReaderMarkingRepository.load(context);
         BackupRepository.writeTextFile(`${stagingDirectory}/bookmark.json`,
@@ -1051,9 +1141,20 @@ export class BackupRepository {
           ReaderBookmarkExporter.toAndroidMarkingArray(markings));
       }
 
+      // 搜索关键词：上游 Backup.kt:180-181
+      // `if (BackupConfig.dbIsNotIgnored("searchHistory", true)) { writeListToJson(appDb.searchKeywordDao.all, "searchHistory.json", backupPath) }`。
+      // writeListToJson 只在 list 非空时建文件，这里同样只在有关键词时写。
+      if (!BackupRepository.isCategoryIgnored('searchHistory', scope)) {
+        const keywords = await SearchKeywordRepository.loadAll(context);
+        if (keywords.length > 0) {
+          BackupRepository.writeTextFile(`${stagingDirectory}/searchHistory.json`,
+            SearchKeywordRepository.exportKeywords(keywords));
+        }
+      }
+
       // 阅读记录三张表：字段名与上游 Room 实体一致，会话的 words 对应本地 chapterIndex。
       // 三个 load* 都是 async，所以这一段要 await；分类被忽略时整段不写。
-      if (!ignoredCategories.includes('readRecord')) {
+      if (!BackupRepository.isCategoryIgnored('readRecord', scope)) {
         const snapshot = await ReadRecordRepository.exportForBackup(context);
         BackupRepository.writeTextFile(`${stagingDirectory}/readRecord.json`,
           JSON.stringify(snapshot.summaries));
@@ -1072,7 +1173,7 @@ export class BackupRepository {
           JSON.stringify(sessionLines));
       }
 
-      if (!ignoredCategories.includes('readConfig')) {
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'int', 'system_typefaces', `${settings.systemTypefaces}`);
@@ -1194,7 +1295,7 @@ export class BackupRepository {
       }
       // coverConfig 的 14 个 coverPrefKeys 受 coverConfig 忽略开关控制
       // （上游 BackupConfig.kt:419 if (!backupIgnoreCoverConfig)），值按唯一映射表转成上游键名与类型。
-      if (!ignoredCategories.includes('coverConfig')) {
+      if (!BackupRepository.isCategoryIgnored('coverConfig', scope)) {
         let coverText = fileIo.readTextSync(configPath);
         for (const preference of coverSettingsToAndroid(coverSettings)) {
           coverText = BackupRepository.upsertAndroidPreference(
@@ -1210,7 +1311,15 @@ export class BackupRepository {
             JSON.stringify(coverRule));
         }
       }
-      if (!ignoredCategories.includes('themeConfig')) {
+      // 上游 Backup.kt:249-253 无条件写 DirectLinkUpload.ruleFileName，没有忽略开关。
+      // 本地口径：与默认规则第一条完全一致时不写（与 coverRule 同一处理，避免给上游塞
+      // 一份它本来不会产出的文件），用户改过才出文件。
+      const directLinkRule: DirectLinkRule = await DirectLinkUploadStore.loadRule(context);
+      if (!BackupRepository.isDefaultDirectLinkRule(directLinkRule)) {
+        BackupRepository.writeTextFile(`${stagingDirectory}/${DIRECT_LINK_RULE_FILE_NAME}`,
+          JSON.stringify(directLinkRule));
+      }
+      if (!BackupRepository.isCategoryIgnored('themeConfig', scope)) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'eyeProtectionEnabled', String(settings.eyeProtectionEnabled));
@@ -1231,7 +1340,7 @@ export class BackupRepository {
       // 再由 `BackupConfig.keyIsNotIgnore`（BackupConfig.kt:413-439）按
       // `PreferKey.themeMode == key && backupIgnoreThemeMode` 剔掉。
       // 本地是白名单式逐键写出，所以这里显式补一条，忽略门控与上游同向。
-      if (!ignoredCategories.includes('themeMode')) {
+      if (!BackupRepository.isCategoryIgnored('themeMode', scope)) {
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'string', 'themeMode', BackupRepository.normalizeThemeModeForBackup(themeMode));
@@ -1239,18 +1348,64 @@ export class BackupRepository {
       }
       // 订阅入口开关：上游 `keyIsNotIgnore` 对 `showRss` 单键门控，本地白名单式逐键写出，
       // 所以显式补一条。真值取运行时主题设置而非写死默认值——用户改过开关后写死值会把旧状态带出去。
-      if (!ignoredCategories.includes('showRss')) {
+      if (!BackupRepository.isCategoryIgnored('showRss', scope)) {
         const themeSnapshot = await ThemeSettingsRepository.load(context);
         let configText = fileIo.readTextSync(configPath);
         configText = BackupRepository.upsertAndroidPreference(
           configText, 'boolean', 'showRss', themeSnapshot.showRss ? 'true' : 'false');
         BackupRepository.writeTextFile(configPath, configText);
       }
+      // WebDAV 九键：上游把整个 preferences 全量导出（Backup.kt:258-303），WebDAV 设置
+      // （PreferKey.kt:87-90/126-127/191/338-339）也在其中，只有 web_dav_password
+      // 单独 AES 加密（Backup.kt:291-293）。本地设置存在独立 preferences
+      // （lib/WebDavConfig.ets 的 legado_webdav_settings），这里按上游键名映射写出，
+      // 让 Android 端读得回本机配的 WebDAV。排在透传之前，本地真值必须赢。
+      // webDavDeviceName 与 backupUri 属 alwaysIgnoredPreferenceKeys，上游同样不导出。
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
+        try {
+          const webDav = await WebDavConfigStore.load(context);
+          const backupPassword = await LocalPasswordStore.load(context);
+          let configText = fileIo.readTextSync(configPath);
+          configText = BackupRepository.upsertAndroidPreference(configText, 'string', 'web_dav_url', webDav.url);
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'string', 'web_dav_account', webDav.account);
+          configText = BackupRepository.upsertAndroidPreference(configText, 'string', 'web_dav_password',
+            aesEcbEncryptToBase64(webDav.password, aesEcKeyFromPassword(backupPassword)));
+          configText = BackupRepository.upsertAndroidPreference(configText, 'string', 'webDavDir', webDav.dir);
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'boolean', 'syncBookProgress', webDav.syncBookProgress ? 'true' : 'false');
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'boolean', 'syncBookProgressPlus', webDav.syncBookProgressPlus ? 'true' : 'false');
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'boolean', 'autoCheckNewBackup', webDav.autoCheckNewBackup ? 'true' : 'false');
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'boolean', 'onlyLatestBackup', webDav.onlyLatestBackup ? 'true' : 'false');
+          configText = BackupRepository.upsertAndroidPreference(
+            configText, 'string', 'backupSyncMode', webDav.backupSyncMode);
+          BackupRepository.writeTextFile(configPath, configText);
+        } catch (error) {
+          console.error(`[BackupRepository] 写出 config.xml 的 WebDAV 键失败，已跳过: ${error}`);
+        }
+      }
+      // 语言键：上游把整个 preferences 全量导出（Backup.kt:258-303 的 `asMap()` 含
+      // `PreferKey.language`），且 `language` 不在 alwaysIgnoredPreferenceKeys 里
+      // （BackupConfig.kt:10-30），所以它随 config.xml 一起走。本地存在独立 preferences
+      // （lib/AppLocaleRepository.ets 的 legado_app_locale），这里按上游键名映射写出。
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
+        try {
+          const appLanguage = await AppLocaleRepository.load(context);
+          let languageText = fileIo.readTextSync(configPath);
+          languageText = BackupRepository.upsertAndroidPreference(languageText, 'string', 'language', appLanguage);
+          BackupRepository.writeTextFile(configPath, languageText);
+        } catch (error) {
+          console.error(`[BackupRepository] 写出 config.xml 的语言键失败，已跳过: ${error}`);
+        }
+      }
       // 本地真值补写：97 个本地有真值、但历史白名单从不写出的键，按上游 PreferKey
       // 声明的 XML 类型写进 config.xml。必须排在透传之前——透传缓存里可能存着同一键的旧值，
       // 本地改了设置后本地值必须赢（两处判据已额外排除 missingPreferenceTypes）。
       // 整段 try/catch：读 preferences 失败只记日志，不拖垮整次备份（与 loadIgnoreLists 同姿态）。
-      if (!ignoredCategories.includes('readConfig')) {
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
         try {
           let missingText = fileIo.readTextSync(configPath);
           missingText = await BackupRepository.applyMissingPreferences(context, missingText);
@@ -1263,7 +1418,7 @@ export class BackupRepository {
       // 全部随 config.xml 导出（上游唯一的例外 readAloudWakeLock 不在其中）。键名即上游 PreferKey，标签类型取自
       // READ_ALOUD_SETTINGS_ANDROID_TYPES（capsuleOffsetX/Y 是 float）。排在透传之前，
       // 让本地真值覆盖透传缓存里可能存在的旧值。
-      if (!ignoredCategories.includes('readConfig')) {
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
         try {
           const aloudSettings: ReadAloudSettingsSnapshot = await ReadAloudSettingsRepository.load(context);
           const aloudValues = ReadAloudSettingsRepository.toAndroidValues(aloudSettings);
@@ -1287,17 +1442,17 @@ export class BackupRepository {
       // 上游 Backup.kt:266-275 的 3 个旧键回填逻辑（bookshelfSelectedGroupId ← saveTabPosition、
       // readBrightnessMode ← showBrightnessView、readBrightnessControlPosition ← brightnessVwPos）
       // 本地没有对应旧键，不实现。
-      if (!ignoredCategories.includes('readConfig')) {
+      if (!BackupRepository.isCategoryIgnored('readConfig', scope)) {
         let passthroughText = fileIo.readTextSync(configPath);
         passthroughText = await BackupRepository.applyPassthroughPreferences(
-          context, passthroughText, ignoredCategories);
+          context, passthroughText, scope);
         BackupRepository.writeTextFile(configPath, passthroughText);
       }
       // 主题配色清单：上游 `Backup.kt:241-246` 在未忽略 themeConfig 时把
       // `ThemeConfigStore.configList` 整份 GSON 写进 `themeConfig.json`。
       // 本地没有内存清单，按当前调色板/自定义配色现算日/夜两套再写，
       // 与 `getDurConfig` 取的是同一批键，所以 Android 读回去能直接生效。
-      if (!ignoredCategories.includes('themeConfig')) {
+      if (!BackupRepository.isCategoryIgnored('themeConfig', scope)) {
         const generated: ThemeConfigEntry[] = buildCurrentThemeConfigs(paletteIndex, customTheme);
         BackupRepository.writeTextFile(`${stagingDirectory}/${THEME_CONFIG_FILE_NAME}`,
           themeConfigsToJson(generated));
@@ -1306,7 +1461,7 @@ export class BackupRepository {
       // 源为空时根本不建文件；httpTtsVoices.json 相反，Backup.kt:193 无条件写，
       // 注释原文「空数组也要写出，用来区分旧备份未保存音色与确实没有音色」。
       // 两份条目的空判因此不能合并成一个条件。
-      if (!ignoredCategories.includes('httpTTS')) {
+      if (!BackupRepository.isCategoryIgnored('httpTTS', scope)) {
         const sources = await HttpTtsRepository.load(context);
         if (sources.length > 0) {
           // 本地真值，要覆盖 copyPreservedEntries 带进来的透传件，所以不加 !accessSync。
@@ -1422,7 +1577,7 @@ export class BackupRepository {
     currentBooks: Book[],
     currentSettings: ReaderSettingsSnapshot,
     currentBookshelfLayout: BookshelfLayoutSettings,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): Promise<RestoreResult> {
     const targetDirectory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
     BackupRepository.ensureDirectory(targetDirectory);
@@ -1489,7 +1644,7 @@ export class BackupRepository {
     const bookmarkOutcome: BookmarkImportOutcome = { added: 0, updated: 0, skipped: 0 };
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
-      if (entry === undefined || BackupRepository.isIgnored(entry.name, ignoredCategories)) { continue; }
+      if (entry === undefined || BackupRepository.isIgnored(entry.name, scope)) { continue; }
       const sourcePath = `${selection.stagingDirectory}/${entry.name}`;
       const targetPath = `${targetDirectory}/${entry.name}`;
       if (entry.name === 'bookshelf.json') {
@@ -1497,7 +1652,7 @@ export class BackupRepository {
         if (content.length > BackupRepository.maximumJsonTextBytes) {
           throw new Error(`${entry.name} 超过 32 MB，未恢复书架条目`);
         }
-        if (ignoredCategories.includes('localBook')) {
+        if (BackupRepository.isCategoryIgnored('localBook', scope)) {
           content = BackupRepository.filterLocalBooks(content);
         }
         if (fileIo.accessSync(targetPath)) {
@@ -1512,8 +1667,8 @@ export class BackupRepository {
         continue;
       }
       if (entry.name === 'config.xml') {
-        const content = BackupRepository.filterAndroidConfigXml(
-          fileIo.readTextSync(sourcePath), ignoredCategories
+        const content = await BackupRepository.filterAndroidConfigXml(
+          context, fileIo.readTextSync(sourcePath), scope
         );
         if (content.length > BackupRepository.maximumJsonTextBytes) {
           throw new Error(`${entry.name} 超过 32 MB，未恢复该配置`);
@@ -1522,7 +1677,7 @@ export class BackupRepository {
         // 把 config.xml 里本地不认识的键存进透传缓存，供下次备份原样带出。
         // 新增键数只用于日志，不进 RestoreResult（界面不需要多一个数字）。
         const passthroughAdded = await BackupRepository.savePassthroughFromConfigXml(
-          context, content, ignoredCategories);
+          context, content, scope);
         console.info(`[BackupRepository] config.xml 透传缓存新增 ${passthroughAdded} 键`);
         preservedEntryCount += 1;
         continue;
@@ -1543,13 +1698,25 @@ export class BackupRepository {
           throw new Error(`${entry.name} 超过 32 MB，未恢复书源`);
         }
         const parsed = BookSourceImporter.parse(text);
+        let rules: BookSource[] = parsed.rules;
+        let skipped: number = parsed.skipped;
+        // 上游 `Restore.kt:176-189`：新格式一条都解析不出来时，回头按旧版书源格式再解一次
+        // （`ImportOldData.importOldSource(json)`）。旧版字段名与规则语法都不同，
+        // 用同一份文本再走一遍旧格式解析器即可，不必判断文件来自哪个时代。
+        if (rules.length === 0 && text.trim().length > 0) {
+          const legacy = OldDataImporter.parseOldSources(text);
+          if (legacy.sources.length > 0) {
+            rules = legacy.sources;
+            skipped = legacy.skipped;
+          }
+        }
         // 先从库里读出本地已有条目，importRules 的合并语义才有真实基线；
         // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
         await BookSourceRepository.load(context);
-        const outcome = await BookSourceRepository.importRules(context, parsed.rules);
+        const outcome = await BookSourceRepository.importRules(context, rules);
         bookSourceAdded += outcome.added;
         bookSourceUpdated += outcome.updated;
-        bookSourceSkipped += parsed.skipped + outcome.skipped;
+        bookSourceSkipped += skipped + outcome.skipped;
         // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
         await fileIo.copyFile(sourcePath, targetPath);
         preservedEntryCount += 1;
@@ -1620,7 +1787,9 @@ export class BackupRepository {
         let decryptFailed = false;
         if (!plain.startsWith('[')) {
           try {
-            plain = aesEcbDecryptFromBase64(plain, aesEcKeyFromPassword(''));
+            // 与写出侧同源：上游 Restore.kt 的 aes 实例也来自应用访问密码。
+            const backupPassword = await LocalPasswordStore.load(context);
+            plain = aesEcbDecryptFromBase64(plain, aesEcKeyFromPassword(backupPassword));
           } catch (error) {
             decryptFailed = true;
             console.error(`[BackupRepository] servers.json 解密失败（可能是设过备份密码的包）: ${error}`);
@@ -1727,21 +1896,23 @@ export class BackupRepository {
           throw new Error(`${entry.name} 超过 32 MB，未恢复在线朗读源`);
         }
         const parsed = HttpTtsImporter.parseSources(text);
-        // 先读出本地已有源，importSources 的合并语义才有真实基线；
-        // 否则空缓存会让 save() 整表重写时把上一次恢复的数据抹掉。
-        await HttpTtsRepository.load(context);
-        const sourceOutcome = await HttpTtsRepository.importSources(context, parsed.sources);
-        httpTtsSourcesAdded += sourceOutcome.added;
-        httpTtsSourcesUpdated += sourceOutcome.updated;
-        httpTtsSourcesSkipped += parsed.skipped + sourceOutcome.skipped;
+        // 目录只能从原始文本再解析一次：speakersJson / emotionsJson 不写回源行，
+        // 权威副本在 read_aloud_voices 表里（上游 Restore.kt:565-571）。
+        const drafts: HttpTtsCatalogDraft[] = HttpTtsImporter.parseCatalogs(text);
+        // 上游 Restore.kt:580-582 用 require 卡住条数：源与目录必须一一对应，
+        // 否则按下标配对会错位。这里照搬，宁可整份不恢复也不写错目录。
+        if (drafts.length !== parsed.sources.length) {
+          throw new Error(`httpTTS 目录条数与源条数不一致（源 ${parsed.sources.length} 条，目录 ${drafts.length} 条）`);
+        }
         // 音色必须在源之后恢复：read_aloud_voices.engineId 指向 httpTTS.id。
         // 单独出现（没有 httpTTS.json）的 httpTtsVoices.json 是孤儿音色，不在这里恢复。
         const voicesPath = `${selection.stagingDirectory}/httpTtsVoices.json`;
+        let voices: ReadAloudVoice[] | undefined = undefined;
         if (fileIo.accessSync(voicesPath)) {
           const voicesText = fileIo.readTextSync(voicesPath);
           const voicesTrimmed = voicesText.trim();
-          // 坏 JSON 不能当成旧备份忽略，更不能拿解析出的空数组去 replaceHttpVoices——
-          // 那样会静默清掉本地 excluded 状态；先独立验结构，损坏就只计 skipped、不清库。
+          // 坏 JSON 不能当成「旧备份没有音色」放过：那会静默丢掉排除状态。
+          // 上游 Restore.kt:583-586 用 getOrThrow，这里同样让整份恢复失败。
           let wellFormed = false;
           if (voicesTrimmed.startsWith('[') || voicesTrimmed.startsWith('{')) {
             try {
@@ -1751,15 +1922,43 @@ export class BackupRepository {
               wellFormed = false;
             }
           }
-          if (wellFormed) {
-            const voiceParsed = HttpTtsImporter.parseVoices(voicesText);
-            await ReadAloudVoiceRepository.replaceHttpVoices(context, voiceParsed.voices);
-            httpTtsVoicesRestored += voiceParsed.voices.length;
-            httpTtsVoicesSkipped += voiceParsed.skipped;
-          } else {
-            httpTtsVoicesSkipped += 1;
-            console.error('httpTtsVoices.json 无法解析，保留本地 http 音色未覆盖');
+          if (!wellFormed) {
+            throw new Error('httpTtsVoices.json 无法解析，音色状态会丢失，本次恢复中止');
           }
+          const voiceParsed = HttpTtsImporter.parseVoices(voicesText);
+          voices = voiceParsed.voices;
+          httpTtsVoicesSkipped += voiceParsed.skipped;
+        }
+        const catalogEntries: HttpTtsCatalogEntry[] = [];
+        for (let index = 0; index < parsed.sources.length; index++) {
+          const source = parsed.sources[index];
+          if (source === undefined) { continue; }
+          const draft = drafts[index];
+          catalogEntries.push({
+            source,
+            draft: draft === undefined ? { speakers: [], emotions: [] } : draft
+          });
+        }
+        // 先读出本地已有源，合并语义才有真实基线；
+        // 否则空缓存会让整表重写时把上一次恢复的数据抹掉。
+        await HttpTtsRepository.load(context);
+        const existingIds = new Set<number>();
+        const existingSources = HttpTtsRepository.getAll();
+        for (let index = 0; index < existingSources.length; index++) {
+          existingIds.add(existingSources[index].id);
+        }
+        await HttpTtsRepository.restoreWithCatalogs(context, catalogEntries, voices);
+        for (let index = 0; index < catalogEntries.length; index++) {
+          const source = catalogEntries[index].source;
+          if (existingIds.has(source.id)) {
+            httpTtsSourcesUpdated += 1;
+          } else {
+            httpTtsSourcesAdded += 1;
+          }
+        }
+        httpTtsSourcesSkipped += parsed.skipped;
+        if (voices !== undefined) {
+          httpTtsVoicesRestored += voices.length;
         }
         // 同时归档到保留目录，下次备份时 copyPreservedEntries 会原样带走。
         await fileIo.copyFile(sourcePath, targetPath);
@@ -1894,6 +2093,36 @@ export class BackupRepository {
         preservedEntryCount += 1;
         continue;
       }
+      if (entry.name === 'searchHistory.json') {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复搜索历史`);
+        }
+        // 上游 Restore.kt:213-220：`insert(onConflict = REPLACE)` 并逐条吞掉约束冲突，
+        // 关键词按 word 覆盖、其余保留，所以这里走 importKeywords 的合并语义。
+        if (!BackupRepository.isCategoryIgnored('searchHistory', scope)) {
+          const keywords = SearchKeywordRepository.parseKeywords(text);
+          await SearchKeywordRepository.importKeywords(context, keywords);
+        }
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
+      if (entry.name === DIRECT_LINK_RULE_FILE_NAME) {
+        const text = fileIo.readTextSync(sourcePath);
+        if (text.length > BackupRepository.maximumJsonTextBytes) {
+          throw new Error(`${entry.name} 超过 32 MB，未恢复直链上传规则`);
+        }
+        // 上游 Restore.kt:318-325 把文件内容原样塞进 ACache，读的时候再解析；
+        // 本地存 preferences 单键 JSON，所以先解析校验，坏 JSON 保持原有规则不动。
+        const rule: DirectLinkRule | undefined = DirectLinkUploadStore.parse(text);
+        if (rule !== undefined) {
+          await DirectLinkUploadStore.saveRule(context, rule);
+        }
+        await fileIo.copyFile(sourcePath, targetPath);
+        preservedEntryCount += 1;
+        continue;
+      }
       if (entry.name === 'coverRule.json') {
         const text = fileIo.readTextSync(sourcePath);
         if (text.length > BackupRepository.maximumJsonTextBytes) {
@@ -1916,6 +2145,14 @@ export class BackupRepository {
     if (pendingSummaries !== undefined || pendingDetails !== undefined || pendingSessions !== undefined) {
       await ReadRecordRepository.restoreFromBackup(context,
         pendingSummaries ?? [], pendingDetails ?? [], pendingSessions ?? []);
+      // 上游 `Restore.kt:295` 在恢复完阅读记录后立刻调 `reconcileReadRecordAliases()`：
+      // 备份里作者为空的历史行，若书库里同名的书只有一个作者，就直接认领到那个作者名下。
+      // 多个作者时不猜，留给用户在记录页手动合并（`loadUnknownAuthorRecords` + 归属决定）。
+      await ReadRecordRepository.reconcileAliases(context, currentBooks);
+      // 上游 `Restore.kt:295-298` 在别名认领之后还调 `reconcileRestoredReadRecordTotals()`：
+      // 以会话为权威把汇总与每日明细重算一遍，并与库里已有值取较大者 ——
+      // 同一份备份重复导入不会让时长翻倍，旧版备份里只有汇总没有会话的历史时长也不会被抹掉。
+      await ReadRecordRepository.reconcileRestoredReadRecordTotals(context);
     }
 
     // 归档里的 themeConfig.json 已经落进私有目录，这里补一次装载，
@@ -1939,40 +2176,46 @@ export class BackupRepository {
     const restoredReadSettings = BackupRepository.restoreReaderSettings(
       selection.stagingDirectory,
       currentSettings,
-      ignoredCategories
+      scope
     );
     const settings = BackupRepository.applyEyeProtection(
-      selection.stagingDirectory, restoredReadSettings, ignoredCategories
+      selection.stagingDirectory, restoredReadSettings, scope
     );
     await ReaderSettingsRepository.save(context, settings);
     // 朗读偏好 14 键：与写出侧对称，从 config.xml 反读后合并进当前快照并落盘。
     // 与阅读设置分开存（legado_read_aloud_settings），所以单独 save。
-    await BackupRepository.restoreReadAloudSettings(context, selection.stagingDirectory, ignoredCategories);
+    await BackupRepository.restoreReadAloudSettings(context, selection.stagingDirectory, scope);
     // 全局深色模式与阅读设置分开存（`legado_theme`），所以单独读、单独回传，
     // 由调用方 `Index.ets` 走 `applyThemeMode` 应用，与上游 Restore.kt:326-335 同序。
     const restoredThemeMode = BackupRepository.restoreThemeMode(
-      selection.stagingDirectory, ignoredCategories
+      selection.stagingDirectory, scope
     );
     // showRss 与 themeMode 同属 config.xml 派生设置：单独读、单独回传，落盘交给 Index.ets
     // 的 saveThemeSettings 整份写，避免与随后 applyThemeMode 的整份写互相覆盖。
     const restoredShowRss = BackupRepository.restoreShowRss(
-      selection.stagingDirectory, ignoredCategories
+      selection.stagingDirectory, scope
     );
     const bookshelfLayout = BackupRepository.restoreBookshelfLayout(
-      selection.stagingDirectory, currentBookshelfLayout, ignoredCategories
+      selection.stagingDirectory, currentBookshelfLayout, scope
     );
     await BookshelfLayoutRepository.save(context, bookshelfLayout);
     // coverConfig 的 14 键 + 2 个无条件键从 config.xml 反向映射回本地封面设置，
     // 与写出侧 coverSettingsToAndroid / 无条件区一一对应。
     const coverSettings = BackupRepository.restoreCoverSettings(
-      selection.stagingDirectory, CoverSettingsRepository.get(), ignoredCategories
+      selection.stagingDirectory, CoverSettingsRepository.get(), scope
     );
     await CoverSettingsRepository.save(context, coverSettings);
+    // WebDAV 九键：与写出侧对称，从 config.xml 反读后合并进本地 WebDAV 设置并落盘。
+    // web_dav_password 在 filterAndroidConfigXml 里已经按上游 RestoreConfigNormalizer 的
+    // 口径解密成明文，这里直接当普通 string 读。
+    await BackupRepository.restoreWebDavSettings(context, selection.stagingDirectory, scope);
+    // 语言：与写出侧对称，从 config.xml 读回并交给平台（下一次冷启动按新语言加载资源）。
+    await BackupRepository.restoreLanguage(context, selection.stagingDirectory, scope);
     const updated = await BackupRepository.restoreMatchingLocalProgress(
       context,
       selection.stagingDirectory,
       currentBooks,
-      ignoredCategories
+      scope
     );
     const localBooks = updated.books.filter((book: Book) => BookRepository.isPersistableBook(book));
     await BookRepository.saveImportedBooks(context, localBooks);
@@ -2224,12 +2467,12 @@ export class BackupRepository {
   private static restoreBookshelfLayout(
     directory: string,
     current: BookshelfLayoutSettings,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): BookshelfLayoutSettings {
     // showBookIntro 不在上游 bookshelfPrefKeys 39 键内，走 keyIsNotIgnore 的 else -> true，
     // 取消 bookshelfLayout 勾选也照样恢复，所以在忽略判断之前单独读（KI-SL-B1）。
     const unconditionalIntro = BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'showBookIntro');
-    if (ignoredCategories.includes('bookshelfLayout')) {
+    if (BackupRepository.isCategoryIgnored('bookshelfLayout', scope)) {
       const unchanged = copyBookshelfLayout(current);
       if (unconditionalIntro !== undefined) { unchanged.showBookIntro = unconditionalIntro; }
       return unchanged;
@@ -2272,13 +2515,13 @@ export class BackupRepository {
   private static restoreCoverSettings(
     directory: string,
     current: CoverSettings,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): CoverSettings {
     const merged = copyCoverSettings(current);
     const configPath = `${directory}/config.xml`;
     const unconditionalRatio = BackupRepository.readXmlBoolean(configPath, 'coverRestrictRatio');
     const unconditionalFilter = BackupRepository.readXmlInteger(configPath, 'explore_filter_state');
-    if (ignoredCategories.includes('coverConfig')) {
+    if (BackupRepository.isCategoryIgnored('coverConfig', scope)) {
       if (unconditionalRatio !== undefined) { merged.restrictCoverRatio = unconditionalRatio; }
       if (unconditionalFilter !== undefined) { merged.exploreFilterState = unconditionalFilter; }
       return merged;
@@ -2312,9 +2555,9 @@ export class BackupRepository {
   private static async restoreReadAloudSettings(
     context: Context,
     directory: string,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): Promise<void> {
-    if (ignoredCategories.includes('readConfig')) { return; }
+    if (BackupRepository.isCategoryIgnored('readConfig', scope)) { return; }
     const path = directory + '/config.xml';
     if (!fileIo.accessSync(path)) { return; }
     const current = await ReadAloudSettingsRepository.load(context);
@@ -2339,12 +2582,71 @@ export class BackupRepository {
     await ReadAloudSettingsRepository.save(context, merged);
   }
 
+  /**
+   * 恢复侧：把 config.xml 里的 9 个 WebDAV 键合并回本地 WebDAV 设置。
+   * 上游 Restore.kt:377-387 的 applyConfigMap 是把整份 preferences 写回，WebDAV 设置在
+   * 上游同一份 preferences 里（PreferKey.kt:87-90/126-127/191/338-339），所以恢复备份
+   * 会把 WebDAV 配置一并带回来；本地 WebDAV 设置存在独立 preferences
+   * （lib/WebDavConfig.ets 的 legado_webdav_settings），这里做反向映射。
+   * web_dav_password 已由 filterAndroidConfigXml 按上游 RestoreConfigNormalizer 的
+   * 口径解密成明文，当普通 string 读。webDavDeviceName 与 backupUri 属上游
+   * alwaysIgnoredPreferenceKeys，不进备份，也不在这里读。
+   */
+  private static async restoreWebDavSettings(
+    context: Context,
+    directory: string,
+    scope: BackupIgnoreScope
+  ): Promise<void> {
+    if (BackupRepository.isCategoryIgnored('readConfig', scope)) { return; }
+    const path = directory + '/config.xml';
+    if (!fileIo.accessSync(path)) { return; }
+    const next = cloneWebDavSettings(await WebDavConfigStore.load(context));
+    const url = BackupRepository.readXmlString(path, 'web_dav_url');
+    if (url !== undefined) { next.url = url; }
+    const account = BackupRepository.readXmlString(path, 'web_dav_account');
+    if (account !== undefined) { next.account = account; }
+    const password = BackupRepository.readXmlString(path, 'web_dav_password');
+    if (password !== undefined) { next.password = password; }
+    const dir = BackupRepository.readXmlString(path, 'webDavDir');
+    if (dir !== undefined) { next.dir = dir; }
+    const syncBookProgress = BackupRepository.readXmlBoolean(path, 'syncBookProgress');
+    if (syncBookProgress !== undefined) { next.syncBookProgress = syncBookProgress; }
+    const syncBookProgressPlus = BackupRepository.readXmlBoolean(path, 'syncBookProgressPlus');
+    if (syncBookProgressPlus !== undefined) { next.syncBookProgressPlus = syncBookProgressPlus; }
+    const autoCheckNewBackup = BackupRepository.readXmlBoolean(path, 'autoCheckNewBackup');
+    if (autoCheckNewBackup !== undefined) { next.autoCheckNewBackup = autoCheckNewBackup; }
+    const onlyLatestBackup = BackupRepository.readXmlBoolean(path, 'onlyLatestBackup');
+    if (onlyLatestBackup !== undefined) { next.onlyLatestBackup = onlyLatestBackup; }
+    const backupSyncMode = BackupRepository.readXmlString(path, 'backupSyncMode');
+    if (backupSyncMode !== undefined) { next.backupSyncMode = backupSyncMode; }
+    await WebDavConfigStore.save(context, next);
+  }
+
+  /**
+   * 恢复语言设置。上游把整个 preferences 全量恢复（`Restore.kt:380-383` 的
+   * `applyConfigMap` 逐键写回 `AppConfigStore`），`language` 不在 alwaysIgnored 名单里，
+   * 所以会跟着回来；恢复收尾再重放一次（`Restore.kt:392`）。
+   * 本地语言存在独立 preferences（`lib/AppLocaleRepository.ets`），这里按上游键名读回。
+   */
+  private static async restoreLanguage(
+    context: Context,
+    directory: string,
+    scope: BackupIgnoreScope
+  ): Promise<void> {
+    if (BackupRepository.isCategoryIgnored('readConfig', scope)) { return; }
+    const path = directory + '/config.xml';
+    if (!fileIo.accessSync(path)) { return; }
+    const language = BackupRepository.readXmlString(path, 'language');
+    if (language === undefined) { return; }
+    await AppLocaleRepository.setLanguage(context, language);
+  }
+
   private static applyEyeProtection(
     directory: string,
     current: ReaderSettingsSnapshot,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): ReaderSettingsSnapshot {
-    if (ignoredCategories.includes('themeConfig')) { return current; }
+    if (BackupRepository.isCategoryIgnored('themeConfig', scope)) { return current; }
     const path = directory + '/config.xml';
     if (!fileIo.accessSync(path)) { return current; }
     const updated: ReaderSettingsSnapshot = JSON.parse(JSON.stringify(current));
@@ -2365,29 +2667,44 @@ export class BackupRepository {
   private static restoreReaderSettings(
     directory: string,
     current: ReaderSettingsSnapshot,
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): ReaderSettingsSnapshot {
-    if (ignoredCategories.includes('readConfig')) { return current; }
+    if (BackupRepository.isCategoryIgnored('readConfig', scope)) { return current; }
     const path = `${directory}/readConfig.json`;
     if (!fileIo.accessSync(path)) { return current; }
     const text = fileIo.readTextSync(path);
     const records = BackupRepository.splitJsonArray(text);
     if (records.length === 0) { return current; }
+    // 上游 `Restore.kt:346-376` 把 readConfig.json 与 shareReadConfig.json 整份覆盖到配置存储，
+    // 再 `refresh()` 重新装载——等于备份里的样式表整体替换本机样式表
+    // （`ReadBookStyleConfigRepository.kt:305-307` 的 `exportConfigsJson` 就是全部样式、
+    // `exportShareConfigJson` 是共享那一份）。本地没有「配置文件即真源」的结构，
+    // 等价做法是按数组重建样式表。
+    const restoredStyles = BackupRepository.stylesFromAndroidReadConfig(records, current.backgroundStyles);
     const index = BackupRepository.readXmlInteger(`${directory}/config.xml`, 'readStyleSelect') ?? 0;
-    const selected = records[Math.max(0, Math.min(records.length - 1, index))] ?? records[0] ?? '';
+    const shareLayout = BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'shareLayout') ??
+      current.shareLayout;
+    // 上游 `ReadBookConfig.kt:196` 的 `config get() = if (shareLayout) shareConfig else durConfig`：
+    // 共享排版开着时生效的是 shareReadConfig.json 那一份，不看 readStyleSelect 下标。
+    let selected = records[Math.max(0, Math.min(records.length - 1, index))] ?? records[0] ?? '';
+    if (shareLayout) {
+      const sharedPath = `${directory}/shareReadConfig.json`;
+      if (fileIo.accessSync(sharedPath)) {
+        const sharedText = fileIo.readTextSync(sharedPath).trim();
+        if (sharedText.startsWith('{')) { selected = sharedText; }
+      }
+    }
     const fontSizeValue = BackupRepository.readJsonNumber(selected, 'textSize');
     const dayPaperIndex = BackupRepository.paperIndexFromAndroidConfig(
       BackupRepository.readJsonNumber(selected, 'bgType') ?? 0,
       BackupRepository.readJsonString(selected, 'bgStr') ?? '',
-      current.backgroundStyles
+      restoredStyles
     );
     const nightPaperIndex = BackupRepository.paperIndexFromAndroidConfig(
       BackupRepository.readJsonNumber(selected, 'bgTypeNight') ?? 0,
       BackupRepository.readJsonString(selected, 'bgStrNight') ?? '',
-      current.backgroundStyles
+      restoredStyles
     );
-    const shareLayout = BackupRepository.readXmlBoolean(`${directory}/config.xml`, 'shareLayout') ??
-      current.shareLayout;
     const paperIndex = current.readerNightMode ? nightPaperIndex : dayPaperIndex;
     return {
       paddingSettings: {
@@ -2451,9 +2768,8 @@ export class BackupRepository {
       readerNightMode: current.readerNightMode,
       shareLayout: shareLayout,
       // Android 备份里 readConfig.json 的每条就是一份样式（上游 ReadStyleState.items），
-      // 这里只把「当前选中那一份」的颜色映射回本机下标，样式表本身保留本机现状：
-      // 上游导入备份也不覆盖已有样式列表，只改选中项。
-      backgroundStyles: current.backgroundStyles,
+      // 恢复时按数组整份重建，对齐上游把 readConfig.json 覆盖到配置存储的做法。
+      backgroundStyles: restoredStyles,
       systemTypefaces: Math.max(0, Math.min(2,
         BackupRepository.readXmlInteger(`${directory}/config.xml`, 'system_typefaces') ?? current.systemTypefaces)),
       // Android 字体路径属于 Android 私有目录；没有随 ZIP 附带可验证字体文件时保留本机选择。
@@ -2766,9 +3082,9 @@ export class BackupRepository {
     context: Context,
     directory: string,
     currentBooks: Book[],
-    ignoredCategories: string[]
+    scope: BackupIgnoreScope
   ): Promise<RestoredBookProgress> {
-    if (ignoredCategories.includes('localBook')) {
+    if (BackupRepository.isCategoryIgnored('localBook', scope)) {
       return { books: currentBooks, updatedCount: 0, createdMissingBodyCount: 0, deletedDuplicateCount: 0 };
     }
     const path = `${directory}/bookshelf.json`;
@@ -2829,7 +3145,7 @@ export class BackupRepository {
         updated.latestChapterTime = Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'latestChapterTime') ?? restoredProgress.latestChapterTime ?? 0));
         updated.durChapterTime = Math.max(0, Math.trunc(BackupRepository.readJsonNumber(record, 'durChapterTime') ?? restoredProgress.durChapterTime ?? 0));
         updated.order = Math.trunc(BackupRepository.readJsonNumber(record, 'order') ?? restoredProgress.order ?? 0);
-        if (!ignoredCategories.includes('bookGroup')) {
+        if (!BackupRepository.isCategoryIgnored('bookGroup', scope)) {
           const groupMask = BackupRepository.readJsonNumber(record, 'group') ?? 0;
           const groupNames = BookGroupRepository.namesFromMask(groupMask);
           const backupIntro = BackupRepository.readJsonString(record, 'customIntro') ??
@@ -2992,23 +3308,24 @@ export class BackupRepository {
     return `[${records.join(',')}]`;
   }
 
-  private static async copyPreservedEntries(context: Context, targetDirectory: string, ignored: string[]): Promise<void> {
+  private static async copyPreservedEntries(context: Context, targetDirectory: string, scope: BackupIgnoreScope): Promise<void> {
     const sourceDirectory = `${context.filesDir}/${BackupRepository.legacyDirectoryName}`;
     let names: string[] = [];
     try { names = fileIo.listFileSync(sourceDirectory); } catch (error) { console.error(`[BackupRepository] 列出待保留条目目录失败: ${error}`); return; }
     for (let index = 0; index < names.length; index++) {
       const name = names[index];
       if (name === undefined || !BackupRepository.isSafeRootEntry(name) ||
-        BackupRepository.isIgnored(name, ignored)) { continue; }
+        BackupRepository.isIgnored(name, scope)) { continue; }
       const sourcePath = `${sourceDirectory}/${name}`;
       const targetPath = `${targetDirectory}/${name}`;
       try {
         if (!fileIo.lstatSync(sourcePath).isFile()) { continue; }
-        if (name === 'bookshelf.json' && ignored.includes('localBook')) {
+        if (name === 'bookshelf.json' && BackupRepository.isCategoryIgnored('localBook', scope)) {
           const remaining = BackupRepository.filterLocalBooks(fileIo.readTextSync(sourcePath));
           if (remaining.length > 2) { BackupRepository.writeTextFile(targetPath, remaining); }
         } else if (name === 'config.xml') {
-          const content = BackupRepository.filterAndroidConfigXml(fileIo.readTextSync(sourcePath), ignored);
+          const content = await BackupRepository.filterAndroidConfigXml(
+            context, fileIo.readTextSync(sourcePath), scope);
           BackupRepository.writeTextFile(targetPath, content);
         } else {
           await fileIo.copyFile(sourcePath, targetPath);
@@ -3088,6 +3405,22 @@ export class BackupRepository {
   }
 
   /**
+   * 判断直链规则是否就是默认第一条。
+   * 上游 Backup.kt:249-253 无条件写这个文件，但上游的默认规则来自 assets，
+   * 用户没改过时写出来的就是默认内容；本地不写这一份，避免给上游塞重复数据。
+   */
+  private static isDefaultDirectLinkRule(rule: DirectLinkRule): boolean {
+    if (DEFAULT_DIRECT_LINK_RULES.length === 0) {
+      return false;
+    }
+    const preset = DEFAULT_DIRECT_LINK_RULES[0];
+    return rule.uploadUrl === preset.uploadUrl
+      && rule.downloadUrlRule === preset.downloadUrlRule
+      && rule.summary === preset.summary
+      && rule.compress === preset.compress;
+  }
+
+  /**
    * 解析归档里的 coverRule.json。
    * 上游恢复是整段字符串直塞，本地要结构体，所以逐字段取、缺项补默认；
    * 坏 JSON 回退默认规则，不抛错（对齐上游 runCatching 的容错姿态）。
@@ -3113,19 +3446,22 @@ export class BackupRepository {
     return rule;
   }
 
-  private static isIgnored(fileName: string, ignored: string[]): boolean {
+  private static isIgnored(fileName: string, scope: BackupIgnoreScope): boolean {
     if (fileName === 'bookshelf.json' || fileName === 'config.xml') { return false; }
     for (let index = 0; index < BackupRepository.categoryOptions.length; index++) {
       const option = BackupRepository.categoryOptions[index];
-      if (option !== undefined && option.files.includes(fileName) && ignored.includes(option.key)) { return true; }
+      if (option !== undefined && option.files.includes(fileName) &&
+        BackupRepository.isCategoryIgnored(option.key, scope)) { return true; }
     }
     return false;
   }
 
-  private static filterAndroidConfigXml(text: string, ignored: string[]): string {
+  private static async filterAndroidConfigXml(context: Context, text: string,
+    scope: BackupIgnoreScope): Promise<string> {
     const excludedKeys: Set<string> = new Set<string>(BackupRepository.alwaysIgnoredPreferenceKeys);
-    for (let index = 0; index < ignored.length; index++) {
-      const key = ignored[index] ?? '';
+    // 只按偏好层的忽略名单剔键：config.xml 里装的全是偏好项，数据库层的类别在这里没有对应键。
+    for (let index = 0; index < scope.preferences.length; index++) {
+      const key = scope.preferences[index] ?? '';
       const preferenceKeys = BackupRepository.preferenceKeysForCategory(key);
       if (preferenceKeys !== undefined) {
         for (let keyIndex = 0; keyIndex < preferenceKeys.length; keyIndex++) {
@@ -3134,6 +3470,11 @@ export class BackupRepository {
         }
       }
     }
+    // 上游 RestoreConfigNormalizer.kt:21 把这两个旧亮度键整条丢弃（只拿来回填新键），
+    // 本地同样不写进 config.xml，免得上游读到两份互相矛盾的亮度状态。
+    const original = BackupRepository.parseAndroidConfigXml(text);
+    excludedKeys.add('showBrightnessView');
+    excludedKeys.add('brightnessVwPos');
     const pattern = /<(string|int|long|float|boolean|set)\b[^>]*\bname=["']([^"']+)["'][^>]*(?:\/>|>[\s\S]*?<\/\1>)/gi;
     let result: string = '';
     let cursor: number = 0;
@@ -3147,7 +3488,97 @@ export class BackupRepository {
       match = pattern.exec(text);
     }
     const filtered = result + text.substring(cursor);
-    return filtered.replace(/\r?\n[ \t]*\r?\n/g, '\n');
+    return await BackupRepository.normalizeAndroidConfigXml(
+      context, filtered.replace(/\r?\n[ \t]*\r?\n/g, '\n'), original, excludedKeys);
+  }
+
+  /**
+   * 对齐上游 RestoreConfigNormalizer.kt:35-56 的两条旧键迁移：
+   * 旧亮度键 → readBrightnessMode / readBrightnessControlPosition（Boolean 转 "1"/"0"），
+   * bookInfoBackgroundBlur → bookInfoNetworkCoverBackground + bookInfoDefaultCoverBackground。
+   * 上游在整份 map 上做，本地按 XML 文本做：新键已经在文件里就不补，被忽略集合排除的也不补。
+   *
+   * Double→Float（上游 `:30`）在本地没有对应物：上游把 JSON 数字都解析成 Double 才需要转，
+   * config.xml 的 float 标签天然是 float。
+   *
+   * webDavPassword（上游 `:23-27`）按上游两支处理：先用本地访问密码（LocalPasswordStore，
+   * 与上游 LocalConfig.password 同口径）解密，解得开就写回明文；解不开时，
+   * 本地已经有 WebDAV 密码就丢弃该键（对应上游 hasLocalWebDavPassword == true），
+   * 本地没有就保留原文（对应 false）。
+   */
+  private static async normalizeAndroidConfigXml(
+    context: Context,
+    text: string,
+    original: Map<string, XmlPreferenceEntry>,
+    excludedKeys: Set<string>
+  ): Promise<string> {
+    let result = text;
+    const legacyPairs: string[][] = [
+      ['showBrightnessView', 'readBrightnessMode'],
+      ['brightnessVwPos', 'readBrightnessControlPosition']
+    ];
+    for (let index = 0; index < legacyPairs.length; index++) {
+      const pair = legacyPairs[index];
+      const legacyKey = pair[0] ?? '';
+      const newKey = pair[1] ?? '';
+      if (original.has(newKey) || excludedKeys.has(newKey)) { continue; }
+      const legacy = original.get(legacyKey);
+      if (legacy === undefined) { continue; }
+      const value = legacy.type === 'boolean'
+        ? (legacy.value === 'true' ? '1' : '0')
+        : legacy.value;
+      const entry: XmlPreferenceEntry = { type: 'string', value: value };
+      result = BackupRepository.upsertXmlPreference(result, newKey, entry);
+    }
+    const legacyBlur = original.get('bookInfoBackgroundBlur');
+    if (legacyBlur !== undefined && !excludedKeys.has('bookInfoBackgroundBlur')) {
+      const targets: string[] = ['bookInfoNetworkCoverBackground', 'bookInfoDefaultCoverBackground'];
+      for (let index = 0; index < targets.length; index++) {
+        const target = targets[index] ?? '';
+        if (original.has(target) || excludedKeys.has(target)) { continue; }
+        const entry: XmlPreferenceEntry = { type: 'string', value: legacyBlur.value };
+        result = BackupRepository.upsertXmlPreference(result, target, entry);
+      }
+    }
+    // webDavPassword：上游单独 AES 加密后写进 config.xml（Backup.kt:291-293），恢复时解密。
+    const encryptedWebDavPassword = original.get('web_dav_password');
+    if (encryptedWebDavPassword !== undefined && !excludedKeys.has('web_dav_password')) {
+      const localPassword = await LocalPasswordStore.load(context);
+      let decrypted: string | undefined = undefined;
+      try {
+        decrypted = aesEcbDecryptFromBase64(
+          encryptedWebDavPassword.value, aesEcKeyFromPassword(localPassword));
+      } catch (error) {
+        decrypted = undefined;
+      }
+      if (decrypted !== undefined && decrypted.length > 0) {
+        const entry: XmlPreferenceEntry = { type: 'string', value: decrypted };
+        result = BackupRepository.upsertXmlPreference(result, 'web_dav_password', entry);
+      } else {
+        const localSettings = await WebDavConfigStore.load(context);
+        if (localSettings.password.length > 0) {
+          result = BackupRepository.removeXmlPreference(result, 'web_dav_password');
+        }
+      }
+    }
+    return result;
+  }
+
+  /** 从 config.xml 文本里整条删掉一个键，正则与 parseAndroidConfigXml 同源。 */
+  private static removeXmlPreference(text: string, key: string): string {
+    const pattern = /<(string|int|long|float|boolean|set)\b[^>]*\bname=["']([^"']+)["'][^>]*(?:\/>|>[\s\S]*?<\/\1>)/gi;
+    let result: string = '';
+    let cursor: number = 0;
+    let match: RegExpExecArray | null = pattern.exec(text);
+    while (match !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      result += text.substring(cursor, start);
+      if ((match[2] ?? '') !== key) { result += match[0]; }
+      cursor = end;
+      match = pattern.exec(text);
+    }
+    return result + text.substring(cursor);
   }
 
 
@@ -3285,19 +3716,20 @@ export class BackupRepository {
   }
 
   /**
-   * 备份侧：把缓存里「已知写出键集 / alwaysIgnored / ignoredCategories」之外的全部键 upsert 进 config.xml。
+   * 备份侧：把缓存里「已知写出键集 / alwaysIgnored / scope」之外的全部键 upsert 进 config.xml。
    * 判据与上游 BackupConfig.kt:412 keyIsNotIgnore 的 else -> true 等价；类别展开复用 preferenceKeysForCategory。
    */
   private static async applyPassthroughPreferences(
     context: Context,
     xml: string,
-    ignored: string[]
+    scope: BackupIgnoreScope
   ): Promise<string> {
     const cached = await BackupRepository.loadPassthrough(context);
     if (cached.size === 0) { return xml; }
     const excludedKeys: Set<string> = new Set<string>(BackupRepository.alwaysIgnoredPreferenceKeys);
-    for (let index = 0; index < ignored.length; index++) {
-      const preferenceKeys = BackupRepository.preferenceKeysForCategory(ignored[index] ?? '');
+    // 透传缓存里装的都是偏好项，只按偏好层的忽略名单剔键。
+    for (let index = 0; index < scope.preferences.length; index++) {
+      const preferenceKeys = BackupRepository.preferenceKeysForCategory(scope.preferences[index] ?? '');
       if (preferenceKeys !== undefined) {
         for (let keyIndex = 0; keyIndex < preferenceKeys.length; keyIndex++) {
           const preferenceKey = preferenceKeys[keyIndex];
@@ -3318,19 +3750,20 @@ export class BackupRepository {
 
   /**
    * 恢复侧：把 config.xml 里本地不认识的键存进透传缓存。
-   * 105 个已知写出键由既有恢复分支负责，进缓存只会打架；alwaysIgnored / ignoredCategories 剔除的键也不进。
+   * 105 个已知写出键由既有恢复分支负责，进缓存只会打架；alwaysIgnored / scope 剔除的键也不进。
    * 与旧缓存合并而不是覆盖：用户可能连续恢复两个不同来源的包。
    * 返回本次新增键数，只供日志用，不进 RestoreResult（界面不需要多一个数字）。
    */
   private static async savePassthroughFromConfigXml(
     context: Context,
     text: string,
-    ignored: string[]
+    scope: BackupIgnoreScope
   ): Promise<number> {
     const parsed = BackupRepository.parseAndroidConfigXml(text);
     const excludedKeys: Set<string> = new Set<string>(BackupRepository.alwaysIgnoredPreferenceKeys);
-    for (let index = 0; index < ignored.length; index++) {
-      const preferenceKeys = BackupRepository.preferenceKeysForCategory(ignored[index] ?? '');
+    // 透传缓存里装的都是偏好项，只按偏好层的忽略名单剔键。
+    for (let index = 0; index < scope.preferences.length; index++) {
+      const preferenceKeys = BackupRepository.preferenceKeysForCategory(scope.preferences[index] ?? '');
       if (preferenceKeys !== undefined) {
         for (let keyIndex = 0; keyIndex < preferenceKeys.length; keyIndex++) {
           const preferenceKey = preferenceKeys[keyIndex];
@@ -3617,6 +4050,49 @@ export class BackupRepository {
    * 先在本机现有样式表里按日间色找（用户自建样式可能就是从别的设备导进来的，颜色能对上就直接复用）；
    * 找不到再回落到内置预设的固定颜色别名。
    */
+  /**
+   * 按 Android 备份里的 readConfig.json 重建本地样式表。
+   *
+   * 上游把整份样式表存在配置存储里（`ReadBookConfig.kt` 的 `configsSnapshot()`），
+   * 恢复时 `Restore.kt:346-376` 用 `copyFileAtomic` 把 readConfig.json 整份覆盖过去，
+   * 再 `get<ReadStyleGateway>().refresh()` 重新装载 ⇒ 备份里的样式表整体替换本机样式表。
+   * 本地没有「配置文件即真源」的结构，等价做法就是按数组重建。
+   *
+   * 背景类型非 0（图片背景）时，颜色位没有可比的值，沿用本机同下标的样式色，
+   * 图片路径本身由 `bgType`/`bgStr` 单独承载（见 `toAndroidReadConfig` 的注释）。
+   */
+  private static stylesFromAndroidReadConfig(records: string[],
+    current: ReaderBackgroundStyle[]): ReaderBackgroundStyle[] {
+    const styles: ReaderBackgroundStyle[] = [];
+    for (let index = 0; index < records.length; index++) {
+      const record = records[index];
+      const preset = index < READER_BACKGROUND_STYLES.length ? READER_BACKGROUND_STYLES[index] : undefined;
+      const fallback = index < current.length ? current[index] : preset;
+      const bgType = BackupRepository.readJsonNumber(record, 'bgType') ?? 0;
+      const bgTypeNight = BackupRepository.readJsonNumber(record, 'bgTypeNight') ?? 0;
+      const dayColor = bgType === 0 ? BackupRepository.readJsonString(record, 'bgStr') : undefined;
+      const nightColor = bgTypeNight === 0 ? BackupRepository.readJsonString(record, 'bgStrNight') : undefined;
+      const name = BackupRepository.readJsonString(record, 'name');
+      const sameAsPreset = preset !== undefined && name !== undefined && name === preset.name;
+      styles.push({
+        id: sameAsPreset ? preset.id : `backup-style-${index}`,
+        name: name !== undefined && name.length > 0 ? name : (fallback?.name ?? `样式${index + 1}`),
+        dayColor: dayColor !== undefined && dayColor.length > 0 ? dayColor : (fallback?.dayColor ?? '#EEEEEE'),
+        nightColor: nightColor !== undefined && nightColor.length > 0 ? nightColor
+          : (fallback?.nightColor ?? '#000000'),
+        textColor: BackupRepository.readJsonString(record, 'textColor') ??
+          (fallback?.textColor ?? '#3E3D3B'),
+        textColorNight: BackupRepository.readJsonString(record, 'textColorNight') ??
+          (fallback?.textColorNight ?? '#ADADAD')
+      });
+    }
+    // 备份里的样式不足预设条数时，用本机剩余样式补齐，保持「预设位固定」的既有约定。
+    for (let index = styles.length; index < current.length; index++) {
+      styles.push(current[index]);
+    }
+    return styles;
+  }
+
   private static paperIndexFromAndroidConfig(type: number, background: string,
     styles: ReaderBackgroundStyle[]): number {
     if (type !== 0) { return 0; }
@@ -3774,11 +4250,21 @@ export class BackupRepository {
 
   /**
    * 备份包文件名。
-   * 只保留最新备份时用固定名 backup.zip 覆盖（上行 Backup.kt:308-312 同款）；
-   * 否则带日期。注意系统保存框对同名文件会自动加序号，覆盖只在固定目录下才真正成立。
+   * 只保留最新备份时用固定名 backup.zip 覆盖（对齐 Backup.kt:308-312）；
+   * 否则带日期，并在设置了设备名时带上 `-<设备名>` 后缀（对齐 Backup.kt:102-111 的
+   * `"backup${backupDate}-${deviceName}.zip".normalizeFileName()`），
+   * 这样同一个 WebDAV 目录里能分清是哪台设备传的。
+   * 注意系统保存框对同名文件会自动加序号，覆盖只在固定目录下才真正成立。
    */
-  static backupFileName(onlyLatest: boolean): string {
-    return onlyLatest ? 'backup.zip' : `backup${BackupRepository.currentDate()}.zip`;
+  static backupFileName(onlyLatest: boolean, deviceName: string = ''): string {
+    if (onlyLatest) {
+      return 'backup.zip';
+    }
+    const trimmed = deviceName.trim();
+    const raw = trimmed.length > 0
+      ? `backup${BackupRepository.currentDate()}-${trimmed}.zip`
+      : `backup${BackupRepository.currentDate()}.zip`;
+    return normalizeFileName(raw);
   }
 
   static currentDate(): string {

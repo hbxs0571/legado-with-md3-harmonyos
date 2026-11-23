@@ -1,19 +1,29 @@
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
+import { UiDropdown } from '../components/settings/UiDropdown';
 import { Book } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
+import { BookExporter, ExportTarget } from '../data/BookExporter';
+import {
+  BookExportSettings,
+  BookExportSettingsStore,
+  COMMON_EXPORT_CHARSETS,
+  EXPORT_TYPES,
+  defaultBookExportSettings,
+  episodeExportFileNameOf
+} from '../data/BookExportSettings';
 import { AppGlyph } from '../components/AppGlyph';
 import { AppLog, AppLogEntry } from '../lib/AppLog';
 import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownloadQueue';
-import { fileIo, picker } from '@kit.CoreFileKit';
-import { util } from '@kit.ArkTS';
+import { fileIo, fileShare, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
 import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const MANAGE_MENU_WIDTH: number = 260;
+
 
 /**
  * 书架管理页（:447–:475）。上游是 BookshelfManageScreen.kt，本地原先整页未建。
@@ -61,6 +71,7 @@ export struct BookshelfManagePage {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#B9C6FF';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#17181E';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#23242C';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#1F2027';
   @StorageProp('appTopInset') appTopInset: number = 0;
 
   @State currentGroupName: string = '';
@@ -76,21 +87,55 @@ export struct BookshelfManagePage {
   @State showExportSettings: boolean = false;
   @State exportBooks: Book[] = [];
   @State exportMsgByKey: Map<string, string> = new Map<string, string>();
-  @State exportCharset: string = 'UTF-8';
-  @State exportCustomCharset: string = '';
-  @State exportFileNameTemplate: string = '{title}';
-  @State exportWithChapterName: boolean = true;
+  /**
+   * 导出设置，10 个字段与上游 `BookExportSettings.kt:3-14` 一一对应，存 preferences
+   * （`BookExportSettingsStore`）。原先这里的 exportCharset / exportCustomCharset /
+   * exportFileNameTemplate / exportWithChapterName 四个 @State 是本地自造形态：
+   * 占位符是 {title}/{author}/{index}、字符集靠一个自由输入框、没有替换净化与插图开关。
+   * 改成整份设置对象后，字段名与语义都按上游来，跨端导出的行为才对得上。
+   */
+  @State exportSettings: BookExportSettings = defaultBookExportSettings();
+  /** 「导出文件夹」当前值；上游存在 ACache 的 exportBookPath 键下，本地存 preferences。 */
+  @State exportFolderPath: string = '';
+  /** 导出文件夹最近一次的可写探测结果，用来决定设置行说明文字。 */
+  @State exportFolderWritable: boolean = true;
+  /** 自定义字符集对话框的输入暂存（点确定才写回 exportSettings）。 */
+  @State exportCharsetDraft: string = '';
+  /** 导出文件名对话框的输入暂存。 */
+  @State exportFileNameDraft: string = '';
+  /** 两个输入对话框的显隐；都用 openCustomDialog 弹出（showAlertDialog 带不了输入框）。 */
+  @State showCharsetDialog: boolean = false;
+  @State showFileNameDialog: boolean = false;
+  /** openCustomDialog 的 builder 需存成成员，且每次重开重建以刷新内部输入态。 */
+  private exportDialogBuilder: () => void = () => {};
+  private exportDialogId: number = -1;
+
   @State showGroupSelect: boolean = false;
   /** 批2（:471）：分段导出的输入与目标书。 */
   @State showSegmentedExport: boolean = false;
   @State segmentedExportBook: Book | undefined = undefined;
   @State segmentedScope: string = '1-';
   @State segmentedVolumeSize: string = '1';
+  /**
+   * 自定义导出对话框（上游 `BookshelfManageScreen.kt:1248-1371`）。
+   * 上游的触发条件是「刚选完导出目录 + 只选了一本书 + `enableCustomExport && exportType == 1`」
+   * （`isCustomEpubExportEnabled`，`BookshelfManageScreenViewModel.kt:93-94`），本地没有「选完目录」
+   * 这个时机，等价时机是点「导出」那一刻，所以在 `runExport` 里判。
+   */
+  @State showCustomExportDialog: boolean = false;
+  /** true = 导出全本；false = 按下面的范围挑章。 */
+  @State customExportAllChapter: boolean = true;
+  @State customScopeInput: string = '1-';
+  @State customVolumeSizeInput: string = '1';
+  @State customFileNameInput: string = '';
+  /** 范围格式错误时的提示（上游 `customEpubScopeError`，文案见 `strings.xml:1620`）。 */
+  @State customScopeError: string = '';
+  private customExportDialogBuilder: () => void = () => {};
+  private customExportDialogId: number = -1;
   // 四个卡片式菜单的显隐状态，各自独立，避免互相顶掉。
   @State groupFilterVisible: boolean = false;
   @State moreMenuVisible: boolean = false;
   @State selectionMenuVisible: boolean = false;
-  @State exportCharsetVisible: boolean = false;
   @State groupSelectBookKeys: string[] = [];
   @State preselectedGroupName: string = '';
   @State rowMenuKey: string = '';
@@ -111,6 +156,7 @@ export struct BookshelfManagePage {
     this.currentGroupName = this.initialGroupName;
     this.downloadUnsubscribe = ChapterDownloadQueue.subscribe(() => this.refreshDownloadStates());
     this.refreshDownloadStates();
+    void this.loadExportSettings();
   }
 
   aboutToDisappear(): void {
@@ -314,56 +360,148 @@ export struct BookshelfManagePage {
     return parts[parts.length - 1];
   }
 
-  /** 模板占位符 {title}/{author}/{index}；空模板回落 {title}。 */
-  private exportFileName(book: Book, index: number): string {
-    const template = this.exportFileNameTemplate.trim().length > 0
-      ? this.exportFileNameTemplate.trim() : '{title}';
-    const name = template
-      .replace(/\{title\}/g, book.title)
-      .replace(/\{author\}/g, book.author.length > 0 ? book.author : '未知作者')
-      .replace(/\{index\}/g, String(index + 1));
-    const safe = name.replace(/[\/\\:*?"<>|]/g, '_');
-    return safe.endsWith('.txt') ? safe : safe + '.txt';
+  /**
+   * 导出设置落盘。上游每个开关都立即写 preferences（`BookExportSettingsRepository.kt:26-53`），
+   * 这里同样每次改动即存，不攒到导出时再写：用户改完设置直接退出页面也不丢。
+   */
+  private async persistExportSettings(next: BookExportSettings): Promise<void> {
+    this.exportSettings = next;
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      await BookExportSettingsStore.save(context, next);
+    } catch (error) {
+      console.error(`[BookshelfManage] 导出设置保存失败: ${error}`);
+    }
   }
 
-  private exportCharsetValue(): string {
-    return this.exportCustomCharset.trim().length > 0 ? this.exportCustomCharset.trim() : this.exportCharset;
+  /** 改单个字段：先 clone 再改再存，避免直接改 @State 持有的对象。 */
+  private async patchExportSettings(patch: (draft: BookExportSettings) => void): Promise<void> {
+    const draft = BookExportSettingsStore.clone(this.exportSettings);
+    patch(draft);
+    await this.persistExportSettings(draft);
   }
 
   /**
-   * 按指定字符集导出文本。utf-8 走字符串直写（全仓既有写法）；
-   * 其它字符集用 TextEncoder 编成 ArrayBuffer 再写：SDK 的 writeSync 收
-   * ArrayBuffer | string，直接把 Uint8Array 传进去在模拟器上会报 13900020（EINVAL）。
-   * 当前 SDK 不支持的字符集编码失败时回落字符串直写，避免整批导出中断。
+   * 打开「自定义字符集」/「导出文件名」输入对话框。
+   * 上游是两个独立的 AppAlertDialog（`BookshelfManageScreen.kt:1195-1215` 与 `:1217-1240`），
+   * 本地用一个对话框 + 一个开关区分，形态照 `pages/AppBackupSettingsPage.ets:404-433`：
+   * 用 openCustomDialog 而非 showAlertDialog —— 后者带不了输入框。
    */
-  private async saveExportText(context: Context, fileName: string, content: string,
-                               charset: string): Promise<boolean> {
-    const options = new picker.DocumentSaveOptions();
-    options.newFileNames = [fileName];
-    options.fileSuffixChoices = ['TXT 文本|.txt'];
-    const uris = await new picker.DocumentViewPicker(context).save(options);
-    const uri = uris[0];
-    if (uri === undefined) { return false; }
-    const target = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
-    try {
-      const normalized = charset.trim().toLowerCase();
-      if (normalized.length === 0 || normalized === 'utf-8' || normalized === 'utf8') {
-        fileIo.writeSync(target.fd, content);
-      } else {
-        let buffer: ArrayBuffer | undefined = undefined;
-        try {
-          const encoded: Uint8Array = util.TextEncoder.create(charset.trim()).encodeInto(content);
-          buffer = encoded.buffer as ArrayBuffer;
-        } catch (error) {
-          buffer = undefined;
-        }
-        if (buffer !== undefined) { fileIo.writeSync(target.fd, buffer); }
-        else { fileIo.writeSync(target.fd, content); }
+  private openExportInputDialog(charset: boolean): void {
+    this.showCharsetDialog = charset;
+    this.showFileNameDialog = !charset;
+    if (this.exportDialogId >= 0) { return; }
+    this.exportDialogBuilder = (): void => { this.ExportInputDialogContent(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.exportDialogBuilder,
+      autoCancel: false,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => {
+        this.exportDialogId = -1;
+        this.showCharsetDialog = false;
+        this.showFileNameDialog = false;
       }
-    } finally {
-      fileIo.closeSync(target);
+    }).then((id: number) => {
+      this.exportDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[BookshelfManage] 打开导出输入对话框失败: ${error}`);
+    });
+  }
+
+  private closeExportInputDialog(): void {
+    this.showCharsetDialog = false;
+    this.showFileNameDialog = false;
+    if (this.exportDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.exportDialogId);
+      this.exportDialogId = -1;
     }
-    return true;
+  }
+
+  /** 确认输入：字符集空串按上游回落 UTF-8（`BookshelfManageScreen.kt:1236`）。 */
+  private async confirmExportInput(): Promise<void> {
+    if (this.showCharsetDialog) {
+      const value = this.exportCharsetDraft.trim();
+      await this.patchExportSettings((draft: BookExportSettings) => {
+        draft.exportCharset = value.length > 0 ? value : 'UTF-8';
+      });
+    } else {
+      const value = this.exportFileNameDraft.trim();
+      await this.patchExportSettings((draft: BookExportSettings) => {
+        draft.bookExportFileName = value;
+      });
+    }
+    this.closeExportInputDialog();
+  }
+
+  private async loadExportSettings(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      this.exportSettings = await BookExportSettingsStore.load(context);
+      // 目录读写与可写探测都在 BookExporter，详情页与分段导出读的是同一份。
+      this.exportFolderPath = await BookExporter.loadFolder(context);
+      this.exportFolderWritable = this.exportFolderPath.length === 0
+        ? true : BookExporter.canWriteInto(this.exportFolderPath);
+    } catch (error) {
+      console.error(`[BookshelfManage] 导出设置读取失败: ${error}`);
+    }
+  }
+
+  /**
+   * 「导出文件夹」行：对齐上游 `selectExportFolder()`（`BookshelfManageScreen.kt:281-311`）的
+   * `OpenDocumentTree` —— 选一个目录并记住，之后导出直接写进去，不再弹保存框。
+   * 可写探测在 `BookExporter.canWriteInto`（与 `pages/Index.ets:6867-6884` 同法）。
+   */
+  private async chooseExportFolder(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const options = new picker.DocumentSelectOptions();
+      options.selectMode = picker.DocumentSelectMode.FOLDER;
+      options.maxSelectNumber = 1;
+      const uris = await new picker.DocumentViewPicker(context).select(options);
+      const uri = uris[0];
+      if (uri === undefined) { return; }
+      try {
+        await fileShare.persistPermission([{
+          uri: uri,
+          operationMode: fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE
+        }]);
+      } catch (error) {
+        // 授权失败本次仍可用，只是重启后失效，不阻断用户。
+        console.error(`[BookshelfManage] 记住导出目录授权失败: ${error}`);
+      }
+      const writable = BookExporter.canWriteInto(uri);
+      this.exportFolderPath = writable ? uri : '';
+      this.exportFolderWritable = writable;
+      await BookExporter.saveFolder(context, this.exportFolderPath);
+      if (!writable) {
+        this.onUnavailableAction('这个目录应用写不进去，已忽略');
+      }
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? `选择导出文件夹失败：${error.message}` : '选择导出文件夹失败');
+    }
+  }
+
+  /**
+   * 把当前设置与导出目录打包成 `ExportTarget` 交给 `BookExporter`。
+   *
+   * 导出执行层统一放在 `data/BookExporter.ets`：上游的 `ExportBookService` 被三处调用
+   * （书架管理页导出 / 详情页导出 EPUB / 分段导出），三处读同一份设置与同一个目录。
+   * 页面只负责设置读写、目录选择与输入对话框，拼正文与落盘都在执行层。
+   */
+  private exportTarget(): ExportTarget {
+    return {
+      settings: this.exportSettings,
+      folderPath: this.exportFolderPath,
+      folderWritable: this.exportFolderWritable
+    };
+  }
+
+  /** 导出一本书（TXT 或 EPUB），落盘后按 `exportToWebDav` 上传。实现见 `BookExporter.exportOne`。 */
+  private async exportOneBook(context: Context, book: Book): Promise<string> {
+    return await BookExporter.exportOne(context, book, this.exportTarget());
   }
 
   /** Map 原地 set 不触发 @State 刷新，一律整体替换。 */
@@ -422,31 +560,134 @@ export struct BookshelfManagePage {
   private async runExport(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { this.onUnavailableAction('无法访问本地文件'); return; }
+    // 上游在「选完导出目录」时判 `isCustomEpubExportEnabled`：单本 + 开了自定义导出 + 格式是 epub
+    // （`BookshelfManageScreen.kt:298`/`:336`，`BookshelfManageScreenViewModel.kt:93-94`）。
+    // 本地没有「选完目录」这个时机，等价时机是点「导出」这一刻。
+    if (this.exportBooks.length === 1 && this.isCustomEpubExportEnabled()) {
+      const book = this.exportBooks[0];
+      if (book !== undefined) {
+        this.openCustomExportDialog(book);
+        return;
+      }
+    }
     this.showExportSheet = false;
-    const total = this.exportBooks.length;
+    await this.exportBooksInOrder(context, this.exportBooks, false);
+  }
+
+  /** 上游 `isCustomEpubExportEnabled`：`enableCustomExport && exportType == 1`。 */
+  private isCustomEpubExportEnabled(): boolean {
+    return this.exportSettings.enableCustomExport && this.exportSettings.exportType === 1;
+  }
+
+  /** 逐本导出，把每本的提示写回行内文案。`scopeSpec` 非空时走分段导出。 */
+  private async exportBooksInOrder(context: Context, books: Book[], segmented: boolean,
+    scopeSpec: string = '', chaptersPerVolume: number = 1): Promise<void> {
+    const target = this.exportTarget();
+    const total = books.length;
     for (let i = 0; i < total; i++) {
-      const book = this.exportBooks[i];
+      const book = books[i];
       if (book === undefined) { continue; }
       const key = this.rowKey(book);
-      this.putExportMsg(key, `第 ${i + 1} / 共 ${total} 本，正在选择保存位置…`);
-      const body = BookRepository.readBookContentForPreview(book);
-      if (body.length === 0) {
-        this.putExportMsg(key, '没有可导出的纯文本正文');
-        continue;
-      }
-      // 上游「导出包含章节名」控制是否插章节标题行；本地整本导出时章节名本就在正文里，
-      // 这个开关只额外加一行书名/作者抬头（:468）。
-      const header = this.exportWithChapterName ? `${book.title}\n${book.author}\n\n` : '';
+      this.putExportMsg(key, `第 ${i + 1} / 共 ${total} 本，正在导出…`);
       let message = '已导出';
       try {
-        const saved = await this.saveExportText(context, this.exportFileName(book, i),
-          header + body, this.exportCharsetValue());
-        if (!saved) { message = '已取消'; }
+        if (segmented) {
+          const written = await BookExporter.exportSegmented(context, book, scopeSpec, chaptersPerVolume, target);
+          message = written === 0 ? '已取消' : `已导出 ${written} 卷`;
+        } else {
+          message = await BookExporter.exportOne(context, book, target);
+        }
       } catch (error) {
-        message = '导出失败';
+        message = error instanceof Error ? `导出失败：${error.message}` : '导出失败';
       }
       this.putExportMsg(key, message);
     }
+  }
+
+  /**
+   * 打开自定义导出对话框（上游 `BookshelfManageScreen.kt:1248-1371` 的 AppAlertDialog）。
+   * 上游用 AppAlertDialog 内嵌两个 RadioButton + 三个 AppTextField，本地同样用
+   * openCustomDialog 承载（showAlertDialog 带不了输入框）。
+   */
+  private openCustomExportDialog(book: Book): void {
+    this.showExportSheet = false;
+    this.segmentedExportBook = book;
+    this.customExportAllChapter = true;
+    this.customScopeInput = `1-${Math.max(1, this.chapterCountHint(book))}`;
+    this.customVolumeSizeInput = '1';
+    this.customFileNameInput = this.exportSettings.episodeExportFileName;
+    this.customScopeError = '';
+    this.showCustomExportDialog = true;
+    if (this.customExportDialogId >= 0) { return; }
+    this.customExportDialogBuilder = (): void => { this.CustomExportDialogContent(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.customExportDialogBuilder,
+      autoCancel: false,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => {
+        this.customExportDialogId = -1;
+        this.showCustomExportDialog = false;
+        this.customScopeError = '';
+      }
+    }).then((id: number) => {
+      this.customExportDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[BookshelfManage] 打开自定义导出对话框失败: ${error}`);
+    });
+  }
+
+  private closeCustomExportDialog(): void {
+    this.showCustomExportDialog = false;
+    this.customScopeError = '';
+    if (this.customExportDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.customExportDialogId);
+      this.customExportDialogId = -1;
+    }
+  }
+
+  /**
+   * 上游 `verificationField`（`utils/CustomExportUtils.kt:30-32`）：整串必须匹配
+   * `\d+(-\d+)?(,\d+(-\d+)?)*`，与 `EpubExporter.parseScope` 的宽松解析不是一回事 ——
+   * 上游是「先整串校验，不通过就不导出」，本地同口径。
+   */
+  private isValidScopeSpec(text: string): boolean {
+    return new RegExp('^\\d+(-\\d+)?(,\\d+(-\\d+)?)*$').test(text);
+  }
+
+  /** 自定义导出的「分析结果」预览（上游 `"$resultAnalyzedText: ${getExportFileName("epub", 1, 模板)}"`）。 */
+  private customExportPreviewName(): string {
+    const book = this.segmentedExportBook;
+    if (book === undefined) { return ''; }
+    return episodeExportFileNameOf(book, 'epub', 1, this.customFileNameInput.trim());
+  }
+
+  /** 确认自定义导出：全本走普通 EPUB，否则按范围与每卷章数走分段。 */
+  private async confirmCustomExport(): Promise<void> {
+    const book = this.segmentedExportBook;
+    if (book === undefined) { this.closeCustomExportDialog(); return; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.onUnavailableAction('无法访问本地文件'); return; }
+    if (this.customExportAllChapter) {
+      this.closeCustomExportDialog();
+      await this.exportBooksInOrder(context, [book], false);
+      return;
+    }
+    const scopeSpec = this.customScopeInput.trim();
+    if (!this.isValidScopeSpec(scopeSpec)) {
+      this.customScopeError = '请输入正确的章节范围';
+      return;
+    }
+    this.customScopeError = '';
+    const fileName = this.customFileNameInput.trim();
+    if (fileName.length > 0) {
+      await this.patchExportSettings((draft: BookExportSettings) => {
+        draft.episodeExportFileName = fileName;
+      });
+    }
+    const size = Math.floor(Number(this.customVolumeSizeInput));
+    this.closeCustomExportDialog();
+    await this.exportBooksInOrder(context, [book], true, scopeSpec,
+      Number.isFinite(size) && size >= 1 ? size : 1);
   }
 
   /** 每次打开删除框都从「未勾选」起步，不沿用上一次。 */
@@ -604,24 +845,6 @@ export struct BookshelfManagePage {
     })
   }
 
-  private exportCharsetItems(): UiMenuItem[] {
-    return ['UTF-8', 'GBK', 'GB2312', 'GB18030', 'Big5', 'UTF-16'].map((charset: string): UiMenuItem => {
-      return { key: charset, title: charset, selected: charset === this.exportCharset };
-    });
-  }
-
-  @Builder
-  private ExportCharsetMenu() {
-    UiMenuPanel({
-      items: this.exportCharsetItems(),
-      panelWidth: MANAGE_MENU_WIDTH,
-      onSelect: (key: string) => {
-        this.exportCharsetVisible = false;
-        this.exportCharset = key;
-      }
-    })
-  }
-
   // ---------------------------------------------------------------- 书籍行
 
   @Builder
@@ -754,51 +977,268 @@ export struct BookshelfManagePage {
     }.width('100%')
   }
 
+  /**
+   * 导出设置面板，11 项逐条对齐上游 `BookshelfManageScreen.kt:1020-1150` 的 LazyColumn：
+   * 格式下拉 / 字符集下拉 / 自定义字符集 / 导出文件夹 / 导出文件名 / 替换净化 /
+   * 自定义导出 / 导出包含章节名 / 导出到 WebDav / 导出插图文件 / 并行导出。
+   */
   @Builder
   private ExportSettingsContent() {
     Column() {
+      UiDropdown({
+        title: '导出格式',
+        option: EXPORT_TYPES[this.exportSettings.exportType] ?? 'txt',
+        options: EXPORT_TYPES,
+        onSelect: (value: string) => {
+          const index = EXPORT_TYPES.indexOf(value);
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.exportType = index < 0 ? 0 : index;
+          });
+        }
+      })
+      UiDropdown({
+        title: '导出字符集',
+        option: this.exportSettings.exportCharset,
+        options: COMMON_EXPORT_CHARSETS,
+        onSelect: (value: string) => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.exportCharset = value;
+          });
+        }
+      })
       Row() {
-        Text('导出格式').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('TXT（EPUB 打包器未接入）').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
-      }.width('100%').padding({ top: 8, bottom: 8 })
+        Text('自定义字符集').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text(this.exportSettings.exportCharset).fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          this.exportCharsetDraft = this.exportSettings.exportCharset;
+          this.openExportInputDialog(true);
+        })
       Row() {
-        Text('导出字符集').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text(this.exportCharset).fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
-          .onClick(() => { this.exportCharsetVisible = !this.exportCharsetVisible; })
-          .bindPopup(this.exportCharsetVisible, {
-            builder: this.ExportCharsetMenu,
-            placement: Placement.BottomRight,
-            popupColor: '#00000000',
-            enableArrow: false,
-            autoCancel: true,
-            width: MANAGE_MENU_WIDTH,
-            onStateChange: (event: PopupStateChangeParam) => { this.exportCharsetVisible = event.isVisible; }
-          })
-      }.width('100%').padding({ top: 8, bottom: 8 })
+        Text('导出文件夹').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text(this.exportFolderPath.length > 0 ? this.exportFolderPath : '未选择')
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+          .textAlign(TextAlign.End)
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => { void this.chooseExportFolder(); })
       Row() {
-        Text('自定义字符集').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).width(110)
-        TextInput({ text: this.exportCustomCharset, placeholder: '留空用上面选的字符集' })
-          .layoutWeight(1).height(36).fontSize(LABEL_MEDIUM)
-          .onChange((value: string) => this.exportCustomCharset = value)
-      }.width('100%').padding({ top: 8, bottom: 8 })
+        Text('导出文件名').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text(this.exportSettings.bookExportFileName.length > 0
+          ? this.exportSettings.bookExportFileName : '默认')
+          .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+          .textAlign(TextAlign.End)
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          this.exportFileNameDraft = this.exportSettings.bookExportFileName;
+          this.openExportInputDialog(false);
+        })
       Row() {
-        Text('导出文件名').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).width(110)
-        TextInput({ text: this.exportFileNameTemplate, placeholder: '{title}' })
-          .layoutWeight(1).height(36).fontSize(LABEL_MEDIUM)
-          .onChange((value: string) => this.exportFileNameTemplate = value)
-      }.width('100%').padding({ top: 8, bottom: 8 })
-      Text('占位符：{title} {author} {index}，空模板回落 {title}')
-        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%')
+        Text('替换净化').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        UiSwitchControl({
+          checked: this.exportSettings.exportUseReplace,
+          interactive: false,
+          onChange: (value: boolean) => {
+            void this.patchExportSettings((draft: BookExportSettings) => {
+              draft.exportUseReplace = value;
+            });
+          }
+        })
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.exportUseReplace = !draft.exportUseReplace;
+          });
+        })
+      Row() {
+        Text('自定义导出').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        UiSwitchControl({
+          checked: this.exportSettings.enableCustomExport,
+          interactive: false,
+          onChange: (value: boolean) => {
+            void this.patchExportSettings((draft: BookExportSettings) => {
+              draft.enableCustomExport = value;
+            });
+          }
+        })
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.enableCustomExport = !draft.enableCustomExport;
+          });
+        })
       Row() {
         Text('导出包含章节名').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         UiSwitchControl({
-          checked: this.exportWithChapterName,
+          checked: !this.exportSettings.exportNoChapterName,
           interactive: false,
-          onChange: (value: boolean) => this.exportWithChapterName = value
+          onChange: (value: boolean) => {
+            void this.patchExportSettings((draft: BookExportSettings) => {
+              draft.exportNoChapterName = !value;
+            });
+          }
         })
-      }.width('100%').padding({ top: 8, bottom: 8 })
-        .onClick(() => this.exportWithChapterName = !this.exportWithChapterName)
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.exportNoChapterName = !draft.exportNoChapterName;
+          });
+        })
+      Row() {
+        Text('导出到WebDav').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        UiSwitchControl({
+          checked: this.exportSettings.exportToWebDav,
+          interactive: false,
+          onChange: (value: boolean) => {
+            void this.patchExportSettings((draft: BookExportSettings) => {
+              draft.exportToWebDav = value;
+            });
+          }
+        })
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.exportToWebDav = !draft.exportToWebDav;
+          });
+        })
+      Row() {
+        Text('导出插图文件').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        UiSwitchControl({
+          checked: this.exportSettings.exportPictureFile,
+          interactive: false,
+          onChange: (value: boolean) => {
+            void this.patchExportSettings((draft: BookExportSettings) => {
+              draft.exportPictureFile = value;
+            });
+          }
+        })
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.exportPictureFile = !draft.exportPictureFile;
+          });
+        })
+      Row() {
+        Text('并行导出').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        UiSwitchControl({
+          checked: this.exportSettings.parallelExportBook,
+          interactive: false,
+          onChange: (value: boolean) => {
+            void this.patchExportSettings((draft: BookExportSettings) => {
+              draft.parallelExportBook = value;
+            });
+          }
+        })
+      }.width('100%').padding({ top: 10, bottom: 10 })
+        .onClick(() => {
+          void this.patchExportSettings((draft: BookExportSettings) => {
+            draft.parallelExportBook = !draft.parallelExportBook;
+          });
+        })
     }.width('100%')
+  }
+
+  /**
+   * 字符集 / 文件名输入对话框。形态照上游 AppAlertDialog（标题 + 一个输入框 + 确定/取消），
+   * 视觉用本仓 M3 对话框口径：`pages/AppBackupSettingsPage.ets:730-792` 的 312 宽 + 24 内距 + 28 圆角。
+   */
+  @Builder
+  private ExportInputDialogContent() {
+    Column() {
+      Text(this.showCharsetDialog ? '设置字符集' : '导出文件名')
+        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%')
+      TextInput({
+        text: this.showCharsetDialog ? this.exportCharsetDraft : this.exportFileNameDraft,
+        placeholder: this.showCharsetDialog ? 'UTF-8' : '{name} {author}'
+      })
+        .height(44).fontSize(BODY_MEDIUM).width('100%').margin({ top: 16 })
+        .onChange((value: string) => {
+          if (this.showCharsetDialog) {
+            this.exportCharsetDraft = value;
+          } else {
+            this.exportFileNameDraft = value;
+          }
+        })
+      if (!this.showCharsetDialog) {
+        Text('可用占位符：{name} {author} {group} {source} {remark}；留空则用「书名 作者：作者名」')
+          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 8 })
+      }
+      Row() {
+        Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .fontColor(this.themeColorTextSecondary).backgroundColor(this.themeColorSurfaceSecondary)
+          .onClick(() => this.closeExportInputDialog())
+        Button('确定').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .fontColor('#101116').backgroundColor(this.themeColorAccent).margin({ left: 12 })
+          .onClick(async () => { await this.confirmExportInput(); })
+      }.width('100%').margin({ top: 24 })
+    }
+    .width(312).padding(24)
+    .backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
+  }
+
+  /**
+   * 自定义导出对话框内容，逐项对齐上游 `BookshelfManageScreen.kt:1248-1371`：
+   * 两个单选（全本 / 按范围）+ 范围输入（含错误提示）+ 每卷章数 + 分卷文件名模板 +
+   * 「Analyzed: 预览名」。上游只在「按范围」时显示后三行，这里同构。
+   */
+  @Builder
+  private CustomExportDialogContent() {
+    Column() {
+      Text('选择要导出的章节')
+        .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%')
+      Row() {
+        Radio({ value: 'all', group: 'customExportScope' })
+          .checked(this.customExportAllChapter)
+          .onChange((checked: boolean) => { if (checked) { this.customExportAllChapter = true; } })
+        Text('导出全部').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').margin({ top: 12 })
+      Row() {
+        Radio({ value: 'range', group: 'customExportScope' })
+          .checked(!this.customExportAllChapter)
+          .onChange((checked: boolean) => { if (checked) { this.customExportAllChapter = false; } })
+        Text('按章节范围导出').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').margin({ top: 4 })
+      if (!this.customExportAllChapter) {
+        TextInput({ text: this.customScopeInput, placeholder: '1-5,8,10-18' })
+          .height(44).fontSize(BODY_MEDIUM).width('100%').margin({ top: 12 })
+          .onChange((value: string) => {
+            this.customScopeInput = value;
+            this.customScopeError = '';
+          })
+        if (this.customScopeError.length > 0) {
+          Text(this.customScopeError).fontSize(LABEL_SMALL).fontColor('#F2B8B5')
+            .width('100%').margin({ top: 4 })
+        }
+        Text('每个文件包含的章节数').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .width('100%').margin({ top: 12 })
+        TextInput({ text: this.customVolumeSizeInput, placeholder: '1' })
+          .height(44).fontSize(BODY_MEDIUM).width('100%').type(InputType.Number).margin({ top: 4 })
+          .onChange((value: string) => { this.customVolumeSizeInput = value; })
+        Text('分卷文件名模板').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .width('100%').margin({ top: 12 })
+        TextInput({ text: this.customFileNameInput, placeholder: '{name} - {author}' })
+          .height(44).fontSize(BODY_MEDIUM).width('100%').margin({ top: 4 })
+          .onChange((value: string) => { this.customFileNameInput = value; })
+        // 上游：模板为空或不可解析时不显示预览，非空且解析失败时显示 Error（`:1257`/`:1319-1330`）。
+        if (this.customFileNameInput.trim().length > 0) {
+          Text(`Analyzed: ${this.customExportPreviewName()}`)
+            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
+        }
+      }
+      Row() {
+        Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .fontColor(this.themeColorTextSecondary).backgroundColor(this.themeColorSurfaceSecondary)
+          .onClick(() => this.closeCustomExportDialog())
+        Button('确定').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .fontColor('#101116').backgroundColor(this.themeColorAccent).margin({ left: 12 })
+          .onClick(async () => { await this.confirmCustomExport(); })
+      }.width('100%').margin({ top: 24 })
+    }
+    .width(312).padding(24)
+    .backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
   }
 
   @Builder

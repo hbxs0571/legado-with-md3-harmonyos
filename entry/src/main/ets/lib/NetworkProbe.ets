@@ -16,9 +16,30 @@ export class NetworkProbe {
   private static onWifi: boolean = true;
   private static started: boolean = false;
   private static conn: connection.NetConnection | undefined = undefined;
+  /**
+   * 当前是否有可用网络。**未知时按「有网」处理**，理由同 `onWifi`：
+   * 探测失败就说没网，会把该做的同步静默跳过，比多试一次更糟。
+   */
+  private static available: boolean = true;
+  /** 可用性从「无」变「有」时逐个回调（对应上游 `ReadBookViewModel.onNetworkChanged`）。 */
+  private static availabilityListeners: Array<() => void> = [];
 
   static isOnWifi(): boolean {
     return NetworkProbe.onWifi;
+  }
+
+  static isAvailable(): boolean {
+    return NetworkProbe.available;
+  }
+
+  /**
+   * 注册「网络恢复可用」回调。只在这一刻触发，不做防抖 ——
+   * 调用方自己判断要不要做事（上游 `onNetworkChanged` 里也是靠 `syncBookProgressPlus` 等条件过滤）。
+   */
+  static onAvailable(listener: () => void): void {
+    if (!NetworkProbe.availabilityListeners.includes(listener)) {
+      NetworkProbe.availabilityListeners.push(listener);
+    }
   }
 
   /** 同步查询一次当前默认网络，返回判断结果。查询失败保持上一次的值。 */
@@ -27,14 +48,30 @@ export class NetworkProbe {
       const handle = connection.getDefaultNetSync();
       if (handle === undefined || handle.netId === 0) {
         NetworkProbe.onWifi = false;
+        NetworkProbe.setAvailable(false);
         return NetworkProbe.onWifi;
       }
       const caps = connection.getNetCapabilitiesSync(handle);
       NetworkProbe.onWifi = NetworkProbe.isWifiBearer(caps);
+      NetworkProbe.setAvailable(true);
     } catch (e) {
       // 无网络权限、查询异常时不做判断，沿用旧值。
     }
     return NetworkProbe.onWifi;
+  }
+
+  /** 只有「无 → 有」这一跳才通知，避免网络类型在 WiFi/蜂窝之间切换时重复触发。 */
+  private static setAvailable(next: boolean): void {
+    if (NetworkProbe.available === next) { return; }
+    NetworkProbe.available = next;
+    if (!next) { return; }
+    for (const listener of NetworkProbe.availabilityListeners) {
+      try {
+        listener();
+      } catch (e) {
+        // 单个回调出错不能连累其它订阅者。
+      }
+    }
   }
 
   /** 注册一次监听并同步初值。重复调用无副作用。 */

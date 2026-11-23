@@ -11,7 +11,8 @@ import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { DEFAULT_DAILY_READING_GOAL_MINUTES, MAX_DAILY_READING_GOAL_MINUTES } from '../data/HomeDashboardSettingsRepository';
-import { BODY_MEDIUM, BODY_SMALL, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { BODY_MEDIUM, BODY_SMALL, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { i18n, intl } from '@kit.LocalizationKit';
 
 /** 首页右上角菜单的宽度，与详情页溢出菜单同口径。 */
 const HOME_MENU_WIDTH: number = 260;
@@ -24,6 +25,18 @@ export struct HomePage {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  /** WebDAV 卡副标题的常态色，上游 `onSurfaceVariant`。 */
+  @StorageProp('themeColorOnSurfaceVariant') themeColorOnSurfaceVariant: string = '#45483D';
+  /** WebDAV 卡副标题的失败色，上游 `colorScheme.error`。 */
+  @StorageProp('themeColorError') themeColorError: string = '#BA1A1A';
+  /**
+   * 三个按钮的容器色。上游 `SmallTonalButton` 走 `SeriesIconButtonStyle.Tonal`，
+   * 容器色解析成 `surfaceContainerLow`（`SeriesIconButton.kt:280`），禁用态换成 `outlineVariant`
+   * （`SeriesIconButton.kt:288-292`）。本地 `themeColorSurfaceSecondary` 就是 surfaceContainerLow，
+   * `themeColorOutlineVariant` 就是 outlineVariant（`data/ThemePalette.ets:1174`/`:1155`）。
+   */
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#F0F1F5';
+  @StorageProp('themeColorOutlineVariant') themeColorOutlineVariant: string = '#C5C8BA';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
@@ -45,11 +58,31 @@ export struct HomePage {
   // 今日阅读目标：由 Index 从偏好与今日阅读记录灌入，本页只显示与编辑（回写走 onGoalChange）。
   @Prop goalMinutes: number = DEFAULT_DAILY_READING_GOAL_MINUTES;
   @Prop todayReadMinutes: number = 0;
-  // WebDAV 卡副标题四态：0 未测 / 1 加载中 / 2 成功（有备份名）/ 3 失败。
-  @Prop webDavBackupName: string = '';
-  @Prop webDavState: number = 0;
-  onWebDavBackup: () => void = () => {};
-  onWebDavRestore: () => void = () => {};
+  /**
+   * WebDAV 卡四态，照上游 `HomeViewModel.kt:363-368` 的 `HomeBackupState`：
+   * `latestBackupName` 非空即有备份（`latest != null`），`backupLoading` 是 `isLoading`，
+   * `backupLoadError` 是 `isLoadError`，`backupActionRunning` 是 `isActionRunning`。
+   * 副标题文案的先后顺序也照上游 `HomeScreen.kt:1173-1195` 的 when 分支：加载中 → 有备份 → 失败 → 无备份。
+   */
+  @Prop latestBackupName: string = '';
+  /** 最新备份的毫秒时间戳，0 表示没有；上游显示的是格式化后的时间而不是文件名。 */
+  @Prop latestBackupTime: number = 0;
+  @Prop backupLoading: boolean = false;
+  @Prop backupLoadError: boolean = false;
+  @Prop backupActionRunning: boolean = false;
+  /** 上游 `HomeIntent.BackupClick` / `RestoreClick` / `BackupSettingsClick` / `RetryBackupInfo`。 */
+  onBackupClick: () => void = () => {};
+  onRestoreClick: () => void = () => {};
+  onRetryBackupInfo: () => void = () => {};
+  /**
+   * 备份/恢复选项弹层：'' 关闭 / 'backup' 备份三选一 / 'restore' 恢复二选一。
+   * 上游是 `HomeSheet.BackupOptions` 与 `HomeSheet.RestoreOptions` 两个 sheet
+   * （`HomeScreen.kt:1375-1399`），本地复用本组件已有的那一个 bindSheet（同组件只能挂一个）。
+   */
+  @Prop backupSheet: string = '';
+  onSelectBackupDestination: (destination: string) => void = (_destination: string) => {};
+  onSelectRestoreDestination: (destination: string) => void = (_destination: string) => {};
+  onDismissBackupSheet: () => void = () => {};
   onGoalChange: (minutes: number) => void = (_minutes: number) => {};
   onOpenBook: (book: Book) => void = () => {};
   onOpenBookInfo: (book: Book) => void = () => {};
@@ -354,41 +387,35 @@ export struct HomePage {
           }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(16)).margin({ top: 12 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           if (this.visibleSections.includes('backup')) {
-          Column() {
-            Row() {
-              AppGlyph({ name: 'cloudSync', tint: this.themeColorAccent, glyphSize: 20 })
-              Column() {
+          Column({ space: 12 }) {
+            Row({ space: 10 }) {
+              // 上游 `HomeScreen.kt:1198` 的 `AppIcon(CloudSync, tint = primary, offset y = 1.dp)`。
+              AppGlyph({ name: 'cloudSync', tint: this.themeColorAccent, glyphSize: 20 }).margin({ top: 1 })
+              Column({ space: 2 }) {
                 Text('WebDAV 备份').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary)
-                // 四态照抄上游：加载中 / 失败 / 有备份 / 无备份，一个字不改。
-                if (this.webDavState === 1) {
-                  Text('正在获取备份信息…').fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
-                } else if (this.webDavState === 3) {
-                  Text('无法获取备份信息').fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
-                } else if (this.webDavState === 2) {
-                  Text(`最近备份：${this.webDavBackupName}`).fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
-                } else {
-                  Text('暂无 WebDAV 备份').fontSize(BODY_SMALL).fontColor('#AEB0BA').margin({ top: 4 })
-                }
-              }.alignItems(HorizontalAlign.Start).margin({ left: 10 })
-            }.width('100%')
-            Row() {
-              Row() {
-                AppGlyph({ name: 'cloudUpload', glyphSize: 15 })
-                Text('备份').fontSize(LABEL_LARGE).fontColor('#C5C7D0').margin({ left: 5 })
-              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14)
-                .onClick(() => this.onWebDavBackup())
-              Row() {
-                AppGlyph({ name: 'cloudDownload', glyphSize: 15 })
-                Text('恢复').fontSize(LABEL_LARGE).fontColor('#C5C7D0').margin({ left: 5 })
-              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
-                .onClick(() => this.onWebDavRestore())
-              Row() {
-                AppGlyph({ name: 'settings', glyphSize: 15 })
-                Text('设置').fontSize(LABEL_LARGE).fontColor('#C5C7D0').margin({ left: 5 })
-              }.layoutWeight(1).justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 }).backgroundColor('#17181E').borderRadius(14).margin({ left: 8 })
-                .onClick(() => this.onOpenBackup())
-            }.margin({ top: 12 })
-          }.width('100%').padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(16)).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
+                // 四态顺序照上游 `HomeScreen.kt:1173-1195` 的 when：加载中 → 有备份 → 失败 → 无备份。
+                // 有备份时上游显示的是 `DateFormat.getDateTimeInstance(MEDIUM, SHORT)` 格式化的时间，
+                // 不是文件名；失败态用 colorScheme.error。
+                Text(this.backupSubtitleText())
+                  .fontSize(BODY_SMALL)
+                  .fontColor(this.backupLoadError && !this.backupLoading ? this.themeColorError : this.themeColorOnSurfaceVariant)
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              if (this.backupLoading || this.backupActionRunning) {
+                // 上游 `AppContainedLoadingIndicator(size = 24.dp)`。
+                LoadingProgress().width(24).height(24).color(this.themeColorAccent)
+              }
+            }.width('100%').alignItems(VerticalAlign.Center)
+            if (this.backupLoadError && !this.backupLoading) {
+              // 上游 `:1213-1220`：加载失败时整行只给一个「重试」按钮，不给备份/恢复/设置。
+              this.BackupTonalButton('profileRefresh', '重试', !this.backupActionRunning, () => this.onRetryBackupInfo())
+            } else {
+              Row({ space: 8 }) {
+                this.BackupTonalButton('cloudUpload', '备份', !this.backupActionRunning, () => this.onBackupClick())
+                this.BackupTonalButton('cloudDownload', '恢复', !this.backupActionRunning, () => this.onRestoreClick())
+                this.BackupTonalButton('settings', '设置', !this.backupActionRunning, () => this.onOpenBackup())
+              }.width('100%')
+            }
+          }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(16)).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
           }
           Column({ space: 12 }) {
             AppGlyph({ name: 'add', tint: this.themeColorTextSecondary, glyphSize: 32 })
@@ -442,13 +469,15 @@ export struct HomePage {
         })
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       // 同一组件只挂一个 bindSheet（项目已踩过挂多个只有最后一个生效的坑），
-      // 首页组件面板与设定阅读目标对话框共用，按状态切换内容。
-      .bindSheet(this.showHomeOptions || this.showGoalDialog, this.homeSheetContent(), {
+      // 首页组件面板、设定阅读目标对话框、备份三选一、恢复二选一共用，按状态切换内容。
+      // 上游这四个是独立组件：`HomeSheet`（组件面板）、`HomeDialog.SetReadingGoal`、
+      // `HomeSheet.BackupOptions`、`HomeSheet.RestoreOptions`（`HomeScreen.kt:1375-1399`）。
+      .bindSheet(this.showHomeOptions || this.showGoalDialog || this.backupSheet.length > 0, this.homeSheetContent(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
         backgroundColor: this.themeColorSurfaceTertiary,
-        onDisappear: () => { this.showHomeOptions = false; this.showGoalDialog = false; }
+        onDisappear: () => { this.showHomeOptions = false; this.showGoalDialog = false; this.onDismissBackupSheet(); }
       })
   }
 
@@ -462,13 +491,123 @@ export struct HomePage {
     this.showGoalDialog = false;
   }
 
+  /**
+   * WebDAV 卡副标题四态文案，照上游 `HomeScreen.kt:1173-1195` 的 when 顺序：
+   * `isLoading` → 加载中；`latestBackup != null` → 「最近备份：<时间>」；
+   * `isLoadError` → 加载失败；否则 → 无备份。
+   */
+  private backupSubtitleText(): string {
+    if (this.backupLoading) {
+      return '正在获取备份信息…';
+    }
+    if (this.latestBackupTime > 0) {
+      return `最近备份：${this.formatBackupTime(this.latestBackupTime)}`;
+    }
+    if (this.backupLoadError) {
+      return '无法获取备份信息';
+    }
+    return '暂无 WebDAV 备份';
+  }
+
+  /**
+   * 备份时间格式化。上游用 `DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)`，
+   * 中文环境下的形态是「2026年11月23日 23:15」。这里走 `@ohos.intl` 的
+   * `DateTimeFormat`（`@ohos.intl.d.ts:791`），`dateStyle`/`timeStyle` 两档见 `:435-488`；
+   * 不用 `toLocaleString()`：它拿不到 MEDIUM/SHORT 这两档粒度。
+   */
+  private formatBackupTime(timestamp: number): string {
+    try {
+      const options: intl.DateTimeOptions = { dateStyle: 'medium', timeStyle: 'short' };
+      const formatter: intl.DateTimeFormat = new intl.DateTimeFormat(i18n.System.getSystemLocale(), options);
+      return formatter.format(new Date(timestamp));
+    } catch (_) {
+      // 老设备没有 dateStyle/timeStyle 时退到逐字段拼，形态与 MEDIUM/SHORT 一致。
+      const d: Date = new Date(timestamp);
+      const p2 = (v: number): string => v < 10 ? '0' + v : String(v);
+      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    }
+  }
+
+  /**
+   * 卡上的一颗 `SmallTonalButton`（上游 `SmallTonalButton.kt:12-51`）：
+   * 文字 + 18dp 图标、`labelMedium`、内距 8/4、间距 4、圆角 `RoundedCornerShape(50)`（胶囊）、
+   * 容器 `surfaceContainerLow`、内容 `onSurfaceVariant`；禁用时容器换 `outlineVariant`、
+   * 内容 alpha 0.38（`SeriesIconButton.kt:288-303`）。
+   */
+  @Builder
+  private BackupTonalButton(icon: AppGlyphName, label: string, buttonEnabled: boolean, action: () => void) {
+    Row({ space: 4 }) {
+      AppGlyph({ name: icon, glyphSize: 18, tint: buttonEnabled ? this.themeColorOnSurfaceVariant : this.themeColorOnSurfaceVariant })
+        .opacity(buttonEnabled ? 1 : 0.38)
+      Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorOnSurfaceVariant).opacity(buttonEnabled ? 1 : 0.38)
+    }
+    .layoutWeight(1).justifyContent(FlexAlign.Center)
+    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+    .backgroundColor(buttonEnabled ? this.themeColorSurfaceSecondary : this.themeColorOutlineVariant)
+    .borderRadius(50)
+    .onClick(() => { if (buttonEnabled) { action(); } })
+  }
+
   @Builder
   private homeSheetContent() {
     if (this.showGoalDialog) {
       this.goalDialogContent();
+    } else if (this.backupSheet === 'backup') {
+      this.backupOptionSheetContent();
+    } else if (this.backupSheet === 'restore') {
+      this.restoreOptionSheetContent();
     } else {
       this.homeOptionsSheetContent();
     }
+  }
+
+  /**
+   * 备份三选一，对齐上游 `HomeScreen.kt:1375-1386` 的 `BackupOptionSheet`：
+   * 标题「备份」，三张卡分别是「备份至本地」「备份至网络」「备份至本地与网络」
+   * （文案取 `strings.xml:1045`/`:1046`/`:1044`）。
+   */
+  @Builder
+  private backupOptionSheetContent() {
+    Column() {
+      Text('备份').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
+      Row({ space: 12 }) {
+        this.BackupOptionCard('folder', '备份至本地', () => this.onSelectBackupDestination('local'))
+        this.BackupOptionCard('cloud', '备份至网络', () => this.onSelectBackupDestination('webdav'))
+      }.width('100%').padding({ left: 18, right: 18 })
+      Row({ space: 12 }) {
+        this.BackupOptionCard('grid', '备份至本地与网络', () => this.onSelectBackupDestination('both'))
+        Blank().layoutWeight(1)
+      }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 24 })
+    }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 恢复二选一，对齐上游 `HomeScreen.kt:1387-1399` 的 `RestoreOptionSheet`：
+   * 「从本地恢复」「从网络恢复」两张卡（文案取 `strings.xml:205` 与 `:190`）。
+   */
+  @Builder
+  private restoreOptionSheetContent() {
+    Column() {
+      Text('恢复').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
+      Row({ space: 12 }) {
+        this.BackupOptionCard('folder', '从本地恢复', () => this.onSelectRestoreDestination('local'))
+        this.BackupOptionCard('cloud', '从网络恢复', () => this.onSelectRestoreDestination('webdav'))
+      }.width('100%').padding({ left: 18, right: 18, bottom: 24 })
+    }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
+  /** 弹层里的 100vp 方卡，对齐上游 `OptionCard`（`OptionSheet.kt:55-87`）。 */
+  @Builder
+  private BackupOptionCard(icon: AppGlyphName, label: string, action: () => void) {
+    Column({ space: 8 }) {
+      AppGlyph({ name: icon, glyphSize: 32, tint: this.themeColorAccent })
+      Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
+    }.layoutWeight(1).height(100).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
+      .onClick(action)
   }
 
   /** 设定阅读目标对话框（上游 SetReadingGoal）：标题/标签照抄 strings.xml。 */

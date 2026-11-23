@@ -12,6 +12,7 @@ import { BookSourceRuntimeStore } from '@legado/sourceengine';
 import { BookSourceRuntimePersistenceImpl } from '../bookSource/BookSourceRuntimePersistenceImpl';
 import { OnlineBookService } from '../bookSource/OnlineBookService';
 import { ChapterDownloadQueue } from '../bookSource/ChapterDownloadQueue';
+import { CrashHandler } from '../lib/CrashHandler';
 
 /**
  * 系统栏底色：全屏布局下恒透明。
@@ -75,6 +76,10 @@ export default class EntryAbility extends UIAbility {
     // 仓储缓存此时可能还没 load（首屏才 load），但 getBookSource 走 getAll 是同步快照，
     // 首次调用发生在用户点搜索之后，那时缓存已就绪。
     BookSourceRuntimeStore.install(new BookSourceRuntimePersistenceImpl(this.context));
+    // 全局未捕获异常落盘（缺口 39，对齐上游 CrashHandler.kt:36-38 的
+    // Thread.setDefaultUncaughtExceptionHandler）。装在这里是因为它必须在任何
+    // 业务代码之前生效，且要早于首屏 —— 启动阶段的崩溃也要能留下日志。
+    CrashHandler.install(this.context);
     // 在线书内容提供器（P3-E）：缓存优先 + 书源网络兜底，供在线书打开阅读用。
     // 批2（:455）：同一个实例也装进下载队列 —— 队列判「这章缓存在不在」与阅读时读缓存
     // 必须是同一份路径规则，两个实例各建目录名只会互相看不见。
@@ -93,6 +98,9 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     this.context.eventHub.emit('pauseReadSession');
+    // 每日自动备份：上游在 MainActivity.onDestroy 与阅读页 onPause 都调 Backup.autoBack，
+    // 退到后台是这两处的公共点。是否真要备份由监听方按「距上次超过 1 天」自行判断。
+    this.context.eventHub.emit('autoBackup');
     // 「离开应用前有效」档：grace=0 立即锁、grace>0 记时间戳，回前台按宽限期判定（批5，对齐上游 PrivateUnlockScope.UntilBackground）。
     PrivateAccessRepository.onBackground();
   }
@@ -101,6 +109,14 @@ export default class EntryAbility extends UIAbility {
     this.context.eventHub.emit('resumeReadSession');
     // 回前台检查宽限期是否已过，过了就回锁定态。
     PrivateAccessRepository.onForeground();
+  }
+
+  onDestroy(): void {
+    // 上游 `MainActivity.kt:1208-1215 onDestroy()` 在退出应用时再调一次 `Backup.autoBack(this)`。
+    // 这里同样发一次事件：退到后台时通常已经发过一次，重复触发会被「距上次超过 1 天」的判断挡掉，
+    // 但如果用户是直接从后台划掉进程（onBackground 之后没再回前台），这是唯一能补上的一次机会。
+    this.context.eventHub.emit('pauseReadSession');
+    this.context.eventHub.emit('autoBackup');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

@@ -32,6 +32,8 @@ import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownlo
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { ReplaceRule, replaceRuleRowKey } from '../model/ReplaceRule';
 import { ReplaceRulePreviewLine, ReplaceRuleRepository } from '../data/ReplaceRuleRepository';
+import { CrashLogFile, CrashLogRepository } from '../data/CrashLogRepository';
+import { OtherSettingsRepository } from '../data/OtherSettingsRepository';
 import { ReadRecordDetail, ReadRecordSession, ReadRecordSummary, ReadTimeRecord } from '../model/ReadRecord';
 import { ReadRecordRepository } from '../data/ReadRecordRepository';
 import { TxtTocRule } from '../model/TxtTocRule';
@@ -7560,12 +7562,25 @@ export struct AboutAppPage {
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#E7E8EC';
   onBack: () => void = () => {};
   onOpenPrivacyNotice: () => void = () => {};
   onOpenLicense: () => void = () => {};
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   @State versionName: string = '';
   @State collapsedHeader: boolean = false;
+  /** 崩溃日志面板开关，对应上游 `AboutSheet.CrashLogs`（`AboutScreen.kt:254-260`）。 */
+  @State showCrashLogs: boolean = false;
+  /** 崩溃日志列表，对应上游 `state.crashLogFiles`。 */
+  @State crashLogFiles: CrashLogFile[] = [];
+  /**
+   * 正在查看的那份崩溃日志正文。
+   *
+   * 上游读文件成功后把 sheet 换成 `AboutSheet.Markdown(name, content)`（`AboutViewModel.kt:123-131`），
+   * 这里用「同一个 bindSheet 的第二档内容」表达同一件事 —— ArkUI 一个节点只能挂一个 bindSheet。
+   */
+  @State crashLogTitle: string = '';
+  @State crashLogContent: string = '';
   private aboutScroller: Scroller = new Scroller();
 
   private updateHeader(): void {
@@ -7591,6 +7606,133 @@ export struct AboutAppPage {
       this.versionName = bundleInfo.versionName;
     } catch (_) {
       this.versionName = '版本信息不可用';
+    }
+  }
+
+  /**
+   * 打开崩溃日志面板，对应上游 `AboutViewModel.showCrashLogs`（`:110-121`）。
+   *
+   * 上游是 `execute { loadCrashLogFiles() }` 成功后再把 sheet 置成 `CrashLogs`；
+   * 这里同样先读列表再开面板，读完是空列表也照样打开 —— 上游靠 `CrashLogSheet`
+   * 内部的 `EmptyMessage(no_crash_logs)` 表达「没有日志」，不是干脆不弹。
+   */
+  private async showCrashLogsPanel(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法访问应用上下文，崩溃日志未读取');
+      return;
+    }
+    this.crashLogTitle = '';
+    this.crashLogContent = '';
+    this.crashLogFiles = await CrashLogRepository.listCrashLogs(context);
+    this.showCrashLogs = true;
+  }
+
+  /**
+   * 读单份崩溃日志，对应上游 `AboutViewModel.readCrashFile`（`:123-131`）。
+   *
+   * 上游成功后把 sheet 切成 `AboutSheet.Markdown(fileDoc.name, content)`，失败 toast
+   * 异常消息。本地在同一个 bindSheet 内切到第二档内容（标题 + 正文滚动区），
+   * 失败同样用 `onUnavailableAction` 报出来。
+   */
+  private async readCrashLogFile(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法访问应用上下文，崩溃日志未读取');
+      return;
+    }
+    try {
+      this.crashLogContent = await CrashLogRepository.readCrashLog(context, name);
+      this.crashLogTitle = name;
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? error.message : '读取崩溃日志失败');
+    }
+  }
+
+  /**
+   * 清空崩溃日志，对应上游 `AboutViewModel.clearCrashLogs`（`:133-154`）。
+   *
+   * 上游删两处目录后 `.onFinally` 重新读列表刷新面板；这里同样在删完后重读，
+   * 面板保持打开，用户能立刻看到列表变空。
+   */
+  private async clearCrashLogs(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法访问应用上下文，崩溃日志未清空');
+      return;
+    }
+    try {
+      await CrashLogRepository.clearCrashLogs(context);
+      this.crashLogFiles = await CrashLogRepository.listCrashLogs(context);
+      this.crashLogTitle = '';
+      this.crashLogContent = '';
+      this.onUnavailableAction('已清空崩溃日志');
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? error.message : '清空崩溃日志失败');
+    }
+  }
+
+  /**
+   * 保存日志，对应上游 `AboutViewModel.saveLog`（`:173-190`）。
+   *
+   * 上游两条前置判断都只是 toast，**不中断**：备份目录为空才 return；
+   * `recordLog` 关闭只提示一句然后照常保存（`delay(3000)` 只是为了让人看清提示）。
+   * 本地没有 delay 的必要 —— 提示走 `onUnavailableAction`，保存照常进行。
+   */
+  private async saveLog(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法访问应用上下文，日志未保存');
+      return;
+    }
+    const backupPath = CrashLogRepository.backupFolderSync(context);
+    if (backupPath.length === 0) {
+      this.onUnavailableAction('还没有设置备份目录，无法保存日志');
+      return;
+    }
+    if (!OtherSettingsRepository.get().recordLog) {
+      this.onUnavailableAction('日志记录已关闭，本次只导出当前已有的日志');
+    }
+    try {
+      const saved = await CrashLogRepository.exportLogs(context);
+      this.onUnavailableAction(saved ? `日志已保存到备份目录` : '日志保存失败');
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? `日志保存失败：${error.message}` : '日志保存失败');
+    }
+  }
+
+  /**
+   * 创建堆转储，对应上游 `AboutViewModel.createHeapDump`（`:192-214`）。
+   *
+   * 上游：备份目录为空 → toast 并 return；`recordHeapDump` 关闭 → toast 但**不 return**；
+   * toast「正在创建」；`System.gc()`；`CrashHandler.doHeapDump(true)`；拷贝失败提示
+   * `about_heap_dump_not_found`，成功提示已保存到备份目录。ArkTS 没有 `System.gc()`，
+   * 这一步在本地没有对应动作（`dumpJsHeapData` 自己会触发回收）。
+   */
+  private async createHeapDump(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('无法访问应用上下文，堆转储未创建');
+      return;
+    }
+    const backupPath = CrashLogRepository.backupFolderSync(context);
+    if (backupPath.length === 0) {
+      this.onUnavailableAction('还没有设置备份目录，无法创建堆转储');
+      return;
+    }
+    if (!OtherSettingsRepository.get().recordHeapDump) {
+      this.onUnavailableAction('堆转储记录已关闭，本次仍会创建一份');
+    }
+    try {
+      const dumped = CrashLogRepository.createHeapDumpSync(context, true);
+      if (dumped.length === 0) {
+        this.onUnavailableAction('没有生成堆转储文件');
+        return;
+      }
+      const copied = await CrashLogRepository.copyHeapDumpToBackup(context);
+      this.onUnavailableAction(copied ? '堆转储已保存到备份目录' : '没有找到堆转储文件');
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? `创建堆转储失败：${error.message}` : '创建堆转储失败');
     }
   }
 
@@ -7622,13 +7764,86 @@ export struct AboutAppPage {
             AboutActionRow({ title: '用户隐私与协议', onSelect: () => this.onOpenPrivacyNotice() })
             AboutActionRow({ title: '开源许可', onSelect: () => this.onOpenLicense() })
             AboutActionRow({ title: '免责声明', onSelect: () => this.onUnavailableAction('免责声明页面尚未迁移') })
-            AboutActionRow({ title: '崩溃日志', onSelect: () => this.onUnavailableAction('崩溃日志页面尚未迁移') })
-            AboutActionRow({ title: '保存日志', onSelect: () => this.onUnavailableAction('日志导出尚未迁移') })
-            AboutActionRow({ title: '创建堆转储', last: true, onSelect: () => this.onUnavailableAction('堆转储尚未迁移') })
+            AboutActionRow({ title: '崩溃日志', onSelect: () => { this.showCrashLogsPanel(); } })
+            AboutActionRow({ title: '保存日志', onSelect: () => { this.saveLog(); } })
+            AboutActionRow({ title: '创建堆转储', last: true, onSelect: () => { this.createHeapDump(); } })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
         }.padding({ left: 16, right: 16, top: 4, bottom: 18 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
+      .bindSheet(this.showCrashLogs, this.CrashLogSheet(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: this.themeColorSurfaceTertiary,
+        onDisappear: () => {
+          this.showCrashLogs = false;
+          this.crashLogTitle = '';
+          this.crashLogContent = '';
+        }
+      })
+  }
+
+  /**
+   * 崩溃日志面板，对齐上游 `ui/widget/components/log/CrashLogSheet.kt`（67 行）。
+   *
+   * 上游结构：`AppModalBottomSheet(title = crash_log, endAction = MediumTonalButton(DeleteSweep, clear))`，
+   * 内容为空时 `EmptyMessage(no_crash_logs)`，否则 `LazyColumn` 逐条 `AppText(fileDoc.name)`，
+   * 点击 `onReadFile(fileDoc)`。读到的正文由上游切到 `MarkdownSheet` 展示；这里因为
+   * 一个节点只能挂一个 bindSheet，用 `crashLogTitle` 非空作为「第二档」标记，
+   * 在同一面板里换成「标题 + 正文滚动区 + 返回」。
+   */
+  @Builder
+  private CrashLogSheet() {
+    Column() {
+      // 头部：标题居中 + 右侧清空按钮，与 `AppModalBottomSheet` 的 `endAction` 同位。
+      Stack({ alignContent: Alignment.Center }) {
+        Text(this.crashLogTitle.length > 0 ? this.crashLogTitle : '崩溃日志')
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .padding({ left: 56, right: 56 })
+        Row() {
+          Blank()
+          if (this.crashLogTitle.length > 0) {
+            // 第二档：返回列表。上游 MarkdownSheet 的返回是关面板，这里退回到列表更顺手。
+            Text('返回').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
+              .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+              .onClick(() => {
+                this.crashLogTitle = '';
+                this.crashLogContent = '';
+              })
+          } else {
+            Text('清空').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
+              .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+              .onClick(() => { this.clearCrashLogs(); })
+          }
+        }.width('100%')
+      }.width('100%').padding({ bottom: 16 })
+
+      if (this.crashLogTitle.length > 0) {
+        Scroll() {
+          Text(this.crashLogContent)
+            .fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
+            .width('100%').textAlign(TextAlign.Start)
+        }
+        .width('100%').scrollBar(BarState.Auto).constraintSize({ maxHeight: 420 })
+      } else if (this.crashLogFiles.length === 0) {
+        Text('没有崩溃日志').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').textAlign(TextAlign.Center).padding({ top: 32, bottom: 32 })
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.crashLogFiles, (item: CrashLogFile) => {
+              Text(item.name).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
+                .width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                .padding({ left: 4, right: 4, top: 16, bottom: 16 })
+                .onClick(() => { this.readCrashLogFile(item.name); })
+            }, (item: CrashLogFile) => item.name)
+          }.width('100%')
+        }
+        .width('100%').scrollBar(BarState.Auto).constraintSize({ maxHeight: 420 })
+      }
+    }.width('100%').padding({ left: 16, right: 16, bottom: 16 })
   }
 }
 

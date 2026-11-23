@@ -480,6 +480,73 @@ export class EpubExporter {
   }
 
   /**
+   * 导出到指定目录（对齐上游 `ExportBookService.kt:299-334` 的 `exportTxt(fileDoc, …)` 那一支：
+   * 目录由「导出文件夹」设置给出，不再弹系统保存框）。
+   *
+   * 返回实际写出的文件路径；目录不可写时抛错，由调用方提示。
+   */
+  static async exportBookToDir(context: Context, book: Book, dirPath: string,
+    fileName: string): Promise<string> {
+    const chapters = await EpubExporter.loadExportableChapters(context, book);
+    if (chapters.length === 0) {
+      throw new Error('这本书没有章节，无法导出');
+    }
+    const archive = await EpubExporter.packVolume(book, chapters, chapters);
+    return EpubExporter.writeArchiveToDir(dirPath, fileName, archive);
+  }
+
+  /**
+   * 分段导出到指定目录（对齐上游 `ExportBookService.kt:958` 的 `epubSize` / `epubScope` 分支）。
+   * 每卷文件名由 `nameOf(volumeIndex)` 给出，返回写出的卷数。
+   */
+  static async exportBookSegmentedToDir(context: Context, book: Book, scopeSpec: string,
+    chaptersPerVolume: number, dirPath: string,
+    nameOf: (volumeIndex: number) => string): Promise<number> {
+    const chapters = await EpubExporter.loadExportableChapters(context, book);
+    if (chapters.length === 0) {
+      throw new Error('这本书没有章节，无法导出');
+    }
+    const picked = EpubExporter.parseScope(scopeSpec, chapters);
+    if (picked.length === 0) {
+      throw new Error('范围里没有章节，无法导出');
+    }
+    const size = Math.floor(chaptersPerVolume) >= 1 ? Math.floor(chaptersPerVolume) : 1;
+    const volumes: BookChapter[][] = [];
+    for (let start = 0; start < picked.length; start += size) {
+      volumes.push(picked.slice(start, Math.min(picked.length, start + size)));
+    }
+    let written = 0;
+    for (let index = 0; index < volumes.length; index++) {
+      const volume = volumes[index];
+      if (volume === undefined) { continue; }
+      const archive = await EpubExporter.packVolume(book, volume, chapters);
+      EpubExporter.writeArchiveToDir(dirPath, nameOf(index + 1), archive);
+      written += 1;
+      AppLog.put(`导出分卷：第 ${index + 1}/${volumes.length} 卷，${volume.length} 章`);
+    }
+    return written;
+  }
+
+  /** 把一段 ArrayBuffer 写成目录下的文件；同名文件先删再写，与上游 `fileDoc.find(filename)?.delete()` 同义。 */
+  private static writeArchiveToDir(dirPath: string, fileName: string, archive: ArrayBuffer): string {
+    const base = dirPath.endsWith('/') ? dirPath.substring(0, dirPath.length - 1) : dirPath;
+    const target = `${base}/${fileName}`;
+    try {
+      if (fileIo.accessSync(target)) { fileIo.unlinkSync(target); }
+    } catch (_) {
+      // 删不掉（权限或不存在）就让后面的 openSync 报错，不吞掉真正的原因。
+    }
+    const file = fileIo.openSync(target,
+      fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(file.fd, archive);
+    } finally {
+      fileIo.closeSync(file);
+    }
+    return target;
+  }
+
+  /**
    * 批2（:471）：多卷一次落盘。把全部卷名一起交给保存对话框，用户在同一个目录里拿到多个文件；
    * 返回真正写成功的卷数（用户取消返回 0）。
    */

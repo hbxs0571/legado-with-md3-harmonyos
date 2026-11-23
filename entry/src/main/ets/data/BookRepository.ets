@@ -33,7 +33,7 @@ const BOOK_COLUMNS: string =
   '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
   '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
   '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, ' +
-  '`wordCount`, `isPrivate`, `variable`, `origin`, `lastCheckTime`, `canUpdate`';
+  '`wordCount`, `isPrivate`, `variable`, `origin`, `lastCheckTime`, `canUpdate`, `syncTime`';
 
 /** books.readConfig 里本地用得上的几项，其余上游字段不解析。 */
 interface StoredReadConfig {
@@ -579,8 +579,8 @@ export class BookRepository {
     return content.length;
   }
 
-  /** 上游 MD5Utils.md5Encode16：取 MD5 十六进制串的第 8–24 个字符。 */
-  private static md5Encode16(text: string): string {
+  /** 上游 MD5Utils.md5Encode16：取 MD5 十六进制串的第 8–24 个字符。导出插图命名也用这一支。 */
+  static md5Encode16(text: string): string {
     try {
       const md = cryptoFramework.createMd('MD5');
       md.updateSync({ data: new Uint8Array(new util.TextEncoder().encodeInto(text)) });
@@ -1291,6 +1291,8 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       lastCheckTime: RdbCodec.optionalInteger(resultSet, 30),
       // 默认 true 对齐上游 canUpdate 列 DEFAULT 1。
       canUpdate: RdbCodec.boolean(resultSet, 31, true),
+      // syncTime 追加在 SELECT 末尾（索引 32），对齐上游 Book.syncTime 列。
+      syncTime: RdbCodec.optionalInteger(resultSet, 32),
       // 上游 Book.upError 存在 type 位掩码的 16 位上（BookType.upError），
       // 自动刷新失败时置位，书架/详情页据此显示「更新出错」。
       upError: (bookTypeValue & 16) !== 0,
@@ -1743,6 +1745,21 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /**
+   * 单独记一本书的进度同步时刻，对应上游 `BookDao.upSyncTime(bookUrl, syncTime)`。
+   *
+   * 只更新 syncTime 一列，不整行覆盖 —— 整行写回会顺带冲掉别人正在写的阅读进度。
+   * 上游在 `ReadBook.onProgressUploaded` 里于进度上传成功后调它，本地由
+   * `Index.pushBookProgress` 在 WebDAV 上传成功后调，两处语义一致。
+   */
+  static async updateBookSyncTime(context: Context, bookUrl: string, syncTime: number): Promise<void> {
+    if (bookUrl.length === 0) { return; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const args: relationalStore.ValueType[] = [syncTime, bookUrl];
+    await store.executeSql('UPDATE `books` SET `syncTime` = ? WHERE `bookUrl` = ?', args);
+  }
+
+  /**
    * 批量把若干本书挪到指定分组（批 5 的 :146）。
    *
    * 走「替换」语义：书的 group 列被整体覆盖成目标分组，与批 4 的规则同步（只加不减）相反。
@@ -2031,7 +2048,8 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       0,
       BookRepository.buildBookVariable(book),
       JSON.stringify(readConfig),
-      0,
+      // syncTime 列：与 WebDAV 对齐进度的时刻，对齐上游 Book.syncTime（books 表第 34 列）。
+      book.syncTime ?? 0,
       null,
       book.format ?? ''
     ];

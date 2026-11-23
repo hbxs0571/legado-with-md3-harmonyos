@@ -290,11 +290,12 @@ export class BackupConfigViewModel {
   private notifyState: (state: BackupConfigUiState) => void = (_state: BackupConfigUiState): void => {};
   private notifyEffect: (effect: BackupConfigEffect) => void = (_effect: BackupConfigEffect): void => {};
 
-  constructor(backupIgnoreKeys: string[], restoreIgnoreKeys: string[]) {
+  constructor(backupIgnoreKeys: string[], backupDbIgnoreKeys: string[],
+    restoreIgnoreKeys: string[], restoreDbIgnoreKeys: string[]) {
     this.state.backupIgnoreItems = buildIgnoreItems(BACKUP_CONFIG_KEYS, BACKUP_CONFIG_TITLES, backupIgnoreKeys);
-    this.state.dbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, restoreIgnoreKeys);
+    this.state.backupDbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, backupDbIgnoreKeys);
     this.state.ignoreItems = buildIgnoreItems(BACKUP_CONFIG_KEYS, BACKUP_CONFIG_TITLES, restoreIgnoreKeys);
-    this.state.backupDbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, backupIgnoreKeys);
+    this.state.dbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, restoreDbIgnoreKeys);
   }
 
   /** 挂接状态订阅：每次转移后推一份新实例给页面 @State。 */
@@ -326,12 +327,13 @@ export class BackupConfigViewModel {
   }
 
   /** 宿主的忽略键变化后重建四组忽略项（对应上游读 BackupConfig 的四个配置表）。 */
-  rebuildIgnoreItems(backupIgnoreKeys: string[], restoreIgnoreKeys: string[]): void {
+  rebuildIgnoreItems(backupIgnoreKeys: string[], backupDbIgnoreKeys: string[],
+    restoreIgnoreKeys: string[], restoreDbIgnoreKeys: string[]): void {
     this.mutate((state: BackupConfigUiState): void => {
       state.ignoreItems = buildIgnoreItems(BACKUP_CONFIG_KEYS, BACKUP_CONFIG_TITLES, restoreIgnoreKeys);
-      state.dbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, restoreIgnoreKeys);
+      state.dbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, restoreDbIgnoreKeys);
       state.backupIgnoreItems = buildIgnoreItems(BACKUP_CONFIG_KEYS, BACKUP_CONFIG_TITLES, backupIgnoreKeys);
-      state.backupDbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, backupIgnoreKeys);
+      state.backupDbIgnoreItems = buildIgnoreItems(BACKUP_DB_KEYS, BACKUP_DB_TITLES, backupDbIgnoreKeys);
     });
   }
 
@@ -433,23 +435,21 @@ export class BackupConfigViewModel {
         break;
       case BackupConfigIntentKind.SaveIgnoreItems:
         // 上游 :180-190：配置维度与数据库维度一起落盘，然后关弹层。
-        // 本地宿主的忽略列表按「侧」扁平存（backupIgnoreKeys / restoreIgnoreKeys 各一份，
-        // 配置键与数据库键同在这一个数组里），所以这里按侧出队一次，页面取两页签的并集。
-        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'restore');
+        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'ignore');
         this.mutate((state: BackupConfigUiState): void => { state.activeSheet = BackupConfigSheet.NONE; });
         break;
       case BackupConfigIntentKind.SaveBackupIgnoreItems:
-        // 上游 :202-212
-        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'backup');
+        // 上游 :202-212：备份侧的配置维度与数据库维度一起落盘，然后关弹层。
+        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'backupIgnore');
         this.mutate((state: BackupConfigUiState): void => { state.activeSheet = BackupConfigSheet.NONE; });
         break;
       case BackupConfigIntentKind.SaveDbIgnoreItems:
-        // 上游 :224-229：只落盘数据库维度，不关弹层
-        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'restore');
+        // 上游 :224-229：只落盘恢复侧的数据库维度，不关弹层
+        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'dbIgnore');
         break;
       case BackupConfigIntentKind.SaveBackupDbIgnoreItems:
-        // 上游 :241-246：只落盘备份侧数据库维度，不关弹层
-        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'backup');
+        // 上游 :241-246：只落盘备份侧的数据库维度，不关弹层
+        this.emitEffect(BackupConfigEffectKind.PersistIgnoreItems, 'backupDbIgnore');
         break;
 
       // ---- 对话框关闭（ViewModel :94）----

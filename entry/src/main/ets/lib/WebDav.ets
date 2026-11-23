@@ -157,6 +157,20 @@ export class WebDav {
     if (code >= 200 && code < 300) {
       return;
     }
+    // 对齐上游 WebDav.kt:484-509 checkResult：401 时先看 WWW-Authenticate 是否声明支持 Basic，
+    // 服务端不支持 Basic 认证时上游会单独记一条日志，用户看到的就是「账号密码没错但连不上」。
+    if (code === 401) {
+      this.logBasicAuthSupport(response);
+    }
+    // 上游会把响应体里的 s:exception / s:message 拼进异常，坚果云这类服务端会把真正原因放在这里
+    // （如「路径不存在」「配额超限」），只看状态码会把它们一律压成 401/404。
+    const body = this.responseText(response);
+    if (body.length > 0) {
+      const serverMessage = WebDav.parseDavError(body);
+      if (serverMessage.length > 0) {
+        throw new WebDavError(`${what}失败：${serverMessage}（HTTP ${code}）`, code);
+      }
+    }
     let detail = `${what}失败（HTTP ${code}）`;
     if (code === 401) {
       detail = `${what}失败：账号或密码不正确（HTTP 401）`;
@@ -168,6 +182,78 @@ export class WebDav {
       detail = `${what}失败：远端空间不足（HTTP 507）`;
     }
     throw new WebDavError(detail, code);
+  }
+
+  /** 读响应体文本，读不到就返回空串（错误路径上不允许再抛异常盖掉原始错误）。 */
+  private responseText(response: rcp.Response): string {
+    try {
+      const text = response.toString();
+      return typeof text === 'string' ? text : '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  /**
+   * 401 时检查 WWW-Authenticate 是否含 Basic，对应上游 `WebDav.kt:487-495`：
+   * 响应头存在但都不以 Basic 开头时，说明服务器不支持 Basic 认证（多半只认 OAuth/Digest）。
+   */
+  private logBasicAuthSupport(response: rcp.Response): void {
+    try {
+      const headers = response.headers;
+      if (headers === undefined || headers === null) {
+        return;
+      }
+      const raw = headers['www-authenticate'];
+      if (raw === undefined) {
+        return;
+      }
+      const values: string[] = Array.isArray(raw) ? raw as string[] : [raw as string];
+      if (values.length === 0) {
+        return;
+      }
+      let supportsBasic = false;
+      for (let index = 0; index < values.length; index++) {
+        const value = values[index];
+        if (value !== undefined && value.toLowerCase().startsWith('basic')) {
+          supportsBasic = true;
+          break;
+        }
+      }
+      if (!supportsBasic) {
+        console.error('[WebDav] 服务器不支持 BasicAuth 认证');
+      }
+    } catch (error) {
+      // 读响应头失败不影响错误文案，忽略。
+    }
+  }
+
+  /**
+   * 从 WebDAV 错误响应体里取 `s:exception` / `s:message`，对应上游 `WebDav.kt:500-508`。
+   * 优先 s:message（服务端给的人话），没有就退回 s:exception（如 ObjectNotFound）。
+   */
+  static parseDavError(body: string): string {
+    const message = WebDav.extractXmlTag(body, 's:message');
+    if (message.length > 0) {
+      return message;
+    }
+    const exception = WebDav.extractXmlTag(body, 's:exception');
+    if (exception === 'ObjectNotFound') {
+      return '远端路径不存在';
+    }
+    return exception;
+  }
+
+  /** 取标签文本内容，容忍命名空间前缀写成 d:/D: 等变体。 */
+  private static extractXmlTag(body: string, tag: string): string {
+    const localName = tag.substring(tag.indexOf(':') + 1);
+    const pattern = new RegExp(`<[A-Za-z0-9]*:?${localName}[^>]*>([\\s\\S]*?)</[A-Za-z0-9]*:?${localName}>`);
+    const matched = pattern.exec(body);
+    if (matched === null || matched.length < 2) {
+      return '';
+    }
+    const text = matched[1];
+    return typeof text === 'string' ? text.trim() : '';
   }
 
   /**
@@ -239,6 +325,57 @@ export class WebDav {
       new rcp.UploadFromFile(localPath));
     const response = await session.fetch(request);
     this.checkResult(response, '上传文件');
+  }
+
+  /**
+   * 直接上传一段字节，对应上游 `WebDav.kt:410 upload(byteArray, contentType)`。
+   *
+   * 上游阅读进度就是走这条：`WebDav(url).upload(json.toByteArray(), "application/json")`。
+   * 本地原先只能先落临时文件再 `upload(localPath)`（rcp 的 UploadFromFile 只收路径），
+   * 这里用 rcp 的 RawDataContent 直接传 ArrayBuffer，省掉临时文件那一跳。
+   */
+  async uploadBytes(data: ArrayBuffer, remoteUrl: string,
+    contentType: string = 'application/octet-stream'): Promise<void> {
+    const session = this.ensureSession();
+    const request = this.newRequest('PUT', remoteUrl, { 'content-type': contentType }, data);
+    const response = await session.fetch(request);
+    this.checkResult(response, '上传文件');
+  }
+
+  /**
+   * 上传本地 uri 指向的文件，对应上游 `WebDav.kt:431 upload(uri, contentType)`。
+   *
+   * uri 可能是 `file://` 也可能来自系统选择器（`file://docs/...`），两种都能用
+   * `fileIo.openSync(uri, READ_ONLY)` 拿到 fd 再读成字节；读完整份再 PUT，
+   * 与上游 `contentResolver.openInputStream(uri).readBytes()` 同构。
+   */
+  async uploadUri(uri: string, remoteUrl: string,
+    contentType: string = 'application/octet-stream'): Promise<void> {
+    const data = WebDav.readUriBytes(uri);
+    await this.uploadBytes(data, remoteUrl, contentType);
+  }
+
+  /** 把 uri 整份读成 ArrayBuffer。读失败抛 WebDavError，message 面向用户。 */
+  private static readUriBytes(uri: string): ArrayBuffer {
+    let file: fileIo.File | undefined = undefined;
+    try {
+      file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      const size = fileIo.statSync(file.fd).size;
+      const buffer = new ArrayBuffer(size);
+      if (size > 0) {
+        fileIo.readSync(file.fd, buffer);
+      }
+      return buffer;
+    } catch (error) {
+      throw new WebDavError(
+        `读取本地文件失败：${error instanceof Error ? error.message : String(error)}`, 0);
+    } finally {
+      if (file !== undefined) {
+        try { fileIo.closeSync(file); } catch (error) {
+          console.error(`[WebDav] 关闭本地文件失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
   }
 
   /**

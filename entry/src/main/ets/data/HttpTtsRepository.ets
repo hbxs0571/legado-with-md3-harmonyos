@@ -1,14 +1,24 @@
 import { relationalStore } from '@kit.ArkData';
 import { HttpTts } from '../model/HttpTts';
+import { ReadAloudVoice, READ_ALOUD_VOICE_ENGINE_HTTP } from '../model/ReadAloudVoice';
 import { RdbCodec } from './RdbCodec';
 import { RdbStore } from './RdbStore';
 import { RdbSchema } from './RdbSchema';
+import { HttpTtsCatalogDraft } from './HttpTtsImporter';
+import { HttpTtsCatalogSync } from './HttpTtsCatalogSync';
+import { ReadAloudVoiceRepository } from './ReadAloudVoiceRepository';
 
 /** 批量导入结果，供恢复结果如实反馈新增与覆盖的条数。 */
 export interface HttpTtsImportOutcome {
   added: number;
   updated: number;
   skipped: number;
+}
+
+/** 恢复时的一条「源 + 它自带的目录草稿」，对应上游 `Pair<HttpTTS, HttpTtsCatalogDraft>`。 */
+export interface HttpTtsCatalogEntry {
+  source: HttpTts;
+  draft: HttpTtsCatalogDraft;
 }
 
 /**
@@ -132,34 +142,105 @@ export class HttpTtsRepository {
     return operation;
   }
 
+  /**
+   * 恢复 httpTTS：源与它自带的目录在同一个事务里落库，音色快照随后覆盖，最后清孤儿。
+   *
+   * 对应上游 `HttpTtsRepository.kt:79-94 restore`：
+   *  - `importWithCatalogs` 逐条写源并同步目录（`SyncHttpTtsCatalogUseCase`）；
+   *  - `voices` 非 null 时，先把这些引擎下的音色整批删掉再写备份里的行（备份是本机状态的权威副本）；
+   *  - 末尾 `deleteOrphanedHttpVoices` 清掉 engineId 已不在 httpTTS 表里的孤儿。
+   *
+   * `voices` 传 undefined 表示「旧备份没保存音色」：此时不动音色表，只靠目录同步结果
+   * （上游 `Restore.kt:583-586` 用 `voicesFile.exists()` 区分这两种情况）。
+   */
+  static restoreWithCatalogs(context: Context, entries: HttpTtsCatalogEntry[],
+    voices: ReadAloudVoice[] | undefined): Promise<HttpTts[]> {
+    const operation = HttpTtsRepository.saveQueue.then(async (): Promise<HttpTts[]> => {
+      const store = await RdbStore.getStore(context);
+      await RdbSchema.ensure(store);
+      const merged: HttpTts[] = HttpTtsRepository.copySources(HttpTtsRepository.cachedSources);
+      store.beginTransaction();
+      try {
+        for (let index = 0; index < entries.length; index++) {
+          const entry = entries[index];
+          if (entry === undefined) { continue; }
+          const source = entry.source;
+          if (!HttpTtsRepository.isSource(source)) { continue; }
+          await store.executeSql(HttpTtsRepository.insertSql, HttpTtsRepository.sourceArgs(source));
+          // 目录与源同一事务：中途失败整体回滚，不会留下「源在、目录半截」的状态
+          await HttpTtsCatalogSync.syncCatalog(store, String(source.id), entry.draft, source.lastUpdateTime);
+          let replaced = false;
+          for (let cursor = 0; cursor < merged.length; cursor++) {
+            if (merged[cursor].id === source.id) {
+              merged[cursor] = source;
+              replaced = true;
+              break;
+            }
+          }
+          if (!replaced) {
+            merged.push(source);
+          }
+        }
+        if (voices !== undefined) {
+          for (let index = 0; index < entries.length; index++) {
+            const entry = entries[index];
+            if (entry === undefined) { continue; }
+            await store.executeSql(ReadAloudVoiceRepository.deleteHttpVoicesSql, [String(entry.source.id)]);
+          }
+          for (let index = 0; index < voices.length; index++) {
+            const voice = voices[index];
+            if (voice === undefined) { continue; }
+            if (voice.engineType !== READ_ALOUD_VOICE_ENGINE_HTTP) { continue; }
+            await ReadAloudVoiceRepository.insertVoice(store, voice);
+          }
+        }
+        await store.executeSql(ReadAloudVoiceRepository.deleteOrphanedHttp);
+        store.commit();
+      } catch (error) {
+        store.rollBack();
+        // ArkTS 限制：catch 到的值类型不确定，不能直接 throw（arkts-limited-throw）。
+        throw new Error(`在线朗读源恢复失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+      HttpTtsRepository.cachedSources = HttpTtsRepository.copySources(merged);
+      return HttpTtsRepository.copySources(merged);
+    });
+    HttpTtsRepository.saveQueue = operation.then((): void => {}, (_error: Error): void => {});
+    return operation;
+  }
+
   /** 在调用方给定的事务里整表重写；不 commit、不回滚。 */
   private static async replaceAll(store: relationalStore.RdbStore, sources: HttpTts[]): Promise<void> {
     await store.executeSql('DELETE FROM `httpTTS`');
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
       if (source === undefined) { continue; }
-      await store.executeSql(HttpTtsRepository.insertSql, [
-        source.id,
-        source.name,
-        source.url,
-        source.contentType === undefined ? null : source.contentType,
-        source.concurrentRate === undefined ? null : source.concurrentRate,
-        source.loginUrl === undefined ? null : source.loginUrl,
-        source.loginUi === undefined ? null : source.loginUi,
-        source.header === undefined ? null : source.header,
-        source.jsLib === undefined ? null : source.jsLib,
-        // 上游 enabledCookieJar 是 Boolean?，本地列 NOT NULL DEFAULT 0，
-        // 所以缺省写 0 而不是 null，读回得到 false。
-        source.enabledCookieJar === undefined ? 0 : (source.enabledCookieJar ? 1 : 0),
-        source.loginCheckJs === undefined ? null : source.loginCheckJs,
-        source.speed === undefined ? null : source.speed,
-        source.synthesisThreadCount,
-        source.lastUpdateTime,
-        source.textParam === undefined ? 'text' : source.textParam,
-        source.speedParam === undefined ? 'speed' : source.speedParam,
-        source.toneParam === undefined ? 'tone' : source.toneParam
-      ]);
+      await store.executeSql(HttpTtsRepository.insertSql, HttpTtsRepository.sourceArgs(source));
     }
+  }
+
+  /** insertSql 的 17 个绑定值；整表重写与单条写入共用，避免两处列顺序漂移。 */
+  private static sourceArgs(source: HttpTts): relationalStore.ValueType[] {
+    return [
+      source.id,
+      source.name,
+      source.url,
+      source.contentType === undefined ? null : source.contentType,
+      source.concurrentRate === undefined ? null : source.concurrentRate,
+      source.loginUrl === undefined ? null : source.loginUrl,
+      source.loginUi === undefined ? null : source.loginUi,
+      source.header === undefined ? null : source.header,
+      source.jsLib === undefined ? null : source.jsLib,
+      // 上游 enabledCookieJar 是 Boolean?，本地列 NOT NULL DEFAULT 0，
+      // 所以缺省写 0 而不是 null，读回得到 false。
+      source.enabledCookieJar === undefined ? 0 : (source.enabledCookieJar ? 1 : 0),
+      source.loginCheckJs === undefined ? null : source.loginCheckJs,
+      source.speed === undefined ? null : source.speed,
+      source.synthesisThreadCount,
+      source.lastUpdateTime,
+      source.textParam === undefined ? 'text' : source.textParam,
+      source.speedParam === undefined ? 'speed' : source.speedParam,
+      source.toneParam === undefined ? 'tone' : source.toneParam
+    ];
   }
 
   /** 从结果集读出全部源；列顺序与 selectAll 一致。 */

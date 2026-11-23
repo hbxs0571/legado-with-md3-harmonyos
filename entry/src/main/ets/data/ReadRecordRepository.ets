@@ -772,6 +772,64 @@ export class ReadRecordRepository {
   }
 
   /**
+   * 本地阅读记录分区的设备标识，对应上游 `Restore.kt:89 LOCAL_READ_RECORD_DEVICE_ID`。
+   *
+   * 上游注释：阅读器当前只使用本地记录分区。旧版备份可能保留设备 Android ID，
+   * 恢复时须归一化，否则同一本书会因 deviceId 不同而显示为两条记录。
+   */
+  static readonly localRecordDeviceId: string = '';
+
+  /** 汇总行身份收敛：deviceId 归本地分区，书名/作者折叠空白。 */
+  private static canonicalSummaries(rows: ReadRecordSummary[]): ReadRecordSummary[] {
+    const result: ReadRecordSummary[] = [];
+    for (const item of rows) {
+      result.push({
+        deviceId: ReadRecordRepository.localRecordDeviceId,
+        bookName: ReadRecordRepository.normalizeIdentity(item.bookName),
+        bookAuthor: ReadRecordRepository.normalizeIdentity(item.bookAuthor),
+        readTime: item.readTime,
+        lastRead: item.lastRead
+      });
+    }
+    return result;
+  }
+
+  /** 明细行身份收敛，口径同 canonicalSummaries。 */
+  private static canonicalDetails(rows: ReadRecordDetail[]): ReadRecordDetail[] {
+    const result: ReadRecordDetail[] = [];
+    for (const item of rows) {
+      result.push({
+        deviceId: ReadRecordRepository.localRecordDeviceId,
+        bookName: ReadRecordRepository.normalizeIdentity(item.bookName),
+        bookAuthor: ReadRecordRepository.normalizeIdentity(item.bookAuthor),
+        date: item.date,
+        readTime: item.readTime,
+        readWords: item.readWords,
+        firstReadTime: item.firstReadTime,
+        lastReadTime: item.lastReadTime
+      });
+    }
+    return result;
+  }
+
+  /** 会话行身份收敛，口径同 canonicalSummaries；bookUrl 等其余字段原样保留。 */
+  private static canonicalSessions(rows: ReadRecordSession[]): ReadRecordSession[] {
+    const result: ReadRecordSession[] = [];
+    for (const item of rows) {
+      result.push({
+        deviceId: ReadRecordRepository.localRecordDeviceId,
+        bookName: ReadRecordRepository.normalizeIdentity(item.bookName),
+        bookAuthor: ReadRecordRepository.normalizeIdentity(item.bookAuthor),
+        bookUrl: item.bookUrl,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        chapterIndex: item.chapterIndex
+      });
+    }
+    return result;
+  }
+
+  /**
    * 规范化书名/作者：折叠连续空白并去除首尾空白。
    *
    * 对应上游 ReadRecordIdentity.normalize。同一本书在不同来源下可能带非零宽空格、
@@ -1112,6 +1170,11 @@ export class ReadRecordRepository {
     details: ReadRecordDetail[],
     sessions: ReadRecordSession[]
   ): Promise<void> {
+    // 身份先收敛到本地分区口径：上游 Restore.kt:426-478 三个导入函数逐条 copy(deviceId = LOCAL_READ_RECORD_DEVICE_ID, bookName = ..., bookAuthor = ...)。
+    // 旧版备份会带 Android ID 作 deviceId，不收敛的话同一本书会因 deviceId 不同而显示成两条；书名/作者的空格写法差异同理。
+    const canonicalSummaries: ReadRecordSummary[] = ReadRecordRepository.canonicalSummaries(summaries);
+    const canonicalDetails: ReadRecordDetail[] = ReadRecordRepository.canonicalDetails(details);
+    const canonicalSessions: ReadRecordSession[] = ReadRecordRepository.canonicalSessions(sessions);
     await ReadRecordRepository.saveQueue;
     const store = await RdbStore.getStore(context);
     await RdbSchema.ensure(store);
@@ -1129,7 +1192,7 @@ export class ReadRecordRepository {
       for (const item of summaryRows) {
         mergedSummaries.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`, item);
       }
-      for (const item of summaries) {
+      for (const item of canonicalSummaries) {
         const key = `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`;
         const found = mergedSummaries.get(key);
         if (found === undefined) {
@@ -1155,7 +1218,7 @@ export class ReadRecordRepository {
       for (const item of detailRows) {
         mergedDetails.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`, item);
       }
-      for (const item of details) {
+      for (const item of canonicalDetails) {
         const key = `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`;
         const found = mergedDetails.get(key);
         if (found === undefined) {
@@ -1186,7 +1249,7 @@ export class ReadRecordRepository {
         seen.add(ReadRecordRepository.sessionIdentity(item));
         mergedSessions.push(item);
       }
-      for (const item of sessions) {
+      for (const item of canonicalSessions) {
         const key = ReadRecordRepository.sessionIdentity(item);
         if (seen.has(key)) { continue; }
         seen.add(key);
@@ -1194,14 +1257,21 @@ export class ReadRecordRepository {
       }
 
       // 派生层由会话重算；没有会话支撑的历史汇总/明细沿用导入值（对齐上游 reconcile）。
+      // 合并口径是「取大值」而不是覆盖：会话算出来的时长可能小于库里已有的历史累计
+      // （旧版备份只有汇总没有会话），覆盖会让时长缩水。上游 reconcileRestoredReadRecordTotals
+      // 同样是 maxOf(record.readTime, sessions.sumOf { ... })。
       const derived = ReadRecordRepository.computeDerived(mergedSessions);
       const finalDetails: Map<string, ReadRecordDetail> = new Map<string, ReadRecordDetail>(mergedDetails);
       for (const item of derived.details) {
-        finalDetails.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`, item);
+        const key = `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000${item.date}`;
+        const found = finalDetails.get(key);
+        finalDetails.set(key, found === undefined ? item : ReadRecordRepository.mergeDetailMax(found, item));
       }
       const finalSummaries: Map<string, ReadRecordSummary> = new Map<string, ReadRecordSummary>(mergedSummaries);
       for (const item of derived.summaries) {
-        finalSummaries.set(`${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`, item);
+        const key = `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}`;
+        const found = finalSummaries.get(key);
+        finalSummaries.set(key, found === undefined ? item : ReadRecordRepository.mergeSummaryMax(found, item));
       }
       const detailList: ReadRecordDetail[] = Array.from(finalDetails.values());
       const summaryList: ReadRecordSummary[] = Array.from(finalSummaries.values());
@@ -1233,10 +1303,189 @@ export class ReadRecordRepository {
     }
   }
 
+  /** 汇总行合并：累计时长与最后阅读时间各取较大值（等价上游 maxOf(...)）。 */
+  private static mergeSummaryMax(existing: ReadRecordSummary, incoming: ReadRecordSummary): ReadRecordSummary {
+    return {
+      deviceId: existing.deviceId,
+      bookName: existing.bookName,
+      bookAuthor: existing.bookAuthor,
+      readTime: Math.max(existing.readTime, incoming.readTime),
+      lastRead: Math.max(existing.lastRead, incoming.lastRead)
+    };
+  }
+
+  /** 明细行合并：时长/章节数/最后时间取较大值，首次阅读时间取较小正数值。 */
+  private static mergeDetailMax(existing: ReadRecordDetail, incoming: ReadRecordDetail): ReadRecordDetail {
+    return {
+      deviceId: existing.deviceId,
+      bookName: existing.bookName,
+      bookAuthor: existing.bookAuthor,
+      date: existing.date,
+      readTime: Math.max(existing.readTime, incoming.readTime),
+      readWords: Math.max(existing.readWords, incoming.readWords),
+      firstReadTime: ReadRecordRepository.minPositive(existing.firstReadTime, incoming.firstReadTime),
+      lastReadTime: Math.max(existing.lastReadTime, incoming.lastReadTime)
+    };
+  }
+
+  /**
+   * 恢复完成后以会话为权威重建汇总与每日明细，并保留未被会话覆盖的历史时长。
+   *
+   * 对应上游 `Restore.kt:295-298` 在 `reconcileReadRecordAliases()` 之后调用的
+   * `ReadRecordRepository.kt:961-987 reconcileRestoredReadRecordTotals`：
+   * 逐本取该书全部会话，把会话时长之和与库里累计值取较大者写回汇总；
+   * 逐条明细按「日期」取该日会话时长/章节数，与库里值取较大者写回，
+   * 首次/最后阅读时间同样收敛。这样同一份备份重复导入不会让时长翻倍，
+   * 也不会把旧版备份里只有汇总、没有会话支撑的历史时长抹掉。
+   *
+   * 返回被调整的行数（汇总 + 明细）。
+   */
+  static async reconcileRestoredReadRecordTotals(context: Context): Promise<number> {
+    await ReadRecordRepository.saveQueue;
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    let touched: number = 0;
+    store.beginTransaction();
+    try {
+      const sessionResult = await store.querySql(ReadRecordRepository.selectSessions);
+      let sessions: ReadRecordSession[] = [];
+      try {
+        sessions = ReadRecordRepository.readSessions(sessionResult);
+      } finally {
+        sessionResult.close();
+      }
+      // 书名+作者 -> 该书的全部会话
+      const sessionsByBook: Map<string, ReadRecordSession[]> = new Map<string, ReadRecordSession[]>();
+      for (const session of sessions) {
+        const key = `${session.bookName}\u0000${session.bookAuthor}`;
+        const bucket = sessionsByBook.get(key);
+        if (bucket === undefined) {
+          sessionsByBook.set(key, [session]);
+        } else {
+          bucket.push(session);
+        }
+      }
+
+      const summaryResult = await store.querySql(ReadRecordRepository.selectSummaries);
+      let summaries: ReadRecordSummary[] = [];
+      try {
+        summaries = ReadRecordRepository.readSummaries(summaryResult);
+      } finally {
+        summaryResult.close();
+      }
+      for (const record of summaries) {
+        const bookSessions = sessionsByBook.get(`${record.bookName}\u0000${record.bookAuthor}`);
+        if (bookSessions === undefined || bookSessions.length === 0) { continue; }
+        let sessionTime: number = 0;
+        let sessionLast: number = 0;
+        for (const session of bookSessions) {
+          sessionTime += Math.max(0, session.endTime - session.startTime);
+          sessionLast = Math.max(sessionLast, session.endTime);
+        }
+        const readTime = Math.max(record.readTime, sessionTime);
+        const lastRead = Math.max(record.lastRead, sessionLast);
+        if (readTime === record.readTime && lastRead === record.lastRead) { continue; }
+        await store.executeSql(ReadRecordRepository.insertSummary, [
+          record.deviceId, record.bookName, record.bookAuthor, readTime, lastRead
+        ]);
+        touched += 1;
+      }
+
+      const detailResult = await store.querySql(ReadRecordRepository.selectDetails);
+      let details: ReadRecordDetail[] = [];
+      try {
+        details = ReadRecordRepository.readDetails(detailResult);
+      } finally {
+        detailResult.close();
+      }
+      for (const detail of details) {
+        const bookSessions = sessionsByBook.get(`${detail.bookName}\u0000${detail.bookAuthor}`);
+        if (bookSessions === undefined || bookSessions.length === 0) { continue; }
+        let sessionTime: number = 0;
+        let sessionWords: number = 0;
+        let firstRead: number = 0;
+        let lastRead: number = 0;
+        for (const session of bookSessions) {
+          const segments = ReadRecordRepository.splitByDate(session);
+          const duration = segments.get(detail.date) ?? 0;
+          if (duration <= 0) { continue; }
+          sessionTime += duration;
+          if (ReadRecordRepository.isStartDate(session, detail.date)) {
+            sessionWords += session.chapterIndex;
+          }
+          const bounds = ReadRecordRepository.boundsOnDate(session, detail.date);
+          firstRead = ReadRecordRepository.minPositive(firstRead, bounds[0]);
+          lastRead = Math.max(lastRead, bounds[1]);
+        }
+        if (sessionTime <= 0 && sessionWords <= 0) { continue; }
+        const readTime = Math.max(detail.readTime, sessionTime);
+        const readWords = Math.max(detail.readWords, sessionWords);
+        const firstReadTime = ReadRecordRepository.minPositive(detail.firstReadTime, firstRead);
+        const lastReadTime = Math.max(detail.lastReadTime, lastRead);
+        if (readTime === detail.readTime && readWords === detail.readWords &&
+          firstReadTime === detail.firstReadTime && lastReadTime === detail.lastReadTime) {
+          continue;
+        }
+        await store.executeSql(ReadRecordRepository.insertDetail, [
+          detail.deviceId, detail.bookName, detail.bookAuthor, detail.date,
+          readTime, readWords, firstReadTime, lastReadTime
+        ]);
+        touched += 1;
+      }
+      store.commit();
+    } catch (error) {
+      store.rollBack();
+      throw new Error(`阅读记录汇总重算失败：${(error as Error).message}`);
+    }
+    return touched;
+  }
+
   /** 会话的完整身份，与上游 getSession 的七个字段一致（words = 本地 chapterIndex）。 */
   private static sessionIdentity(item: ReadRecordSession): string {
     return `${item.deviceId}\u0000${item.bookName}\u0000${item.bookAuthor}\u0000` +
       `${item.bookUrl}\u0000${item.startTime}\u0000${item.endTime}\u0000${item.chapterIndex}`;
+  }
+
+  /**
+   * 恢复完成后按书名认领「作者为空」的阅读记录，对齐上游 `Restore.kt:295` + `:490-511 reconcileReadRecordAliases`。
+   *
+   * 上游口径：遍历作者为空的历史行，用书名去书库找同名的书，取它们的非空作者去重；
+   * 恰好只有一个作者时才认领（多个作者说明无法确定归属，交回用户在记录页里手动合并）。
+   * 认领动作是「把会话整体改判到 (书名, 作者)」，再按会话重算派生表 ——
+   * 与 `mergeReadRecords` 同一条路径，绝不把时长直接相加。
+   *
+   * 返回被认领的记录条数。
+   */
+  static async reconcileAliases(context: Context, books: Book[]): Promise<number> {
+    const summaries = await ReadRecordRepository.loadSummaries(context);
+    const unknown = summaries.filter((item: ReadRecordSummary) => item.bookAuthor.length === 0);
+    if (unknown.length === 0) { return 0; }
+    // 书名 -> 该书库里的非空作者集合。
+    const authorsByName: Map<string, Set<string>> = new Map<string, Set<string>>();
+    for (const book of books) {
+      const author = book.author ?? '';
+      if (author.length === 0) { continue; }
+      const found = authorsByName.get(book.title);
+      if (found === undefined) {
+        authorsByName.set(book.title, new Set<string>([author]));
+      } else {
+        found.add(author);
+      }
+    }
+    let claimed: number = 0;
+    for (const record of unknown) {
+      const authors = authorsByName.get(record.bookName);
+      if (authors === undefined || authors.size !== 1) { continue; }
+      const author = Array.from(authors)[0];
+      if (author === undefined || author.length === 0) { continue; }
+      const target: ReadRecordSummary = {
+        deviceId: record.deviceId, bookName: record.bookName, bookAuthor: author,
+        readTime: record.readTime, lastRead: record.lastRead
+      };
+      await ReadRecordRepository.mergeReadRecords(context, target, [record]);
+      claimed += 1;
+    }
+    return claimed;
   }
 
   /** 备份写出用：三张表的当前内容，字段名与上游实体一致。 */

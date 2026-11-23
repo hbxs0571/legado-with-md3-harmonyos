@@ -6,15 +6,17 @@ import { util } from '@kit.ArkTS';
 import userAuth from '@ohos.userIAM.userAuth';
 import { Book } from '../model/Book';
 import { BookGroupRepository } from './BookGroupRepository';
+import { LocalPasswordStore } from '../lib/LocalPasswordStore';
 
 /**
  * 私密体系（批6，对应本表 :257 :294 :325 :147 :150 :151）。
  *
  * 上游 domain/model/PrivateAccess.kt + data/repository/PrivateAccessRepository.kt + help/security/PrivatePasswordCipher.kt。
  *
- * 与上游的三处有意差异，都是安全侧收紧，写在最前面免得后人以为漏了：
- * 1. 上游把明文密码当唯一权威凭据存进偏好（PASSWORD），本地**不存明文**，只存 salt 与 PBKDF2 校验值。
- *    备份本来就把该键排除在外，所以互通性不受影响。
+ * 与上游的三处差异：
+ * 1. 上游把明文密码当唯一权威凭据存进偏好（PASSWORD），本地同样按上游口径补上了明文
+ *    （`lib/LocalPasswordStore.ets`，键名同上游 `password`），因为备份加密要用它；
+ *    校验仍走本仓的 salt + PBKDF2 校验值，两套并存。
  * 2. 上游密码校验用 Android 的 PBKDF2WithHmacSHA256；本地用 @kit.CryptoArchitectureKit 的同名算法，
  *    迭代次数与 key 长度照抄（210000 / 32 字节），但派生出的是「校验值」而不是加密密钥。
  * 3. 上游生物识别用 AndroidKeyStore + AES/GCM 把密码封进信封；鸿蒙用
@@ -243,7 +245,10 @@ export class PrivateAccessRepository {
 
   /**
    * 设置或修改本地密码。salt 每次重新生成，旧密码立即失效。
-   * 密码本身不落盘，只落 salt 与 PBKDF2 校验值。
+   * 校验走 salt + PBKDF2 校验值；同时按上游口径把明文写进 `LocalPasswordStore`，
+   * 因为上游 `LocalConfig.password` 是明文（`LocalPreferencesKeys.PASSWORD`），
+   * `help/storage/BackupAES.kt:9` 用它派生备份加密密钥。只存校验值会让备份恒用空密码，
+   * 与 Android 端设过密码的备份互相解不开。
    */
   static async setPassword(context: Context, password: string): Promise<void> {
     const trimmed = password.trim();
@@ -256,6 +261,8 @@ export class PrivateAccessRepository {
     await store.put(PrivateAccessRepository.keySalt, bytesToHex(salt));
     await store.put(PrivateAccessRepository.keyVerifier, bytesToHex(verifier));
     await store.flush();
+    // 上游 LocalPasswordRepository.setPassword 把明文与校验值放在同一次写入里。
+    await LocalPasswordStore.save(context, trimmed);
     const current = PrivateAccessRepository.get();
     PrivateAccessRepository.publish({
       enabled: current.enabled,

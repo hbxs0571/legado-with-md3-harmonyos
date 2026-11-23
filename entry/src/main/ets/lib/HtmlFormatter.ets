@@ -216,3 +216,16 @@ function unescapeHtml4(text: string): string {
 export function stripIntroDecorations(text: string): string {
   return text.replace(INTRO_PREFIX_REGEX, '').replace(ON_CLICK_SUFFIX_REGEX, '');
 }
+
+/**
+ * 上游 `HtmlFormatter.format(html: String?, otherRegex: Regex = otherHtmlRegex)`（`utils/HtmlFormatter.kt:74-75`）：
+ * 带默认参数的单参版本，内部 `format(html, otherRegex, "　　")`。
+ *
+ * 与 `formatDisplayText` 的区别就是上游那一条：它不做 script/style 删除、不过滤「书名/作者」行、
+ * 不还原实体，只把标签换行、按段缩进。导出书籍的抬头行（`ExportBookService.kt:373` 的
+ * `HtmlFormatter.format(book.getDisplayIntro())`）用的正是这一支。
+ */
+export function formatHtml(html: string): string {
+  if (html === undefined || html === null || html.length === 0) { return ''; }
+  return format(html, OTHER_HTML_REGEX, PARAGRAPH_INDENT);
+}

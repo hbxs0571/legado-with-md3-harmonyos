@@ -11,6 +11,8 @@ import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepo
 import { SearchCoordinator, SearchProgress, SearchOutcome } from '../bookSource/SearchCoordinator';
 import { MergedBook } from '../bookSource/SearchResultMerger';
 import { SearchBookItem } from '../bookSource/SourceModels';
+import { SearchKeywordRepository } from '../data/SearchKeywordRepository';
+import { SearchKeyword } from '../model/SearchKeyword';
 import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
 
 @Component
@@ -42,6 +44,8 @@ export struct SearchPage {
   @State onlineProgressText: string = '';
   /** 在线结果视图：平铺 / 按源分组。 */
   @State onlineViewMode: 'flat' | 'grouped' = 'flat';
+  /** 书源搜索关键词历史，来自 search_keywords 表（上游 SearchKeywordDao.all）。 */
+  @State historyKeywords: SearchKeyword[] = [];
   private cancelSearchFlag: boolean = false;
   private onlineScroller: Scroller = new Scroller();
   private suggestionScroller: Scroller = new Scroller();
@@ -115,6 +119,8 @@ export struct SearchPage {
       return;
     }
     if (this.onlineSearching) { return; }
+    // 上游 ui/book/search/SearchViewModel.kt:615-618：提交搜索时先记关键词再 startSearch。
+    void this.rememberKeyword(keyword);
     try {
       await BookSourceRepository.load(getContext(this));
     } catch (e) {
@@ -153,6 +159,77 @@ export struct SearchPage {
     this.onlineSearching = false;
   }
 
+  /**
+   * 读取搜索关键词历史，供空查询时的「搜索历史」区渲染。
+   * 上游 SearchScreen.kt:959-1058 的历史区数据来自 `state.history`（SearchKeywordDao 的 flowByTime），
+   * 这里同样按最近使用时间倒序取全表。
+   */
+  private async loadHistoryKeywords(): Promise<void> {
+    try {
+      this.historyKeywords = await SearchKeywordRepository.loadAll(getContext(this));
+    } catch (error) {
+      console.error(`搜索历史读取失败：${error instanceof Error ? error.message : String(error)}`);
+      this.historyKeywords = [];
+    }
+  }
+
+  /** 记一次关键词（上游 SearchRepository.kt:76-93 的 saveSearchKeyword），随后刷新历史区。 */
+  private async rememberKeyword(keyword: string): Promise<void> {
+    try {
+      await SearchKeywordRepository.saveKeyword(getContext(this), keyword);
+      await this.loadHistoryKeywords();
+    } catch (error) {
+      console.error(`搜索历史写入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 删掉一条历史（上游 SearchIntent.DeleteHistory → deleteSearchKeyword）。 */
+  private async deleteHistoryKeyword(keyword: string): Promise<void> {
+    try {
+      await SearchKeywordRepository.deleteKeyword(getContext(this), keyword);
+      await this.loadHistoryKeywords();
+    } catch (error) {
+      console.error(`搜索历史删除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 清空历史：上游 SearchScreen.kt:629-639 是先弹确认框再 ConfirmClearHistory。
+   * 这里同样先确认，避免误触把整份历史清掉。
+   */
+  private confirmClearHistory(): void {
+    if (this.historyKeywords.length === 0) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '清空搜索历史',
+      message: '确定清空全部搜索历史吗？',
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '清空',
+        action: () => {
+          void this.clearHistoryKeywords();
+        }
+      }
+    });
+  }
+
+  private async clearHistoryKeywords(): Promise<void> {
+    try {
+      await SearchKeywordRepository.clearAll(getContext(this));
+      await this.loadHistoryKeywords();
+    } catch (error) {
+      console.error(`搜索历史清空失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** 点历史条目即用它再搜一次（上游 SearchIntent.UseHistoryKeyword）。 */
+  private useHistoryKeyword(keyword: string): void {
+    this.collapsedHeader = false;
+    this.onQueryChange(keyword);
+    void this.startOnlineSearch();
+  }
+
   /** 输入变化防抖 400ms 后自动重搜；仅在线范围生效。 */
   private queryDebounceTimer: number = 0;
   private onQueryChanged(): void {
@@ -176,6 +253,10 @@ export struct SearchPage {
 
   private searchOnline(): void {
     void this.startOnlineSearch();
+  }
+
+  aboutToAppear(): void {
+    void this.loadHistoryKeywords();
   }
 
   private updateHeader(offset: number): void {
@@ -349,10 +430,29 @@ export struct SearchPage {
                     onOpenDetail: () => this.onOpenBookDetail(book) })
                 }, (book: Book) => book.id)
               }
+              // 搜索历史：上游 SearchScreen.kt:999-1058 的头部是「历史图标 + 标题 + 清空按钮（有历史才出现）」，
+              // 下面是 SelectionItemCard 列表（点条目再搜一次，右侧关闭按钮删单条）。
               Row() {
+                AppGlyph({ name: 'search', glyphSize: 16, tint: this.themeColorTextSecondary }).margin({ right: 6 })
                 Text('搜索历史').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-              }.padding({ left: 18, right: 18, top: 18, bottom: 8 })
-              SearchEmptyState({ title: '暂无搜索历史', detail: '在线搜索记录将在搜索能力接入后显示。' })
+                if (this.historyKeywords.length > 0) {
+                  Text('清空').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
+                    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                    .onClick(() => this.confirmClearHistory())
+                }
+              }.width('100%').alignItems(VerticalAlign.Center).padding({ left: 18, right: 18, top: 18, bottom: 8 })
+              if (this.historyKeywords.length === 0) {
+                Text('暂无搜索历史').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextTertiary)
+                  .width('100%').textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
+              } else {
+                ForEach(this.historyKeywords, (item: SearchKeyword) => {
+                  SearchHistoryRow({
+                    word: item.word,
+                    onUse: () => this.useHistoryKeyword(item.word),
+                    onDelete: () => { void this.deleteHistoryKeyword(item.word); }
+                  })
+                }, (item: SearchKeyword) => item.word)
+              }
             }.padding({ bottom: 18 })
           }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
             .onScroll(() => this.updateHeader(this.suggestionScroller.currentOffset().yOffset))
@@ -514,6 +614,35 @@ struct OnlineBookRow {
     }.width('100%').padding(12)
       .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
       .borderRadius(14).margin({ left: 16, right: 16, bottom: 9 })
+  }
+}
+
+/**
+ * 搜索历史行：对齐上游 `SelectionItemCard`（SearchScreen.kt:1044-1057 的用法）——
+ * 整行可点（再搜一次），右侧一个关闭按钮删单条，行本身是一张小卡。
+ */
+@Component
+struct SearchHistoryRow {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @StorageProp('themeAppBackground') themeAppBackground: string = '';
+  @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  @Prop word: string = '';
+  onUse: () => void = () => {};
+  onDelete: () => void = () => {};
+  build() {
+    Row() {
+      Text(this.word).fontSize(BODY_LARGE).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+      Text('×').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextTertiary)
+        .padding({ left: 10, right: 4, top: 4, bottom: 4 })
+        .onClick(() => this.onDelete())
+    }.width('100%').alignItems(VerticalAlign.Center)
+      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+      .backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated))
+      .borderRadius(12).margin({ left: 16, right: 16, bottom: 8 })
+      .onClick(() => this.onUse())
   }
 }
 

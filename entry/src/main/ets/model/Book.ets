@@ -113,6 +113,12 @@ export interface Book {
   wordCount?: string;
   /** 最后阅读这本书的时间戳，对应上游 Book.durChapterTime。 */
   durChapterTime?: number;
+  /**
+   * 与 WebDAV 同步阅读进度的时间戳，对应上游 Book.syncTime（books 表 syncTime 列）。
+   * 启动批量对齐时用它和远端文件的 lastModify 比：远端不比它新就跳过，
+   * 与远端对齐后写成本次时间，避免每次启动重复覆盖。上游写法见 help/AppWebDav.kt:449-480。
+   */
+  syncTime?: number;
   /** 手动排序序号，对应上游 Book.order；按「手动排序」时使用。 */
   order?: number;
   /** 单独为这本书关闭阅读记录，对应上游 Book.disableReadRecord。 */

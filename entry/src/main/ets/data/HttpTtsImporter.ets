@@ -13,7 +13,11 @@ export interface ReadAloudVoiceImportParse {
   skipped: number;
 }
 
-/** 单条原始源；字段全部可选，兼容不同来源的缺省。loginUi 上游可能是 JSON 数组。 */
+/**
+ * 单条原始源；字段全部可选，兼容不同来源的缺省。loginUi 上游可能是 JSON 数组。
+ * speakersJson / emotionsJson 是源自带的音色与情绪目录，只用于恢复时重建
+ * read_aloud_voices，不写回 httpTTS 表（上游 Restore.kt:566-570 的注释同理）。
+ */
 interface RawHttpTts {
   id?: number;
   name?: string;
@@ -29,6 +33,48 @@ interface RawHttpTts {
   speed?: number;
   synthesisThreadCount?: number;
   lastUpdateTime?: number;
+  speakersJson?: string;
+  emotionsJson?: string;
+}
+
+/** 单个发言人的目录项，对应上游 HttpTtsSpeakerDraft。 */
+export interface HttpTtsSpeakerDraft {
+  speakerName: string;
+  toneID: string;
+  tags: string[];
+}
+
+/** 单个情绪标签的目录项，对应上游 HttpTtsEmotionDraft。 */
+export interface HttpTtsEmotionDraft {
+  emotionName: string;
+  emotionTag: string;
+}
+
+/** 一个源自带的目录，对应上游 HttpTtsCatalogDraft。 */
+export interface HttpTtsCatalogDraft {
+  speakers: HttpTtsSpeakerDraft[];
+  emotions: HttpTtsEmotionDraft[];
+}
+
+/** 目录数组元素的原始形态：speakersJson / emotionsJson 两个字符串字段。 */
+interface RawCatalogHolder {
+  speakersJson?: string;
+  emotionsJson?: string;
+}
+
+/** 目录内部单个元素的原始形态：平铺项或分组项，字段别名一并兼容。 */
+interface RawCatalogItem {
+  speakerName?: string;
+  name?: string;
+  toneID?: string;
+  toneId?: string;
+  tone_id?: string;
+  tags?: Object[];
+  items?: Object[];
+  emotionName?: string;
+  emotionTag?: string;
+  tag?: string;
+  value?: string;
 }
 
 /** 单条原始音色；字段全部可选，兼容旧备份里的缺省列。 */
@@ -131,6 +177,183 @@ export class HttpTtsImporter {
       // 落到下面统一按「格式不可识别」处理。
     }
     return { voices: [], skipped: 1 };
+  }
+
+  /**
+   * 解析 httpTTS.json 里每一条源自带的目录，返回顺序与源数组同序，便于按下标配对。
+   * 对应上游 `HttpTtsCatalogParser.parseList`：顶层是数组就逐元素解析，
+   * 不是数组（单对象）就退化成一次单对象解析；整体解析失败返回空数组，
+   * 由调用方按「条数与源条数不一致」处理，而不是猜一个默认目录。
+   */
+  static parseCatalogs(text: string): HttpTtsCatalogDraft[] {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+    try {
+      if (trimmed.startsWith('[')) {
+        const items: Object[] = JSON.parse(trimmed) as Object[];
+        if (!Array.isArray(items)) {
+          return [HttpTtsImporter.parseCatalogText(trimmed)];
+        }
+        return items.map((item: Object): HttpTtsCatalogDraft =>
+          HttpTtsImporter.parseCatalogObject(item));
+      }
+      if (trimmed.startsWith('{')) {
+        return [HttpTtsImporter.parseCatalogText(trimmed)];
+      }
+    } catch (_) {
+      // 落到下面统一按「目录不可解析」处理。
+    }
+    return [];
+  }
+
+  /** 解析一个 JSON 文本形态的目录（顶层是单个对象）。 */
+  private static parseCatalogText(text: string): HttpTtsCatalogDraft {
+    try {
+      const holder: RawCatalogHolder = JSON.parse(text) as RawCatalogHolder;
+      return HttpTtsImporter.parseCatalogObject(holder);
+    } catch (_) {
+      return { speakers: [], emotions: [] };
+    }
+  }
+
+  /** 从已解析的对象取两个目录字段；非字符串形态按空处理，与上游 readString 一致。 */
+  private static parseCatalogObject(item: Object): HttpTtsCatalogDraft {
+    const holder: RawCatalogHolder = item as RawCatalogHolder;
+    const speakersJson = typeof holder.speakersJson === 'string' ? holder.speakersJson : undefined;
+    const emotionsJson = typeof holder.emotionsJson === 'string' ? holder.emotionsJson : undefined;
+    return {
+      speakers: HttpTtsImporter.parseSpeakers(speakersJson),
+      emotions: HttpTtsImporter.parseEmotions(emotionsJson)
+    };
+  }
+
+  /** 解析发言人目录：平铺项在前、分组项在后，同一 toneID 只保留首次出现的那条。 */
+  private static parseSpeakers(json?: string): HttpTtsSpeakerDraft[] {
+    const flat: HttpTtsSpeakerDraft[] = [];
+    const grouped: HttpTtsSpeakerDraft[] = [];
+    HttpTtsImporter.catalogElements(json).forEach((item: RawCatalogItem) => {
+      const items = item.items;
+      if (items !== undefined && Array.isArray(items)) {
+        items.forEach((child: Object) => {
+          const draft = HttpTtsImporter.speakerFrom(child as RawCatalogItem);
+          if (draft !== undefined) { grouped.push(draft); }
+        });
+      } else {
+        const draft = HttpTtsImporter.speakerFrom(item);
+        if (draft !== undefined) { flat.push(draft); }
+      }
+    });
+    return HttpTtsImporter.distinctSpeakers(flat.concat(grouped));
+  }
+
+  /** 解析情绪目录：结构与发言人一致，同一 emotionTag 只保留首次出现的那条。 */
+  private static parseEmotions(json?: string): HttpTtsEmotionDraft[] {
+    const flat: HttpTtsEmotionDraft[] = [];
+    const grouped: HttpTtsEmotionDraft[] = [];
+    HttpTtsImporter.catalogElements(json).forEach((item: RawCatalogItem) => {
+      const items = item.items;
+      if (items !== undefined && Array.isArray(items)) {
+        items.forEach((child: Object) => {
+          const draft = HttpTtsImporter.emotionFrom(child as RawCatalogItem);
+          if (draft !== undefined) { grouped.push(draft); }
+        });
+      } else {
+        const draft = HttpTtsImporter.emotionFrom(item);
+        if (draft !== undefined) { flat.push(draft); }
+      }
+    });
+    return HttpTtsImporter.distinctEmotions(flat.concat(grouped));
+  }
+
+  /** 顶层是数组就展开，是单个对象就包一层；空串与非对象元素一律丢弃。 */
+  private static catalogElements(json?: string): RawCatalogItem[] {
+    if (json === undefined || json === null || json.trim().length === 0) {
+      return [];
+    }
+    try {
+      const parsed: Object = JSON.parse(json) as Object;
+      if (Array.isArray(parsed)) {
+        const items: Object[] = parsed as Object[];
+        return items.filter((item: Object): boolean => item !== null && typeof item === 'object') as RawCatalogItem[];
+      }
+      if (parsed !== null && typeof parsed === 'object') {
+        return [parsed as RawCatalogItem];
+      }
+    } catch (_) {
+      // 目录文本损坏时按「没有目录」处理：源本身仍然可以恢复。
+    }
+    return [];
+  }
+
+  /** 取一个发言人；缺名字或缺 toneID 的条目丢弃——只有名字的发言人是没法合成的。 */
+  private static speakerFrom(item: RawCatalogItem): HttpTtsSpeakerDraft | undefined {
+    const speakerName = HttpTtsImporter.firstString([item.speakerName, item.name]);
+    const toneID = HttpTtsImporter.firstString([item.toneID, item.toneId, item.tone_id]);
+    if (speakerName === undefined || toneID === undefined) {
+      return undefined;
+    }
+    return { speakerName: speakerName, toneID: toneID, tags: HttpTtsImporter.stringArray(item.tags) };
+  }
+
+  /** 取一个情绪标签；缺名字或缺 tag 的条目丢弃。 */
+  private static emotionFrom(item: RawCatalogItem): HttpTtsEmotionDraft | undefined {
+    const emotionName = HttpTtsImporter.firstString([item.emotionName, item.name]);
+    const emotionTag = HttpTtsImporter.firstString([item.emotionTag, item.tag, item.value]);
+    if (emotionName === undefined || emotionTag === undefined) {
+      return undefined;
+    }
+    return { emotionName: emotionName, emotionTag: emotionTag };
+  }
+
+  /** 按字段别名顺序取第一个非空白字符串。 */
+  private static firstString(values: (string | undefined)[]): string | undefined {
+    for (let index = 0; index < values.length; index++) {
+      const value = values[index];
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  /** 只收非空字符串元素的数组，非数组或非字符串元素一律忽略。 */
+  private static stringArray(values?: Object[]): string[] {
+    if (values === undefined || !Array.isArray(values)) {
+      return [];
+    }
+    const result: string[] = [];
+    values.forEach((value: Object) => {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        result.push(value);
+      }
+    });
+    return result;
+  }
+
+  /** 按 toneID 去重，保留首次出现。 */
+  private static distinctSpeakers(items: HttpTtsSpeakerDraft[]): HttpTtsSpeakerDraft[] {
+    const seen: string[] = [];
+    const result: HttpTtsSpeakerDraft[] = [];
+    items.forEach((item: HttpTtsSpeakerDraft) => {
+      if (seen.indexOf(item.toneID) >= 0) { return; }
+      seen.push(item.toneID);
+      result.push(item);
+    });
+    return result;
+  }
+
+  /** 按 emotionTag 去重，保留首次出现。 */
+  private static distinctEmotions(items: HttpTtsEmotionDraft[]): HttpTtsEmotionDraft[] {
+    const seen: string[] = [];
+    const result: HttpTtsEmotionDraft[] = [];
+    items.forEach((item: HttpTtsEmotionDraft) => {
+      if (seen.indexOf(item.emotionTag) >= 0) { return; }
+      seen.push(item.emotionTag);
+      result.push(item);
+    });
+    return result;
   }
 
   /** 把一条原始数据转换成源；缺非零 id 或空 name 的条目没有落库依据，按无效跳过。 */

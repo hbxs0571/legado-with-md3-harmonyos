@@ -21,6 +21,12 @@ export interface OtherSettings {
    */
   recordLog: boolean;
   /**
+   * 记录堆转储开关。上游 `OtherSettings.kt:23 val recordHeapDump: Boolean = false`，
+   * 落盘键 `PreferKey.kt:210 recordHeapDump`；崩溃处理里遇到 OOM 时按它决定是否
+   * 顺手抓一份堆转储（`CrashHandler.kt:105-107`），关于页「创建堆转储」也按它门控。
+   */
+  recordHeapDump: boolean;
+  /**
    * 字体列表排序档位。上游 `OtherSettings.kt:28 val fontSort: Int = 0`，
    * 落盘键 `PreferKey.kt:78 fontSort`，0..5 依次对应
    * `FontSelectGrid.kt:72-83 FontSort` 的名称升序/名称降序/大小升序/大小降序/时间升序/时间降序。
@@ -33,6 +39,7 @@ export const DEFAULT_OTHER_SETTINGS: OtherSettings = {
   sourceEditMaxLine: 2147483647,
   webPort: 1122,
   recordLog: false,
+  recordHeapDump: false,
   fontSort: 0
 };
 
@@ -42,12 +49,14 @@ export class OtherSettingsRepository {
   private static readonly keySourceEditMaxLine: string = 'sourceEditMaxLine';
   private static readonly keyWebPort: string = 'webPort';
   private static readonly keyRecordLog: string = 'recordLog';
+  private static readonly keyRecordHeapDump: string = 'recordHeapDump';
   private static readonly keyFontSort: string = 'fontSort';
   private static cached: OtherSettings = {
     defaultBookTreeUri: '',
     sourceEditMaxLine: 2147483647,
     webPort: 1122,
     recordLog: false,
+    recordHeapDump: false,
     fontSort: 0
   };
 
@@ -57,6 +66,7 @@ export class OtherSettingsRepository {
       sourceEditMaxLine: settings.sourceEditMaxLine,
       webPort: settings.webPort,
       recordLog: settings.recordLog,
+      recordHeapDump: settings.recordHeapDump,
       fontSort: settings.fontSort
     };
   }
@@ -68,6 +78,7 @@ export class OtherSettingsRepository {
       sourceEditMaxLine: OtherSettingsRepository.cached.sourceEditMaxLine,
       webPort: OtherSettingsRepository.cached.webPort,
       recordLog: OtherSettingsRepository.cached.recordLog,
+      recordHeapDump: OtherSettingsRepository.cached.recordHeapDump,
       fontSort: OtherSettingsRepository.cached.fontSort
     };
   }
@@ -78,6 +89,7 @@ export class OtherSettingsRepository {
     let sourceEditMaxLine = DEFAULT_OTHER_SETTINGS.sourceEditMaxLine;
     let webPort = DEFAULT_OTHER_SETTINGS.webPort;
     let recordLog = DEFAULT_OTHER_SETTINGS.recordLog;
+    let recordHeapDump = DEFAULT_OTHER_SETTINGS.recordHeapDump;
     let fontSort = DEFAULT_OTHER_SETTINGS.fontSort;
     try {
       const store = await preferences.getPreferences(context, OtherSettingsRepository.preferenceName);
@@ -85,6 +97,7 @@ export class OtherSettingsRepository {
       sourceEditMaxLine = store.getSync(OtherSettingsRepository.keySourceEditMaxLine, sourceEditMaxLine) as number;
       webPort = store.getSync(OtherSettingsRepository.keyWebPort, webPort) as number;
       recordLog = store.getSync(OtherSettingsRepository.keyRecordLog, recordLog) as boolean;
+      recordHeapDump = store.getSync(OtherSettingsRepository.keyRecordHeapDump, recordHeapDump) as boolean;
       fontSort = store.getSync(OtherSettingsRepository.keyFontSort, fontSort) as number;
     } catch (error) {
       console.error(`其它设置读取失败：${error instanceof Error ? error.message : String(error)}`);
@@ -94,6 +107,7 @@ export class OtherSettingsRepository {
       sourceEditMaxLine: sourceEditMaxLine,
       webPort: webPort,
       recordLog: recordLog,
+      recordHeapDump: recordHeapDump,
       fontSort: normalizeAppFontSort(fontSort)
     };
     OtherSettingsRepository.publish(settings);
@@ -107,6 +121,7 @@ export class OtherSettingsRepository {
     await store.put(OtherSettingsRepository.keySourceEditMaxLine, settings.sourceEditMaxLine);
     await store.put(OtherSettingsRepository.keyWebPort, settings.webPort);
     await store.put(OtherSettingsRepository.keyRecordLog, settings.recordLog);
+    await store.put(OtherSettingsRepository.keyRecordHeapDump, settings.recordHeapDump);
     await store.put(OtherSettingsRepository.keyFontSort, normalizeAppFontSort(settings.fontSort));
     await store.flush();
     OtherSettingsRepository.publish(settings);

@@ -18,7 +18,8 @@ export interface ReadAloudVoiceImportOutcome {
  * 首次使用返回空集，不自动生成默认数据。
  */
 export class ReadAloudVoiceRepository {
-  private static readonly columns: string =
+  /** 列清单与 insertSql 对 HttpTtsCatalogSync 公开：目录恢复要在同一个事务里写这张表。 */
+  static readonly columns: string =
     '`id`, `engineType`, `engineId`, `speakerId`, `displayName`, `traitsJson`, ' +
     '`emotionCatalogJson`, `managedBy`, `enabled`, `available`, `excluded`, ' +
     '`revision`, `createdAt`, `updatedAt`';
@@ -33,13 +34,17 @@ export class ReadAloudVoiceRepository {
     ' AND `engineId` IN (SELECT CAST(`id` AS TEXT) FROM `httpTTS`)' +
     ' ORDER BY `displayName` COLLATE NOCASE ASC';
   /** 合并恢复用：读全部 http 行（含孤儿），才能认出本地 excluded=1 的行。 */
-  private static readonly selectHttpAll: string =
+  static readonly selectHttpAll: string =
     'SELECT ' + ReadAloudVoiceRepository.columns +
     ' FROM `read_aloud_voices` WHERE `engineType` = \'http\'';
   private static readonly selectSourceIds: string = 'SELECT `id` FROM `httpTTS`';
-  private static readonly insertSql: string =
+  static readonly insertSql: string =
     'INSERT OR REPLACE INTO `read_aloud_voices` (' + ReadAloudVoiceRepository.columns + ') ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  /** 清孤儿：engineId 不在 httpTTS 表里的 http 音色（上游 deleteOrphanedHttpVoices）。 */
+  static readonly deleteOrphanedHttp: string =
+    'DELETE FROM `read_aloud_voices` WHERE `engineType` = \'http\'' +
+    ' AND `engineId` NOT IN (SELECT CAST(`id` AS TEXT) FROM `httpTTS`)';
   private static saveQueue: Promise<void> = Promise.resolve();
   private static cachedVoices: ReadAloudVoice[] = [];
 
@@ -219,7 +224,8 @@ export class ReadAloudVoiceRepository {
     }
   }
 
-  private static async readRows(store: relationalStore.RdbStore, sql: string): Promise<ReadAloudVoice[]> {
+  /** 读一组音色行；对 HttpTtsCatalogSync 公开，目录恢复要在同一事务里先读后写。 */
+  static async readRows(store: relationalStore.RdbStore, sql: string): Promise<ReadAloudVoice[]> {
     const resultSet = await store.querySql(sql);
     try {
       return ReadAloudVoiceRepository.readAll(resultSet);
@@ -229,7 +235,7 @@ export class ReadAloudVoiceRepository {
   }
 
   /** 读 httpTTS 的 id 集合，转成字符串后与 read_aloud_voices.engineId（TEXT）比较。 */
-  private static async readSourceIds(store: relationalStore.RdbStore): Promise<string[]> {
+  static async readSourceIds(store: relationalStore.RdbStore): Promise<string[]> {
     const resultSet = await store.querySql(ReadAloudVoiceRepository.selectSourceIds);
     const ids: string[] = [];
     try {
@@ -241,6 +247,25 @@ export class ReadAloudVoiceRepository {
       resultSet.close();
     }
     return ids;
+  }
+
+  /** 删掉某个 httpTTS 引擎下的全部音色行；对应上游 `deleteHttpVoices(engineId)`。 */
+  static readonly deleteHttpVoicesSql: string =
+    'DELETE FROM `read_aloud_voices` WHERE `engineType` = \'http\' AND `engineId` = ?';
+
+  /** 在调用方给定的事务里写一行（同 id 覆盖）；对 HttpTtsCatalogSync 公开，不 commit、不回滚。 */
+  static async insertVoice(store: relationalStore.RdbStore, voice: ReadAloudVoice): Promise<void> {
+    await store.executeSql(ReadAloudVoiceRepository.insertSql, [
+      voice.id, voice.engineType, voice.engineId, voice.speakerId,
+      voice.displayName, voice.traitsJson, voice.emotionCatalogJson,
+      voice.managedBy, voice.enabled ? 1 : 0, voice.available ? 1 : 0,
+      voice.excluded ? 1 : 0, voice.revision, voice.createdAt, voice.updatedAt
+    ]);
+  }
+
+  /** 在调用方给定的事务里删一行；对 HttpTtsCatalogSync 公开，不 commit、不回滚。 */
+  static async deleteVoice(store: relationalStore.RdbStore, id: string): Promise<void> {
+    await store.executeSql('DELETE FROM `read_aloud_voices` WHERE `id` = ?', [id]);
   }
 
   /** 从结果集读出全部音色；列顺序与 columns 一致。 */
