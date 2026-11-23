@@ -4,9 +4,66 @@ import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader
 import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { ThemeItemDivider } from '../components/ThemeItemDivider';
+import { UiDropdown } from '../components/settings/UiDropdown';
 import { BackupCategoryOption } from '../data/BackupRepository';
 import { WebDavSettings, defaultWebDavSettings, cloneWebDavSettings } from '../lib/WebDavConfig';
+import { WebDavSync } from '../lib/WebDavSync';
 import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+
+/** 弹层分支：对应上游 BackupConfigSheet 七项（BackupConfigContract.kt:28-36）。 */
+enum BackupSheetKind {
+  NONE = 'none',
+  CHOOSE_BACKUP_PATH = 'chooseBackupPath',
+  CHOOSE_BACKUP_AND_RUN = 'chooseBackupAndRun',
+  BACKUP_OPTIONS = 'backupOptions',
+  RESTORE_OPTIONS = 'restoreOptions',
+  RESTORE_FILES = 'restoreFiles',
+  IGNORE_RESTORE_ITEMS = 'ignoreRestoreItems',
+  IGNORE_BACKUP_ITEMS = 'ignoreBackupItems'
+}
+
+/** 对话框分支：对应上游 BackupConfigDialog 三项（BackupConfigContract.kt:38-47）。 */
+enum BackupDialogKind {
+  NONE = 'none',
+  WEBDAV_AUTH = 'webDavAuth',
+  CONFIRM_LOCAL_RESTORE_FALLBACK = 'confirmLocalRestoreFallback',
+  LOADING = 'loading'
+}
+
+/** 忽略项：对应上游 BackupIgnoreItem 三字段（BackupConfigContract.kt:22-26）。 */
+interface BackupIgnoreItem {
+  key: string;
+  title: string;
+  checked: boolean;
+}
+
+/** 配置维度九项顺序：照 help/storage/BackupConfig.kt:145-155。 */
+const BACKUP_CONFIG_KEYS: string[] = [
+  'readConfig', 'themeMode', 'themeConfig', 'coverConfig', 'bookshelfLayout',
+  'showRss', 'threadCount', 'localBook', 'mangaConfig'
+];
+
+/** 数据库维度十九项顺序：照 help/storage/BackupConfig.kt:96-102。 */
+const BACKUP_DB_KEYS: string[] = [
+  'bookmark', 'bookGroup', 'bookSource', 'rssSource', 'rssStar', 'replaceRule',
+  'readRecord', 'searchHistory', 'sourceSub', 'txtTocRule', 'httpTTS',
+  'keyboardAssists', 'dictRule', 'homepageModules', 'homepageCustomSets',
+  'highlightRule', 'highlightTagRule', 'tagGroupRule', 'server'
+];
+
+/** 配置维度标题：照 help/storage/BackupConfig.kt:158-168 的 strings 真值。 */
+const BACKUP_CONFIG_TITLES: string[] = [
+  '阅读界面', '深色模式', '主题配置', '封面设置', '书架布局',
+  '显示订阅', '线程数', '本地书籍', '漫画设置'
+];
+
+/** 数据库维度标题：照 help/storage/BackupConfig.kt:104-124 的 strings 真值。 */
+const BACKUP_DB_TITLES: string[] = [
+  '书签', '书架分组', '书源', '订阅源', 'RSS 收藏', '替换规则',
+  '阅读记录', '搜索历史', '书源订阅', 'TXT 目录规则', 'HTTP TTS',
+  '键盘辅助', '字典规则', '首页模块 (JSON)', '首页自定义',
+  '高亮规则', '标签规则', '标签分组规则', '服务器配置'
+];
 
 /** 本地备份与恢复页面，文件格式与 Android 原项目兼容。 */
 @Component
@@ -20,6 +77,11 @@ export struct AppBackupSettingsPage {
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
+  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
+  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
+  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
+  @StorageProp('themeCardBackground') themeCardBackground: string = '';
+  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   @Prop localBookCount: number = 0;
   @Prop categoryOptions: BackupCategoryOption[] = [];
   @Prop backupIgnoreKeys: string[] = [];
@@ -29,7 +91,6 @@ export struct AppBackupSettingsPage {
   @Prop webDavSettings: WebDavSettings = defaultWebDavSettings();
   @Prop webDavTesting: boolean = false;
   @Prop webDavConfigured: boolean = false;
-  @Prop webDavBackupNames: string[] = [];
   onBack: () => void = () => {};
   onCreateBackup: () => void = () => {};
   onSelectRestore: () => void = () => {};
@@ -50,176 +111,292 @@ export struct AppBackupSettingsPage {
   onClearBackupPath: () => void = () => {};
   /** 导入旧版本 myBookShelf.json。 */
   onImportOldShelf: () => void = () => {};
-  @State activeSheet: string = '';
-  @State inputTitle: string = '';
-  @State inputDraft: string = '';
+  /** 保存账号密码：宿主写完配置后串一次连接测试，对齐上游 saveWebDavAuth。 */
+  onSaveWebDavAuth: (account: string, password: string) => void = (_account: string, _password: string) => {};
+  /** 恢复指定的远端备份文件（由 RestoreFiles 弹层选中后触发）。 */
+  onRestoreNetwork: (name: string) => void = (_name: string) => {};
+  /** 网络恢复失败回退：确认后开本地文件选择器。 */
+  onConfirmLocalRestoreFallback: () => void = () => {};
+  /** 忽略面板关闭时一次性写盘，side 为 backup 或 restore。 */
+  onSaveIgnoreItems: (side: string, keys: string[]) => void = (_side: string, _keys: string[]) => {};
+  @State activeSheet: BackupSheetKind = BackupSheetKind.NONE;
+  @State activeDialog: BackupDialogKind = BackupDialogKind.NONE;
   @State collapsedHeader: boolean = false;
-  @State inputKey: string = '';
-  @State inputPassword: boolean = false;
-  /**
-   * :381（批6）WebDAV 账号密码改成单面板双字段。两个草稿只在 webdavAuth 面板用；
-   * 另外五个单字段仍走 inputDraft，不复用。
-   */
+  /** 三个行内输入行的草稿：editingKey 为空表示没有行在编辑。 */
+  @State editingKey: string = '';
+  @State inputDraft: string = '';
+  /** WebDAV 账号密码对话框草稿。 */
   @State accountDraft: string = '';
   @State passwordDraft: string = '';
   @State passwordVisible: boolean = false;
+  /** 忽略面板内存态：只在面板内改，关闭时统一提交。 */
+  @State ignoreDraft: BackupIgnoreItem[] = [];
+  @State ignoreSide: string = 'backup';
+  @State ignoreTab: number = 0;
+  /** 网络恢复拉到的文件名列表与失败原因。 */
+  @State networkNames: string[] = [];
+  @State fallbackError: string = '';
   private backupScroller: Scroller = new Scroller();
 
-  private openSettingInput(key: string, title: string, password: boolean): void {
-    this.inputKey = key;
-    this.inputTitle = title;
-    this.inputDraft = '';
-    this.inputPassword = password;
-    this.activeSheet = 'input';
+  private openSettingInput(key: string, draft: string): void {
+    this.editingKey = key;
+    this.inputDraft = draft;
   }
 
-  /**
-   * :381（批6）：打开「WebDAV 账号与密码」单面板。
-   * 预填当前账号与密码——用户改密码时不该重打一遍账号。
-   */
   private openWebDavAuth(): void {
     this.accountDraft = this.webDavSettings.account;
     this.passwordDraft = this.webDavSettings.password;
     this.passwordVisible = false;
-    this.activeSheet = 'webdavAuth';
+    this.activeDialog = BackupDialogKind.WEBDAV_AUTH;
   }
 
-  /** :381：合并后的账号密码行 detail，沿用原来两行的判据。 */
   private webDavAuthDetail(): string {
-    if (this.webDavSettings.account.trim().length === 0) { return '账号与密码尚未配置'; }
-    return this.webDavSettings.password.length === 0 ? '仅填了账号，密码为空' : '已设置';
+    if (this.webDavSettings.account.trim().length === 0) { return '输入你的 WebDav 账号'; }
+    return this.webDavSettings.password.length === 0 ? '密码为空' : this.webDavSettings.account;
   }
 
   private describeSyncMode(mode: string): string {
-    if (mode === 'local') { return '仅本地'; }
-    if (mode === 'webdav') { return '仅 WebDAV'; }
-    return '本地与 WebDAV';
+    if (mode === 'local') { return '备份至本地'; }
+    if (mode === 'webdav') { return '备份至网络'; }
+    return '备份至本地与网络';
+  }
+
+  private syncModeLabel(value: string): string {
+    return this.describeSyncMode(value);
+  }
+
+  /** 关总开关时把增强一起关掉，对齐上游 syncBookProgressPlus = plus && value。 */
+  private setSyncBookProgress(value: boolean): void {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.syncBookProgress = value;
+    if (!value) {
+      next.syncBookProgressPlus = false;
+    }
+    this.onWebDavSettingsChange(next);
+  }
+
+  private setWebDavField(field: string, value: string): void {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    if (field === 'url') {
+      next.url = value.trim();
+    } else if (field === 'dir') {
+      next.dir = value.trim();
+    } else if (field === 'deviceName') {
+      next.deviceName = value.trim();
+    }
+    this.editingKey = '';
+    this.onWebDavSettingsChange(next);
+  }
+
+  private setBackupSyncMode(mode: string): void {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.backupSyncMode = mode;
+    this.onWebDavSettingsChange(next);
+  }
+
+  private setOnlyLatestBackup(value: boolean): void {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.onlyLatestBackup = value;
+    this.onWebDavSettingsChange(next);
+  }
+
+  private setAutoCheckNewBackup(value: boolean): void {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.autoCheckNewBackup = value;
+    this.onWebDavSettingsChange(next);
+  }
+
+  private setSyncBookProgressPlus(value: boolean): void {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.syncBookProgressPlus = value;
+    this.onWebDavSettingsChange(next);
+  }
+
+  /** 打开忽略面板时按上游键序构建内存副本，checked 取当前该侧的键集合。 */
+  private openIgnoreSheet(sheet: BackupSheetKind): void {
+    const side: string = sheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ? 'backup' : 'restore';
+    const source: string[] = side === 'backup' ? this.backupIgnoreKeys : this.restoreIgnoreKeys;
+    const draft: BackupIgnoreItem[] = [];
+    for (let i = 0; i < BACKUP_CONFIG_KEYS.length; i++) {
+      draft.push({ key: BACKUP_CONFIG_KEYS[i], title: BACKUP_CONFIG_TITLES[i], checked: source.includes(BACKUP_CONFIG_KEYS[i]) });
+    }
+    for (let i = 0; i < BACKUP_DB_KEYS.length; i++) {
+      draft.push({ key: BACKUP_DB_KEYS[i], title: BACKUP_DB_TITLES[i], checked: source.includes(BACKUP_DB_KEYS[i]) });
+    }
+    this.ignoreDraft = draft;
+    this.ignoreSide = side;
+    this.ignoreTab = 0;
+    this.activeSheet = sheet;
+  }
+
+  private toggleIgnoreItem(key: string, checked: boolean): void {
+    this.ignoreDraft = this.ignoreDraft.map((item: BackupIgnoreItem): BackupIgnoreItem => {
+      if (item.key === key) {
+        return { key: item.key, title: item.title, checked: checked };
+      }
+      return item;
+    });
+  }
+
+  private visibleIgnoreItems(): BackupIgnoreItem[] {
+    return this.ignoreDraft.filter((item: BackupIgnoreItem, index: number): boolean => {
+      return this.ignoreTab === 0 ? index < BACKUP_CONFIG_KEYS.length : index >= BACKUP_CONFIG_KEYS.length;
+    });
+  }
+
+  /** 关闭即保存：对齐上游 IgnoreItemsSheet 的 onDismissRequest = onConfirm。 */
+  private dismissSheet(): void {
+    if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
+        this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
+      const keys: string[] = this.ignoreDraft
+        .filter((item: BackupIgnoreItem): boolean => item.checked)
+        .map((item: BackupIgnoreItem): string => item.key);
+      this.onSaveIgnoreItems(this.ignoreSide, keys);
+    }
+    this.activeSheet = BackupSheetKind.NONE;
+  }
+
+  /** 从网络恢复：先拉全部文件名，非空弹选择层，空或失败弹回退对话框。 */
+  private async requestNetworkRestore(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    this.activeDialog = BackupDialogKind.LOADING;
+    try {
+      const names: string[] = await WebDavSync.listBackups(context);
+      this.activeDialog = BackupDialogKind.NONE;
+      if (names.length > 0) {
+        this.networkNames = names;
+        this.activeSheet = BackupSheetKind.RESTORE_FILES;
+      } else {
+        this.fallbackError = '没有找到远端备份文件';
+        this.activeDialog = BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK;
+      }
+    } catch (error) {
+      this.activeDialog = BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK;
+      this.fallbackError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private dialogVisible(): boolean {
+    return this.activeDialog !== BackupDialogKind.NONE || this.busy || this.webDavTesting;
+  }
+
+  private sheetHeight(): number {
+    if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
+        this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
+      return 560;
+    }
+    if (this.activeSheet === BackupSheetKind.RESTORE_FILES) {
+      return 420;
+    }
+    return 320;
   }
 
   private updateHeader(): void {
     const offset = this.backupScroller.currentOffset().yOffset;
     const shouldCollapse = offset > HEADER_COLLAPSE_THRESHOLD ? true : offset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader;
     if (shouldCollapse !== this.collapsedHeader) {
-      // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
       this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
         this.collapsedHeader = shouldCollapse;
       });
     }
   }
 
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   build() {
     Column() {
       CollapsingSettingsHeader({ title: '备份与恢复', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
       Scroll(this.backupScroller) {
         Column() {
-          Text('WebDAV 设置').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
+          Text('WebDav 设置').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
-            BackupActionRow({ icon: 'cloud', title: 'WebDAV 服务器地址',
-              detail: this.webDavSettings.url.trim().length === 0 ? '默认（坚果云）' : this.webDavSettings.url,
-              onSelect: () => this.openSettingInput('url', 'WebDAV 服务器地址', false) })
+            BackupInputRow({ title: 'WebDav 服务器地址', detail: '输入你的WebDav服务器地址',
+              value: this.webDavSettings.url, defaultValue: '', editing: this.editingKey === 'url',
+              draft: this.inputDraft,
+              onBegin: () => this.openSettingInput('url', this.webDavSettings.url),
+              onDraft: (value: string) => this.inputDraft = value,
+              onConfirm: (value: string) => this.setWebDavField('url', value) })
             ThemeItemDivider()
-            // :381（批6）：账号与密码两行合并成一行，点开是同一个面板里的两个输入框
-            // （上游 BackupConfigScreen.kt:452-508 WebDavAuth 对话框）。
-            BackupActionRow({ icon: 'profileSource', title: 'WebDAV 账号与密码',
-              detail: this.webDavAuthDetail(),
-              onSelect: () => this.openWebDavAuth() })
+            BackupActionRow({ icon: 'profileSource', title: 'WebDav 账号',
+              detail: this.webDavAuthDetail(), onSelect: () => this.openWebDavAuth() })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'folder', title: '子目录',
-              detail: this.webDavSettings.dir.trim().length === 0 ? '（根目录）' : this.webDavSettings.dir,
-              onSelect: () => this.openSettingInput('dir', '子目录', false) })
+            BackupInputRow({ title: '子文件夹', detail: '',
+              value: this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado',
+              defaultValue: 'legado', editing: this.editingKey === 'dir',
+              draft: this.inputDraft,
+              onBegin: () => this.openSettingInput('dir', this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado'),
+              onDraft: (value: string) => this.inputDraft = value,
+              onConfirm: (value: string) => this.setWebDavField('dir', value) })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'profileSource', title: '设备名称',
-              detail: this.webDavSettings.deviceName.trim().length === 0 ? '未设置' : this.webDavSettings.deviceName,
-              onSelect: () => this.openSettingInput('deviceName', '设备名称', false) })
+            BackupInputRow({ title: '设备名称', detail: '',
+              value: this.webDavSettings.deviceName, defaultValue: '', editing: this.editingKey === 'deviceName',
+              draft: this.inputDraft,
+              onBegin: () => this.openSettingInput('deviceName', this.webDavSettings.deviceName),
+              onDraft: (value: string) => this.inputDraft = value,
+              onConfirm: (value: string) => this.setWebDavField('deviceName', value) })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'cloudSync', title: '测试同步',
-              detail: this.webDavTesting ? '正在测试…' : '检查 WebDAV 连接',
+            BackupActionRow({ icon: 'cloudSync', title: '测试 WebDav 配置',
+              detail: this.webDavTesting ? '测试中…' : '测试 WebDav 服务工作状态',
               disabled: this.webDavTesting, onSelect: () => this.onTestWebDav() })
             ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '同步书籍进度',
-              detail: '停止阅读时把进度写进 WebDAV 的 bookProgress 目录',
-              checked: this.webDavSettings.syncBookProgress, onChange: (value: boolean) => {
-                const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-                next.syncBookProgress = value;
-                this.onWebDavSettingsChange(next);
-              } })
+            BackupPreviewSwitchRow({ title: '同步阅读进度',
+              detail: '进入退出阅读界面时同步阅读进度',
+              checked: this.webDavSettings.syncBookProgress,
+              onChange: (value: boolean) => this.setSyncBookProgress(value) })
             ThemeItemDivider()
             if (this.webDavSettings.syncBookProgress) {
-              BackupPreviewSwitchRow({ title: '增强进度同步',
-                detail: '打开书时比对远端进度，比本地新就提示跳转',
-                checked: this.webDavSettings.syncBookProgressPlus, onChange: (value: boolean) => {
-                  const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-                  next.syncBookProgressPlus = value;
-                  this.onWebDavSettingsChange(next);
-                } }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              BackupPreviewSwitchRow({ title: '同步增强',
+                detail: '重新进入页面（息屏、后台返回等）或者网络变为可用时同步云端进度',
+                checked: this.webDavSettings.syncBookProgressPlus,
+                onChange: (value: boolean) => this.setSyncBookProgressPlus(value)
+              }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              ThemeItemDivider()
             }
-            ThemeItemDivider()
             BackupPreviewSwitchRow({ title: '自动检查新备份',
-              detail: '启动时检查一次远端是否有更新的备份',
-              checked: this.webDavSettings.autoCheckNewBackup, onChange: (value: boolean) => {
-                const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-                next.autoCheckNewBackup = value;
-                this.onWebDavSettingsChange(next);
-              } })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'settings', title: '备份同步模式',
-              detail: this.describeSyncMode(this.webDavSettings.backupSyncMode), last: true,
-              onSelect: () => this.activeSheet = 'syncMode' })
+              detail: '打开软件时检查是否有新备份，有新备份时提示是否更新',
+              checked: this.webDavSettings.autoCheckNewBackup,
+              onChange: (value: boolean) => this.setAutoCheckNewBackup(value) })
+            UiDropdown({ title: '自动备份同步', detail: '选择自动备份时的同步行为',
+              option: this.webDavSettings.backupSyncMode,
+              options: ['both', 'local', 'webdav'],
+              labelOf: (value: string) => this.syncModeLabel(value),
+              onSelect: (value: string) => this.setBackupSyncMode(value), showDivider: false })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
 
           Text('备份与恢复').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
             .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
           Column() {
             BackupActionRow({ icon: 'folder', title: '备份路径',
-              detail: this.webDavSettings.backupPath.trim().length === 0 ? '未选择（每次弹系统保存框）'
-                : '已选目录，备份直接写入',
-              onSelect: () => this.activeSheet = 'path', disabled: this.busy })
+              detail: this.webDavSettings.backupPath.trim().length === 0 ? '请选择备份路径' : this.webDavSettings.backupPath,
+              onSelect: () => this.activeSheet = BackupSheetKind.CHOOSE_BACKUP_PATH, disabled: this.busy })
             ThemeItemDivider()
-            BackupActionRow({
-              icon: 'cloud', title: '备份',
-              detail: `导出 Android 兼容 ZIP；当前书架 ${this.localBookCount} 本`,
-              onSelect: () => this.activeSheet = 'backup', disabled: this.busy
-            })
+            BackupActionRow({ icon: 'cloud', title: '备份',
+              detail: '本地和 WebDav 一起备份',
+              onSelect: () => this.activeSheet = BackupSheetKind.BACKUP_OPTIONS, disabled: this.busy })
             ThemeItemDivider()
-            BackupActionRow({
-              icon: 'download', title: '恢复',
-              detail: '选择 Android 阅读 ZIP 后直接导入可映射内容',
-              onSelect: () => this.activeSheet = 'restore', disabled: this.busy
-            })
+            BackupActionRow({ icon: 'download', title: '恢复',
+              detail: '选择从本地或网络恢复备份',
+              onSelect: () => this.activeSheet = BackupSheetKind.RESTORE_OPTIONS, disabled: this.busy })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'settings', title: '恢复排除项',
-              detail: `当前跳过 ${this.restoreIgnoreKeys.length} 个数据类别`,
-              onSelect: () => this.activeSheet = 'ignoreRestore', disabled: this.busy })
+            BackupActionRow({ icon: 'settings', title: '恢复忽略列表',
+              detail: '选择恢复忽略内容',
+              onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_RESTORE_ITEMS), disabled: this.busy })
             ThemeItemDivider()
-            BackupActionRow({ icon: 'settings', title: '备份排除项',
-              detail: `当前排除 ${this.backupIgnoreKeys.length} 个数据类别`,
-              onSelect: () => this.activeSheet = 'ignoreBackup', disabled: this.busy })
+            BackupActionRow({ icon: 'settings', title: '备份忽略列表',
+              detail: '选择备份忽略内容',
+              onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_BACKUP_ITEMS), disabled: this.busy })
             ThemeItemDivider()
             BackupActionRow({ icon: 'download', title: '导入旧版数据',
-              detail: '从 myBookShelf.json 迁移书架书目与进度',
+              detail: '选择旧版备份文件夹',
               onSelect: () => this.onImportOldShelf(), disabled: this.busy })
             ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '只保留最新备份',
-              detail: '备份成功后删掉旧的 backup 文件（本地目录与 WebDAV 各清一次）',
-              checked: this.webDavSettings.onlyLatestBackup, onChange: (value: boolean) => {
-                const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-                next.onlyLatestBackup = value;
-                this.onWebDavSettingsChange(next);
-              } })
+            BackupPreviewSwitchRow({ title: '仅保留最新备份',
+              detail: '本地备份仅保留最新备份文件',
+              checked: this.webDavSettings.onlyLatestBackup,
+              onChange: (value: boolean) => this.setOnlyLatestBackup(value) })
           }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          if (this.busy) {
-            Row() {
-              LoadingProgress().width(18).height(18).color(this.themeColorAccent)
-              Text('正在处理 Android 备份…').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ left: 10 })
-            }.width('100%').padding(14).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
-          }
 
           if (this.statusMessage.length > 0) {
             Text(this.statusMessage).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).lineHeight(TITLE_SMALL_LINE_HEIGHT)
@@ -234,12 +411,20 @@ export struct AppBackupSettingsPage {
         }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.activeSheet.length > 0, this.backupSheetContent(), {
-        height: 520,
+      .bindSheet(this.activeSheet !== BackupSheetKind.NONE, this.backupSheetContent(), {
+        height: this.sheetHeight(),
         dragBar: true,
         showClose: false,
         backgroundColor: this.themeColorSurfaceTertiary,
-        onDisappear: () => this.activeSheet = ''
+        onDisappear: () => {
+          if (this.activeSheet !== BackupSheetKind.NONE) {
+            this.dismissSheet();
+          }
+        }
+      })
+      .bindContentCover(this.dialogVisible(), this.dialogContent(), {
+        backgroundColor: '#99000000',
+        onDisappear: () => {}
       })
   }
 
@@ -247,128 +432,247 @@ export struct AppBackupSettingsPage {
   private backupSheetContent() {
     Column() {
       Row() {
-        Text(this.activeSheet === 'backup' ? '备份' : this.activeSheet === 'restore' ? '恢复' :
-          this.activeSheet === 'ignoreBackup' ? '备份排除项' : this.activeSheet === 'ignoreRestore' ?
-          '恢复排除项' : this.activeSheet === 'path' ? '备份路径' : this.activeSheet === 'syncMode' ?
-          '备份同步模式' : this.activeSheet === 'webdavAuth' ? 'WebDAV 账号与密码' : this.inputTitle)
+        Text(this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH ? '选择备份路径' :
+          this.activeSheet === BackupSheetKind.BACKUP_OPTIONS ? '备份' :
+          this.activeSheet === BackupSheetKind.RESTORE_OPTIONS ? '恢复' :
+          this.activeSheet === BackupSheetKind.RESTORE_FILES ? '选择恢复文件' :
+          this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ? '备份忽略列表' :
+          this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS ? '恢复忽略列表' : '')
           .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.activeSheet = '')
+        if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
+            this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
+          AppGlyph({ name: 'profileSave', glyphSize: 22, tint: this.themeColorAccent })
+            .accessibilityText('保存')
+            .onClick(() => this.dismissSheet())
+        } else {
+          Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.dismissSheet())
+        }
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
-      if (this.activeSheet === 'backup') {
-        BackupSheetOption({ title: '备份到本地', detail: '创建 Android 兼容 ZIP',
-          onSelect: () => { this.activeSheet = ''; this.onCreateBackup(); } })
-        BackupSheetOption({ title: '备份到 WebDAV', detail: '仅上传到 WebDAV',
-          onSelect: () => { this.activeSheet = ''; this.onBackupToWebDav(); } })
-        BackupSheetOption({ title: '同时备份到本地和 WebDAV', detail: '先保存到本地，再上传到 WebDAV',
-          onSelect: () => { this.activeSheet = ''; this.onCreateBackupBoth(); } })
-      } else if (this.activeSheet === 'restore') {
-        BackupSheetOption({ title: '从本地恢复', detail: '选择 Android 阅读 ZIP 并恢复',
-          onSelect: () => { this.activeSheet = ''; this.onSelectRestore(); } })
-        BackupSheetOption({ title: '从 WebDAV 恢复',
-          detail: !this.webDavConfigured ? '请先填写账号与密码' :
-            (this.webDavBackupNames.length > 0 ? `最近：${this.webDavBackupNames[0] ?? ''}` : '尚未发现远端备份'),
-          disabled: !this.webDavConfigured,
-          onSelect: () => { this.activeSheet = ''; this.onRestoreFromWebDav(); } })
-      } else if (this.activeSheet === 'ignoreBackup' || this.activeSheet === 'ignoreRestore') {
+      if (this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH) {
+        Grid() {
+          GridItem() {
+            BackupOptionCard({ icon: 'folder', title: '选择系统目录',
+              onSelect: () => { this.dismissSheet(); this.onChooseBackupPath(); } })
+          }
+          GridItem() {
+            BackupOptionCard({ icon: 'download', title: '使用应用备份目录',
+              onSelect: () => { this.dismissSheet(); this.onUseDownloadDir(); } })
+          }
+          GridItem() {
+            BackupOptionCard({ icon: 'clearAll', title: '恢复默认',
+              disabled: this.webDavSettings.backupPath.trim().length === 0,
+              onSelect: () => { this.dismissSheet(); this.onClearBackupPath(); } })
+          }
+        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
+      } else if (this.activeSheet === BackupSheetKind.BACKUP_OPTIONS) {
+        Grid() {
+          GridItem() {
+            BackupOptionCard({ icon: 'folder', title: '备份至本地',
+              onSelect: () => { this.dismissSheet(); this.onCreateBackup(); } })
+          }
+          GridItem() {
+            BackupOptionCard({ icon: 'cloud', title: '备份至网络',
+              onSelect: () => { this.dismissSheet(); this.onBackupToWebDav(); } })
+          }
+          GridItem() {
+            BackupOptionCard({ icon: 'grid', title: '备份至本地与网络',
+              onSelect: () => { this.dismissSheet(); this.onCreateBackupBoth(); } })
+          }
+        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
+      } else if (this.activeSheet === BackupSheetKind.RESTORE_OPTIONS) {
+        Grid() {
+          GridItem() {
+            BackupOptionCard({ icon: 'folder', title: '本地恢复',
+              onSelect: () => { this.dismissSheet(); this.onSelectRestore(); } })
+          }
+          GridItem() {
+            BackupOptionCard({ icon: 'cloud', title: '网络恢复',
+              onSelect: () => { this.dismissSheet(); this.requestNetworkRestore(); } })
+          }
+        }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
+      } else if (this.activeSheet === BackupSheetKind.RESTORE_FILES) {
         Scroll() {
-          BackupIgnoreList({
-            options: this.categoryOptions,
-            ignoredKeys: this.activeSheet === 'ignoreBackup' ? this.backupIgnoreKeys : this.restoreIgnoreKeys,
-            onToggle: (key: string, ignored: boolean) => {
-              if (this.activeSheet === 'ignoreBackup') { this.onToggleBackupIgnore(key, ignored); }
-              else { this.onToggleRestoreIgnore(key, ignored); }
-            }
-          })
-        }.edgeEffect(EdgeEffect.None).height(420).scrollBar(BarState.Off)
-      } else if (this.activeSheet === 'webdavAuth') {
-        // :381 上游 BackupConfigScreen.kt:461-497：账号是普通文本（没有可见性切换，不给它加眼睛）；
-        // 密码是 Password 键盘 + 尾部可见性图标（Visibility / VisibilityOff，描述「显示密码」/「隐藏密码」）。
-        TextInput({ placeholder: 'WebDAV 账号', text: this.accountDraft })
-          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
-          .margin({ left: 18, right: 18, bottom: 12 })
-          .onChange((value: string) => this.accountDraft = value)
-        Row() {
-          TextInput({ placeholder: 'WebDAV 密码', text: this.passwordDraft })
-            .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
-            .type(this.passwordVisible ? InputType.Normal : InputType.Password)
-            .layoutWeight(1)
-            .onChange((value: string) => this.passwordDraft = value)
-          AppGlyph({ name: this.passwordVisible ? 'visibility' : 'visibilityOff', glyphSize: 20,
-            tint: this.themeColorTextSecondary })
-            .margin({ left: 12 })
-            .accessibilityText(this.passwordVisible ? '隐藏密码' : '显示密码')
-            .onClick(() => { this.passwordVisible = !this.passwordVisible; })
-        }.margin({ left: 18, right: 18, bottom: 8 })
-        // 保存：账号 trim 后写入、密码保持原样（与输入框内容一致，不做 trim）。
-        Button('保存').margin({ top: 10 }).onClick(() => {
-          const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-          next.account = this.accountDraft.trim();
-          next.password = this.passwordDraft;
-          this.onWebDavSettingsChange(next);
-          this.accountDraft = '';
-          this.passwordDraft = '';
-          this.passwordVisible = false;
-          this.activeSheet = '';
-        })
-      } else if (this.activeSheet === 'input') {
-        TextInput({ placeholder: this.inputTitle, text: this.inputDraft })
-          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor('#292B33').borderRadius(12)
-          .type(this.inputPassword ? InputType.Password : InputType.Normal)
-          .margin({ left: 18, right: 18, bottom: 16 })
-          .onChange((value: string) => this.inputDraft = value)
-        Button('完成').margin({ top: 18 }).onClick(() => {
-          const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-          if (this.inputKey === 'url') { next.url = this.inputDraft.trim(); }
-          else if (this.inputKey === 'account') { next.account = this.inputDraft.trim(); }
-          else if (this.inputKey === 'password') { next.password = this.inputDraft; }
-          else if (this.inputKey === 'dir') { next.dir = this.inputDraft.trim(); }
-          else if (this.inputKey === 'deviceName') { next.deviceName = this.inputDraft.trim(); }
-          this.onWebDavSettingsChange(next);
-          this.inputDraft = '';
-          this.activeSheet = '';
-        })
-      } else if (this.activeSheet === 'path') {
-        BackupSheetOption({ title: '选择系统目录',
-          detail: this.webDavSettings.backupPath.trim().length === 0 ? '当前未选择，备份时弹系统保存框'
-            : '重新选一个目录并记住授权',
-          onSelect: () => { this.activeSheet = ''; this.onChooseBackupPath(); } })
-        BackupSheetOption({ title: '使用应用备份目录',
-          detail: '固定写入应用内 backups，之后不再弹保存框',
-          onSelect: () => { this.activeSheet = ''; this.onUseDownloadDir(); } })
-        BackupSheetOption({ title: '清除已选目录', detail: '回到每次弹系统保存框',
-          disabled: this.webDavSettings.backupPath.trim().length === 0,
-          onSelect: () => { this.activeSheet = ''; this.onClearBackupPath(); } })
-      } else if (this.activeSheet === 'syncMode') {
-        BackupSheetOption({ title: '仅本地',
-          detail: this.webDavSettings.backupSyncMode === 'local' ? '当前：仅本地' : '只保存到用户选择的位置',
-          onSelect: () => {
-            const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-            next.backupSyncMode = 'local';
-            this.onWebDavSettingsChange(next);
-            this.activeSheet = '';
-          } })
-        BackupSheetOption({ title: '本地与 WebDAV',
-          detail: this.webDavSettings.backupSyncMode === 'both' ? '当前：本地与 WebDAV' : '本地保存后顺手上传同一份 ZIP',
-          onSelect: () => {
-            const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-            next.backupSyncMode = 'both';
-            this.onWebDavSettingsChange(next);
-            this.activeSheet = '';
-          } })
-        BackupSheetOption({ title: '仅 WebDAV',
-          detail: this.webDavSettings.backupSyncMode === 'webdav' ? '当前：仅 WebDAV' : '只上传到 WebDAV，不保存本地文件',
-          onSelect: () => {
-            const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-            next.backupSyncMode = 'webdav';
-            this.onWebDavSettingsChange(next);
-            this.activeSheet = '';
-          } })
+          Column({ space: 8 }) {
+            ForEach(this.networkNames, (name: string) => {
+              BackupSheetOption({ title: name, detail: '',
+                onSelect: () => { this.dismissSheet(); this.onRestoreNetwork(name); } })
+            }, (name: string) => name)
+          }.width('100%').padding({ left: 16, right: 16 })
+        }.height(360).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
+      } else if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
+                 this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
+        Column() {
+          Row({ space: 24 }) {
+            Text('配置忽略')
+              .fontSize(TITLE_MEDIUM).fontWeight(this.ignoreTab === 0 ? FontWeight.Medium : FontWeight.Normal)
+              .fontColor(this.ignoreTab === 0 ? this.themeColorAccent : this.themeColorTextSecondary)
+              .onClick(() => this.ignoreTab = 0)
+            Text('数据库忽略')
+              .fontSize(TITLE_MEDIUM).fontWeight(this.ignoreTab === 1 ? FontWeight.Medium : FontWeight.Normal)
+              .fontColor(this.ignoreTab === 1 ? this.themeColorAccent : this.themeColorTextSecondary)
+              .onClick(() => this.ignoreTab = 1)
+          }.width('100%').padding({ left: 18, bottom: 8 })
+          Scroll() {
+            Column({ space: 4 }) {
+              ForEach(this.visibleIgnoreItems(), (item: BackupIgnoreItem) => {
+                Row() {
+                  Text(item.title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                  UiSwitchControl({
+                    checked: item.checked,
+                    interactive: false,
+                    onChange: (checked: boolean) => this.toggleIgnoreItem(item.key, checked)
+                  })
+                }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                  .onClick(() => this.toggleIgnoreItem(item.key, !item.checked))
+              }, (item: BackupIgnoreItem) => item.key)
+            }.width('100%').padding({ left: 8, right: 8 })
+          }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
+        }.width('100%').layoutWeight(1)
       }
     }.width('100%').padding({ bottom: 24 })
   }
+
+  @Builder
+  private dialogContent() {
+    Column() {
+      if (this.activeDialog === BackupDialogKind.WEBDAV_AUTH) {
+        Column() {
+          Text('WebDav 账号').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
+          Column({ space: 12 }) {
+            TextInput({ placeholder: 'WebDav 账号', text: this.accountDraft })
+              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
+              .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .onChange((value: string) => this.accountDraft = value)
+              .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(4)
+            Row() {
+              TextInput({ placeholder: 'WebDav 密码', text: this.passwordDraft })
+                .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).backgroundColor(Color.Transparent)
+                .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                .type(this.passwordVisible ? InputType.Normal : InputType.Password)
+                .layoutWeight(1)
+                .onChange((value: string) => this.passwordDraft = value)
+              AppGlyph({ name: this.passwordVisible ? 'visibility' : 'visibilityOff', glyphSize: 20,
+                tint: this.themeColorTextSecondary })
+                .margin({ left: 12 })
+                .accessibilityText(this.passwordVisible ? '隐藏密码' : '显示密码')
+                .onClick(() => { this.passwordVisible = !this.passwordVisible; })
+            }.width('100%').border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(4)
+          }.width('100%').margin({ top: 16 })
+          Row({ space: 12 }) {
+            Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
+              .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
+              .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(20)
+              .onClick(() => this.activeDialog = BackupDialogKind.NONE)
+            Button('确定').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
+              .backgroundColor(this.themeColorAccent).borderRadius(20)
+              .onClick(() => {
+                this.activeDialog = BackupDialogKind.NONE;
+                this.onSaveWebDavAuth(this.accountDraft.trim(), this.passwordDraft);
+              })
+          }.width('100%').margin({ top: 24 })
+        }.width(312).padding(24).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
+      } else if (this.activeDialog === BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK) {
+        Column() {
+          Text('恢复').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
+          Text(`WebDAV 出错\n${this.fallbackError}\n将从本地备份恢复。`)
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 16 }).width('100%')
+          Row({ space: 12 }) {
+            Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
+              .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
+              .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(20)
+              .onClick(() => this.activeDialog = BackupDialogKind.NONE)
+            Button('确定').type(ButtonType.Normal).layoutWeight(1).height(40).fontSize(LABEL_LARGE)
+              .backgroundColor(this.themeColorAccent).borderRadius(20)
+              .onClick(() => {
+                this.activeDialog = BackupDialogKind.NONE;
+                this.onConfirmLocalRestoreFallback();
+              })
+          }.width('100%').margin({ top: 24 })
+        }.width(312).padding(24).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
+      } else {
+        Column() {
+          LoadingProgress().width(40).height(40).color(this.themeColorAccent)
+          Text(this.webDavTesting ? '测试中…' : '处理中…')
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 12 })
+        }.width(240).padding(28).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      }
+    }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+  }
 }
 
+/** 行内输入行：默认态显示标题/描述/当前值，点击后在行内展开输入框 + 恢复默认/确认。 */
+@Component
+struct BackupInputRow {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @Prop title: string = '';
+  @Prop detail: string = '';
+  @Prop value: string = '';
+  @Prop defaultValue: string = '';
+  @Prop editing: boolean = false;
+  @Prop draft: string = '';
+  onBegin: () => void = () => {};
+  onDraft: (value: string) => void = (_value: string) => {};
+  onConfirm: (value: string) => void = (_value: string) => {};
+  build() {
+    Column() {
+      if (this.editing) {
+        TextInput({ text: this.draft })
+          .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+          .backgroundColor(Color.Transparent).border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(4)
+          .margin({ left: 15, right: 15, top: 8 })
+          .onChange((value: string) => this.onDraft(value))
+        Row({ space: 12 }) {
+          Button('恢复默认').type(ButtonType.Normal).layoutWeight(1).height(36).fontSize(TITLE_SMALL)
+            .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
+            .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(18)
+            .onClick(() => this.onDraft(this.defaultValue))
+          Button('确认').type(ButtonType.Normal).layoutWeight(1).height(36).fontSize(TITLE_SMALL)
+            .backgroundColor(this.themeColorAccent).borderRadius(18)
+            .onClick(() => this.onConfirm(this.draft))
+        }.width('calc(100% - 30vp)').margin({ left: 15, right: 15, top: 10, bottom: 12 })
+      } else {
+        Row() {
+          Column() {
+            Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+            if (this.detail.length > 0) {
+              Text(this.detail).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+            }
+            if (this.value.length > 0) {
+              Text(this.value).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ top: 4 })
+            }
+          }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
+        }.padding({ left: 15, right: 15, top: 16, bottom: 16 }).onClick(() => this.onBegin())
+      }
+    }.width('100%')
+  }
+}
 
+/** 两列网格选项卡：对齐上游 OptionSheet 的 100dp 见方、32dp 图标、单行居中文字。 */
+@Component
+struct BackupOptionCard {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
+  @Prop icon: AppGlyphName = 'folder';
+  @Prop title: string = '';
+  @Prop disabled: boolean = false;
+  onSelect: () => void = () => {};
+  build() {
+    Column() {
+      AppGlyph({ name: this.icon, glyphSize: 32, tint: this.disabled ? '#656873' : this.themeColorAccent })
+      Text(this.title).fontSize(13).fontColor(this.disabled ? this.themeColorTextPrimary : this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 8 })
+    }.width('100%').height(100).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      .backgroundColor(this.themeColorSurfacePrimary).borderRadius(12)
+      .opacity(this.disabled ? 0.5 : 1)
+      .onClick(() => { if (!this.disabled) { this.onSelect(); } })
+  }
+}
 
 @Component
 struct BackupSheetOption {
@@ -381,10 +685,12 @@ struct BackupSheetOption {
   build() {
     Column() {
       Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
-      Text(this.detail).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
-    }.width('calc(100% - 32vp)').padding(16).alignItems(HorizontalAlign.Start)
+      if (this.detail.length > 0) {
+        Text(this.detail).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+      }
+    }.width('100%').padding(16).alignItems(HorizontalAlign.Start)
       .opacity(this.disabled ? 0.5 : 1)
-      .backgroundColor('#292B33').borderRadius(14).margin({ left: 16, right: 16, bottom: 8 })
+      .backgroundColor('#292B33').borderRadius(14).margin({ bottom: 8 })
       .onClick(() => { if (!this.disabled) { this.onSelect(); } })
   }
 }
@@ -441,33 +747,5 @@ struct BackupActionRow {
       })
       if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).margin({ left: 51, right: 12 }) }
     }.width('100%')
-  }
-}
-
-@Component
-struct BackupIgnoreList {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
-  @Prop options: BackupCategoryOption[] = [];
-  @Prop ignoredKeys: string[] = [];
-  onToggle: (key: string, ignored: boolean) => void = (_key: string, _ignored: boolean) => {};
-  build() {
-    Column() {
-      ForEach(this.options, (option: BackupCategoryOption) => {
-        Row() {
-          Column() {
-            Text(option.title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-            Text(option.files.join('、')).fontSize(LABEL_SMALL).fontColor('#858792').margin({ top: 3 })
-          }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          UiSwitchControl({
-            checked: this.ignoredKeys.includes(option.key),
-            interactive: false,
-            onChange: (ignored: boolean) => this.onToggle(option.key, ignored)
-          })
-        }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-          .onClick(() => this.onToggle(option.key, !this.ignoredKeys.includes(option.key)))
-      }, (option: BackupCategoryOption) => option.key)
-    }.width('100%').margin({ top: 6 }).padding({ left: 8, right: 8, top: 4, bottom: 4 })
-      .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
   }
 }

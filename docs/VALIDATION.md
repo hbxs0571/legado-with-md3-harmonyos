@@ -1982,3 +1982,82 @@ A/B 对照（`textBottomJustify` 置 false 重进同页）21 行坐标与 true �
   - **避让**：并行会话改 `BookSourceEditPage.ets`/parity 文档，本轮未碰。
 
 - **工具教训**：`hdc` 全部命令（`list targets` / `shell` / `install` / `file recv`）不需要 `danger-full-access`，workspace-write 下可直接跑；只有 hvigor 构建的 `quickjs BuildNativeWithNinja` 需要（否则 `spawn EPERM`）。本轮曾误对所有 hdc 命令加权限，导致一次 `APPROVAL_REJECTED` 阻断验证。
+
+---
+
+## r359 备份与恢复页：界面与功能对齐上游（批 1–8，2026-11-23）
+
+### 改了哪些文件
+
+- `entry/src/main/ets/pages/AppBackupSettingsPage.ets`：473 → 751 行，`git diff --numstat` 为 `+534 / -256`（相对任务起点 `dedecdd`）。整份重写，落地批 1–5、7 的界面与交互。
+- `entry/src/main/ets/pages/Index.ets`：新增 4 个私有方法与组件调用处的 4 个回调绑定。**记账事实**：本仓多个会话共用工作区与 index；并行会话在提交 `2fe9954 feat(theme): 多栏布局（A19）` 时，把本任务已写入工作树的 Index.ets 改动一并带进了历史。提交后 `grep -n` 在 `Index.ets:6907/6916/7383/12757/12758/12760` 命中本任务全部 6 处符号，文件内容完整；相对 `dedecdd` 的 diff 为 `+344 / -60`（含并行会话的多栏布局改动，两者交织在同一文件）。本任务没有单独对该文件执行过 `git add` 或 `git commit`。
+- 未改动：`data/BackupRepository.ets`（28 项键表本就与上游同名，只在页面内按上游键序重组，见下）、`lib/WebDavConfig.ets` / `lib/WebDavSync.ets`（逐方法 `WebDavConfigStore.load` 核查后无缺口，见「没改什么」）、`docs/parity/`。
+
+`git diff --numstat` 实测输出（记账时刻）：
+
+```text
+534  256  entry/src/main/ets/pages/AppBackupSettingsPage.ets
+```
+
+### 改了哪些行为
+
+1. **弹层与对话框分成两种宿主**。原 `@State activeSheet: string`（页面原 `:53`）+ 8 个字符串分支，改为 `enum BackupSheetKind`（`AppBackupSettingsPage.ets:14`，7 项照 `BackupConfigContract.kt:28-36`）与 `enum BackupDialogKind`（`:26`，3 项照 `:38-47`），分别由 `bindSheet`（`:419`）与 `bindContentCover`（`:425`）承载。`grep -n "activeSheet = '"` 0 命中。理由：上游 `IgnoreItemsSheet` 关闭即保存（`BackupConfigScreen.kt:354/:378`），`WebDavAuth` 的 dismiss 是丢弃（`:466`），两种语义不能压进同一层。
+2. **组 1 第 1/3/4 行改成行内输入**。原三行点开底部弹层填一个 `TextInput`（原页面 `:313-329`），改为 `BackupInputRow`（`:606`）行内展开，带「恢复默认」「确认」两按钮（`:629`/`:632`）。自造兜底文案 `默认（坚果云）` / `（根目录）` / `未设置` 删除（`grep -rn ... entry/src/main/ets/` 0 命中）；子目录空值显示默认值 `legado`（`:325-331`），对齐 `BackupConfigScreen.kt:185` 的 `defaultValue = "legado"`。
+3. **组 1 第 2 行账号对话框补齐保存后测试**。原 `bindSheet` 内保存只写配置（原页面 `:303-312`），改为 `bindContentCover` 的 M3 对话框（`:539-566`），「确定」调 `onSaveWebDavAuth`（`:560`）→ `Index.ets:6907 saveWebDavAuth` 写完串 `Index.ets:6916 testWebDav`（经 `:6911` 的 `saveWebDavSettings`），对齐 `BackupConfigViewModel.kt:144-153` 的 `saveWebDavAuth()` 写完调 `testWebDav()`。
+4. **两个进度开关加联动与条件渲染**。原增强开关常驻、只写自身（原页面 `:153-161`），改后关总开关时把 `syncBookProgressPlus` 一并置 false（`AppBackupSettingsPage.ets:169-176`），增强行仅 `syncBookProgress === true` 时渲染（`:351`），对齐 `BackupConfigViewModel.kt:114-123` 的 `syncBookProgressPlus = it.syncBookProgressPlus && value` 与 `BackupConfigScreen.kt:212` 的 `if (settings.syncBookProgress)`。
+5. **同步模式改成行内下拉**。原底部弹层三卡、顺序 `local/both/webdav`（原页面 `:341-365`），改为 `UiDropdown`（`:361`）锚定行内、选中打勾，顺序 `both → local → webdav`（`:363`），对齐 `arrays.xml:363-367`。文案显示值改为上游 `backup_to_local_and_network` / `backup_to_local` / `backup_to_network` 真值（`:159-161`）。
+6. **组 2 七行文案对齐上游中文真值**。`备份路径` 副标题由 `未选择（每次弹系统保存框）` 改为路径原文或 `请选择备份路径`（`:372`，`strings.xml:15`）；`备份` / `恢复` / 两个忽略行 / `导入旧版数据` 的描述按 `strings.xml:1011/1017/1038/1040/1018` 改；卡名按 `:1015/1016/1014/175/176` 改为 `备份至本地` 等（`:470-490`）。
+7. **三个选项弹层由整宽横条改成两列网格**。`BackupSheetOption`（原 `:373-390`，无图标、两行文字）改造为 `BackupOptionCard`（`:657`，100vp 见方、32vp 图标、单行 13fp、圆角 12），对齐 `OptionSheet.kt:41-55`。备份三卡 / 恢复两卡 / 路径三卡分别包在 `GridItem` 中（`:452-492`）。
+8. **网络恢复从「只取最新一份」改成可选全部**。原 `restoreFromWebDav()` 走 `WebDavSync.latestBackup`（`Index.ets` 原 `:6950`），改后点「网络恢复」先 `WebDavSync.listBackups` 拉全部名字（`AppBackupSettingsPage.ets:260-280`），非空弹 `RestoreFiles` 选择层（`:493-500`，标题 `选择恢复文件` 照 `strings.xml:1061`），选中调 `onRestoreNetwork` → `Index.ets:6916 restoreNetwork` 下载指定文件。`latestBackup` 方法保留未删。
+9. **网络恢复失败加回退对话框**。原失败只写一行状态文本（`Index.ets` 原 `:6952`），改后列表为空或拉取失败弹 `ConfirmLocalRestoreFallback`（`AppBackupSettingsPage.ets:573-591`），正文照 `strings.xml:177` 的 `WebDAV 出错\n%1$s\n将从本地备份恢复。`，确认走 `onConfirmLocalRestoreFallback` → `selectLocalBackup()`（`Index.ets:12759`）。
+10. **忽略面板拆两 Tab 并改落盘时机**。原一张 28 项平铺列表（原页面 `:447-472`）、每点一次开关即 `saveBackupIgnoreLists()`（`Index.ets` 原 `:7305-7313`），改后按 `BackupConfig.kt:145-155` 的 9 项配置维度与 `:96-102` 的 19 项数据库维度分两 Tab（`AppBackupSettingsPage.ets:503-530`），标题用 `strings.xml` 真值映射表（`:55-69`），两 Tab 共用同一份键表与标题表；面板内只改 `@State ignoreDraft`（`:232`），关闭时一次性提交 `onSaveIgnoreItems`（`:248-257`）→ `Index.ets:7383 saveIgnoreItemsFromSheet`。顺序按上游重排，配置维度 `themeMode` 在末位（`:41-45` 的第 2 项与 `:55-59` 的第 2 项对应）。
+11. **Loading 改成模态**。原页内 `LoadingProgress` 只禁组 2 行（原页面 `:217-222`），改后 `bindContentCover` 承载不可关闭的模态层（`:425`/`:592-601`），覆盖测试、备份、恢复、拉列表四类动作，对齐 `BackupConfigScreen.kt:491-497` 的 `onDismissRequest = null`。
+12. **新增三个回调**。页面新增 `onSaveWebDavAuth` / `onRestoreNetwork` / `onConfirmLocalRestoreFallback` / `onSaveIgnoreItems`（`:117-126`），宿主 `Index.ets:12757-12760` 逐项绑定。
+
+### 没改什么
+
+- `ChooseBackupAndRun` 未实现。`grep -rn 'SelectBackupAndRunDirectory\|ChooseBackupAndRun\|launchDirectoryPicker' app/src/main/java/` 上游只 7 命中，全在 `BackupConfigContract.kt:30/:78`、`BackupConfigScreen.kt:295/:297`、`BackupConfigViewModel.kt:248/:95/:96`（定义与 when 分支），无 `OpenSheet` 写入点 ⇒ 该链路无入口，本地不发明入口（照任务书 6.5）。
+- 坚果云特殊分支未适配。上游 `isJianGuoYun` 在 `WebDavBackupRepository.kt:13/14`、`WebDavBackupGateway.kt:6`、`WebDavBackupUseCase.kt:10/11`、`OnboardingViewModel.kt:177`、`AppWebDav.kt:109`（`rootWebDavUrl.startsWith(defaultWebDavUrl, true)`），影响「备份名超过 700 时跳过」这一判断；本地 6 处命中全是默认 URL 常量与注释（`lib/WebDav.ets`、`lib/WebDavConfig.ets`、`AppBackupSettingsPage.ets`），无该分支。属跨批次依赖，本批不动。
+- 导入旧版数据仍只导书架。`Index.ets:6745` 注释原文保留：上游导书架、书源、替换规则三样，本地只导书架。
+- 备份包逻辑未动。`BackupRepository.buildBackupArchive` / `backupFileName` / `cleanupOldBackups` 一行未改，`WebDavSync` 的 9 个对外方法逐方法核查都调用了 `WebDavConfigStore.load`（`WebDavSync.ets:43/83/109/130/147/163/196/228/257`），与上游 `syncConfig()` 语义对齐，无需补 load。
+- 结果类文案 `backup_confirmation` 引用数 0、`restore_fail` 引用数 0（命令输出见下），未搬进本地；本地既有的结果提示保持原样。
+- `data/BackupRepository.ets` 未改；28 项键表本就与上游 9+19 逐字同名（含 `httpTTS` 大小写与 `mangaConfig` 词形），只在页面内按上游顺序重组显示，不动数据源以免波及备份包键名。
+- 备份路径弹层的「使用应用备份目录」一项保留，属平台适配补充项：上游选系统目录在鸿蒙上受 `READ_WRITE_DOWNLOAD_DIRECTORY` 限制，应用内 `filesDir/backups` 不需要权限。
+
+### 没验什么
+
+- 没连设备。本轮只做静态代码与构建验证，`scripts/emu.sh` 截图留待验收轮；弹层几何、两列网格、模态层的实际观感没有屏幕证据。
+- 没连真实 WebDAV 服务器。网络恢复的可选列表、失败回退对话框只做了代码路径核对，未用 mock 服务或真账号跑过请求。
+- 面板内改勾选不改文件未实测。任务书 7.6 要求的「开着面板用另一进程 `stat` 四个 JSON 的 mtime 不变」这一项，因本轮不连设备、四个 JSON 在应用沙箱内，未执行。代码层面 `Index.ets:7383` 只在 `onSaveIgnoreItems` 里写盘，但这一点只做了代码核对，没有运行时证据。
+- 备份包互换未验。因 `buildBackupArchive` 未改，只列了历史包 `tmp/cover-shots/backup-changed.zip` 的 11 条根目录条目作基线，未生成改动后的新包做逐条 diff。
+- `latestBackup` 之外的自动恢复路径、坚果云服务端、两项备份包互换，均无运行证据。
+
+### 对不齐的地方
+
+- 对照表 `tmp/settings-backup-uicheck/property-diff-backup.md` 有大量属性行本批未覆盖（例如结果与确认类文案、内部数据结构类条目），这些行的结论符号保持原样，没有改动。
+- 路径弹层卡数仍与上游不同：上游实际一张卡（`FilePickerSheet.kt:38/46/54/62/70` 全 `?.let`，备份页只传 `onSelectSysDir`），本地三张卡，其中两张为平台适配补充项，已记账，未删。
+- 卡片圆角上游 `OptionSheet.kt:65` 为 12dp、本地 `BackupOptionCard` 为 12vp，此项已对齐；描述字号上游 `SettingItem.kt:124-132` 为 12sp、本地 `BackupPreviewSwitchRow` 仍用 `LABEL_MEDIUM`（13fp），未改，记为残留差异。
+- 部分文案按上游三种写法分别照抄（WebDav / WebDAV / 网络），没有全局统一；这是照上游每一处原文的结果，不是遗漏。
+
+### 验证命令与输出
+
+```bash
+cd /n/HarmonyProjects/legado-with-md3-harmonyos
+# 批 1 三个符号存在
+grep -n 'enum BackupSheetKind\|enum BackupDialogKind\|interface BackupIgnoreItem' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# 14:enum BackupSheetKind / 26:enum BackupDialogKind / 34:interface BackupIgnoreItem
+grep -n "activeSheet = '" entry/src/main/ets/pages/AppBackupSettingsPage.ets   # 0 命中
+# 批 2 自造兜底文案清零 + 联动存在
+grep -rn '默认（坚果云）\|（根目录）' entry/src/main/ets/   # 0 命中
+grep -n 'syncBookProgressPlus' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# 154 / 159 / 196 / 339 四处
+grep -n 'saveWebDavAuth' entry/src/main/ets/pages/Index.ets   # 6907 定义 / 12757 绑定
+# 禁词 0 命中
+grep -n '已接\|未接\|不适用\|要接\|不接\|应该\|建议\|可以补\|实现思路\|优先级\|工作量估计\|风险\|这是 bug' entry/src/main/ets/pages/AppBackupSettingsPage.ets   # 0 命中
+# 构建
+bash scripts/build-hap.sh
+# Finished :entry:default@CompileArkTS... after 13 s 130 ms
+# BUILD SUCCESSFUL in 19 s 848 ms；ERROR 0
+```
+
+上游引用数核查（`cd /n/HarmonyProjects/legado-with-MD3`，逐项 `grep -rn "R.string.$k\b" app/src/main/java/ | wc -l`）：`backup_confirmation 0`、`restore_fail 0`、`backup_success 2`、`backup_fail 1`、`restore_success 4`、`restore_fail_with_error 1`、`webdav_restore_fallback_message 1`、`select_restore_file 2`、`restore_default 3`。备份包基线条目（`unzip -l tmp/cover-shots/backup-changed.zip | head`）：11 个根目录 JSON/XML 条目，`txtTocRule.json` / `bookmark.json` / `config.xml` / `bookGroup.json` / `bookMarking.json` / `readConfig.json` / `bookshelf.json` / `themeConfig.json` / `replaceRule.json` / `shareReadConfig.json` / `highlightRule.json`。
