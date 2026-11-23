@@ -16,6 +16,8 @@ import { AppTopBar, TopBarBackButton } from './TopBar';
 export struct CollapsingSettingsHeader {
   @Prop title: string = '';
   @Prop collapsed: boolean = false;
+  /** 连续折叠进度（0..1），对齐上游 TopAppBarState.collapsedFraction；-1 表示只用 collapsed 布尔。 */
+  @Prop collapseFraction: number = -1;
   onBack: () => void = () => {};
 
   @Builder navigationSlot() {
@@ -26,6 +28,7 @@ export struct CollapsingSettingsHeader {
     AppTopBar({
       title: this.title,
       collapsed: this.collapsed,
+      collapseFraction: this.collapseFraction,
       hasNavigation: true,
       navigationIcon: () => { this.navigationSlot() }
     })

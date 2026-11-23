@@ -40,6 +40,18 @@ export struct ThemeGroupColumn {
   /** 组标题。上游第 2 段与「恢复默认」段不传 title，这里同样传空串。 */
   @Prop title: string = '';
 
+  /**
+   * 组容器是否自填 surfaceContainerLow 底色。
+   *
+   * 上游 SplicedColumnGroup 的组容器本身透明（仅一层可选的 Large 背景图，
+   * AppContainerBackground.kt:58 无图时直接返回），由每行 SettingItem 各自填
+   * surfaceContainerLow + 4dp 圆角小卡（SettingItem.kt:73-79），行间 2dp 缝透出页面底色。
+   * 本仓多数设置页沿用「组容器填底 + 行透明」的既定口径，故默认 true 保持不变；
+   * 需要逐行还原上游小卡形态的页面（备份与恢复页）传 false，让组容器只在配置了
+   * 主题卡片背景时显示该背景，底色交给行卡。
+   */
+  @Prop surfaceFill: boolean = true;
+
   @BuilderParam content: () => void = this.emptyContent;
 
   @Builder
@@ -60,7 +72,8 @@ export struct ThemeGroupColumn {
       }
       .width('calc(100% - 32vp)')
       .margin({ left: 16, right: 16 })
-      .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary)
+      .backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground
+        : (this.surfaceFill ? this.themeColorSurfaceSecondary : Color.Transparent))
       .borderRadius(this.themeGroupRadius)
       .border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor })
       .backgroundImage(

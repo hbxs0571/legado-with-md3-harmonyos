@@ -3,12 +3,12 @@ import { UiSwitchControl } from '../components/UiSwitchControl';
 import { CollapsingSettingsHeader } from '../components/CollapsingSettingsHeader';
 import curves from '@ohos.curves';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
-import { ThemeItemDivider } from '../components/ThemeItemDivider';
+import { ThemeGroupColumn, ThemeGroupItem } from '../components/settings/ThemeGroupColumn';
 import { UiDropdown } from '../components/settings/UiDropdown';
 import { BackupCategoryOption } from '../data/BackupRepository';
 import { WebDavSettings, defaultWebDavSettings, cloneWebDavSettings } from '../lib/WebDavConfig';
 import { WebDavSync } from '../lib/WebDavSync';
-import { BODY_SMALL, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_LINE_HEIGHT, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+import { BODY_MEDIUM_EMPHASIZED, BODY_SMALL, BODY_SMALL_EMPHASIZED, HEADLINE_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_MEDIUM_EMPHASIZED, LABEL_SMALL, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 弹层分支：对应上游 BackupConfigSheet 七项（BackupConfigContract.kt:28-36）。 */
 enum BackupSheetKind {
@@ -74,19 +74,15 @@ export struct AppBackupSettingsPage {
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
-  @StorageProp('themeCardRadius') themeCardRadius: number = 16;
-  @StorageProp('themeCardBorderWidth') themeCardBorderWidth: number = 0;
-  @StorageProp('themeCardBorderColor') themeCardBorderColor: string = '#6A6D77';
-  @StorageProp('themeCardBackground') themeCardBackground: string = '';
-  @StorageProp('themeContainerBackground') themeContainerBackground: string = '';
   @Prop localBookCount: number = 0;
   @Prop categoryOptions: BackupCategoryOption[] = [];
   @Prop backupIgnoreKeys: string[] = [];
   @Prop restoreIgnoreKeys: string[] = [];
-  @Prop statusMessage: string = '';
+  /** 状态消息改走 showToast（对齐上游 Snackbar），不再在页内常驻成条。 */
+  @Prop @Watch('syncStatusMessage') statusMessage: string = '';
   @Prop @Watch('syncDialog') busy: boolean = false;
   @Prop webDavSettings: WebDavSettings = defaultWebDavSettings();
   @Prop @Watch('syncDialog') webDavTesting: boolean = false;
@@ -123,6 +119,8 @@ export struct AppBackupSettingsPage {
   /** 对话框改由 openCustomDialog 承载：独立弹层形态对齐上游 AppAlertDialog。 */
   @State @Watch('syncDialog') activeDialog: BackupDialogKind = BackupDialogKind.NONE;
   @State collapsedHeader: boolean = false;
+  /** 顶栏连续折叠进度，对齐上游 TopAppBarState.collapsedFraction。 */
+  @State headerFraction: number = 0;
   /** 三个行内输入行的草稿：editingKey 为空表示没有行在编辑。 */
   @State editingKey: string = '';
   @State inputDraft: string = '';
@@ -154,9 +152,9 @@ export struct AppBackupSettingsPage {
     this.activeDialog = BackupDialogKind.WEBDAV_AUTH;
   }
 
+  /** 账号行描述固定为 web_dav_account_d（strings.xml:805），账号值只在对话框内呈现。 */
   private webDavAuthDetail(): string {
-    if (this.webDavSettings.account.trim().length === 0) { return '输入你的 WebDav 账号'; }
-    return this.webDavSettings.password.length === 0 ? '密码为空' : this.webDavSettings.account;
+    return '输入你的 WebDav 账号';
   }
 
   private describeSyncMode(mode: string): string {
@@ -287,6 +285,13 @@ export struct AppBackupSettingsPage {
     return this.activeDialog !== BackupDialogKind.NONE || this.busy || this.webDavTesting;
   }
 
+  /** 状态变化走 toast，对齐上游 Snackbar 的浮层 + 自动消失。 */
+  private syncStatusMessage(): void {
+    if (this.statusMessage.length > 0) {
+      this.onUnavailableAction(this.statusMessage);
+    }
+  }
+
   /**
    * activeDialog / busy / webDavTesting 任一变化时同步独立对话框开合。
    * 用 openCustomDialog 而非 bindContentCover：后者在此 SDK 版本首次 false→true 不重建 Builder，
@@ -346,113 +351,121 @@ export struct AppBackupSettingsPage {
         this.collapsedHeader = shouldCollapse;
       });
     }
+    // 连续折叠进度：滚动过阈值即为 1，与 TopBar.ets 的 collapseFraction 同口径。
+    const fraction: number = Math.max(0, Math.min(1, offset / HEADER_COLLAPSE_THRESHOLD));
+    if (fraction !== this.headerFraction) {
+      this.headerFraction = fraction;
+    }
   }
 
   build() {
     Column() {
-      CollapsingSettingsHeader({ title: '备份与恢复', collapsed: this.collapsedHeader, onBack: () => this.onBack() })
+      CollapsingSettingsHeader({
+        title: '备份与恢复',
+        collapsed: this.collapsedHeader,
+        collapseFraction: this.headerFraction,
+        onBack: () => this.onBack()
+      })
       Scroll(this.backupScroller) {
         Column() {
-          Text('WebDav 设置').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
-            .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
-          Column() {
-            BackupInputRow({ title: 'WebDav 服务器地址', detail: '输入你的WebDav服务器地址',
-              value: this.webDavSettings.url, defaultValue: '', editing: this.editingKey === 'url',
-              draft: this.inputDraft,
-              onBegin: () => this.openSettingInput('url', this.webDavSettings.url),
-              onDraft: (value: string) => this.inputDraft = value,
-              onConfirm: (value: string) => this.setWebDavField('url', value) })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'profileSource', title: 'WebDav 账号',
-              detail: this.webDavAuthDetail(), onSelect: () => this.openWebDavAuth() })
-            ThemeItemDivider()
-            BackupInputRow({ title: '子文件夹', detail: '',
-              value: this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado',
-              defaultValue: 'legado', editing: this.editingKey === 'dir',
-              draft: this.inputDraft,
-              onBegin: () => this.openSettingInput('dir', this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado'),
-              onDraft: (value: string) => this.inputDraft = value,
-              onConfirm: (value: string) => this.setWebDavField('dir', value) })
-            ThemeItemDivider()
-            BackupInputRow({ title: '设备名称', detail: '',
-              value: this.webDavSettings.deviceName, defaultValue: '', editing: this.editingKey === 'deviceName',
-              draft: this.inputDraft,
-              onBegin: () => this.openSettingInput('deviceName', this.webDavSettings.deviceName),
-              onDraft: (value: string) => this.inputDraft = value,
-              onConfirm: (value: string) => this.setWebDavField('deviceName', value) })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'cloudSync', title: '测试 WebDav 配置',
-              detail: this.webDavTesting ? '测试中…' : '测试 WebDav 服务工作状态',
-              disabled: this.webDavTesting, onSelect: () => this.onTestWebDav() })
-            ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '同步阅读进度',
-              detail: '进入退出阅读界面时同步阅读进度',
-              checked: this.webDavSettings.syncBookProgress,
-              onChange: (value: boolean) => this.setSyncBookProgress(value) })
-            ThemeItemDivider()
-            if (this.webDavSettings.syncBookProgress) {
-              BackupPreviewSwitchRow({ title: '同步增强',
-                detail: '重新进入页面（息屏、后台返回等）或者网络变为可用时同步云端进度',
-                checked: this.webDavSettings.syncBookProgressPlus,
-                onChange: (value: boolean) => this.setSyncBookProgressPlus(value)
-              }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
-              ThemeItemDivider()
+          ThemeGroupColumn({ title: 'WebDav 设置', surfaceFill: false }) {
+            ThemeGroupItem({ first: true }) {
+              BackupInputRow({ cardSurface: true, title: 'WebDav 服务器地址', detail: '输入你的WebDav服务器地址',
+                value: this.webDavSettings.url, defaultValue: '', editing: this.editingKey === 'url',
+                draft: this.inputDraft,
+                onBegin: () => this.openSettingInput('url', this.webDavSettings.url),
+                onDraft: (value: string) => this.inputDraft = value,
+                onConfirm: (value: string) => this.setWebDavField('url', value) })
             }
-            BackupPreviewSwitchRow({ title: '自动检查新备份',
-              detail: '打开软件时检查是否有新备份，有新备份时提示是否更新',
-              checked: this.webDavSettings.autoCheckNewBackup,
-              onChange: (value: boolean) => this.setAutoCheckNewBackup(value) })
-            UiDropdown({ title: '自动备份同步', detail: '选择自动备份时的同步行为',
-              option: this.webDavSettings.backupSyncMode,
-              options: ['both', 'local', 'webdav'],
-              labelOf: (value: string) => this.syncModeLabel(value),
-              onSelect: (value: string) => this.setBackupSyncMode(value), showDivider: false })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          Text('备份与恢复').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
-            .alignSelf(ItemAlign.Start).margin({ left: 10, top: 12, bottom: 7 })
-          Column() {
-            BackupActionRow({ icon: 'folder', title: '备份路径',
-              detail: this.webDavSettings.backupPath.trim().length === 0 ? '请选择备份路径' : this.webDavSettings.backupPath,
-              onSelect: () => this.activeSheet = BackupSheetKind.CHOOSE_BACKUP_PATH, disabled: this.busy })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'cloud', title: '备份',
-              detail: '本地和 WebDav 一起备份',
-              onSelect: () => this.activeSheet = BackupSheetKind.BACKUP_OPTIONS, disabled: this.busy })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'download', title: '恢复',
-              detail: '选择从本地或网络恢复备份',
-              onSelect: () => this.activeSheet = BackupSheetKind.RESTORE_OPTIONS, disabled: this.busy })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'settings', title: '恢复忽略列表',
-              detail: '选择恢复忽略内容',
-              onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_RESTORE_ITEMS), disabled: this.busy })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'settings', title: '备份忽略列表',
-              detail: '选择备份忽略内容',
-              onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_BACKUP_ITEMS), disabled: this.busy })
-            ThemeItemDivider()
-            BackupActionRow({ icon: 'download', title: '导入旧版数据',
-              detail: '选择旧版备份文件夹',
-              onSelect: () => this.onImportOldShelf(), disabled: this.busy })
-            ThemeItemDivider()
-            BackupPreviewSwitchRow({ title: '仅保留最新备份',
-              detail: '本地备份仅保留最新备份文件',
-              checked: this.webDavSettings.onlyLatestBackup,
-              onChange: (value: boolean) => this.setOnlyLatestBackup(value) })
-          }.width('100%').padding({ top: 2, bottom: 2 }).backgroundColor(this.themeCardBackground.length > 0 ? this.themeCardBackground : this.themeColorSurfaceSecondary).borderRadius(this.themeCardRadius).border({ width: this.themeCardBorderWidth, color: this.themeCardBorderColor }).backgroundImage(this.themeContainerBackground.length > 0 ? `file://${this.themeContainerBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
-
-          if (this.statusMessage.length > 0) {
-            Text(this.statusMessage).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).lineHeight(TITLE_SMALL_LINE_HEIGHT)
-              .width('100%').padding(13).margin({ top: 12 }).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: 'WebDav 账号', detail: this.webDavAuthDetail(),
+                onSelect: () => this.openWebDavAuth() })
+            }
+            ThemeGroupItem() {
+              BackupInputRow({ cardSurface: true, title: '子文件夹', detail: '',
+                value: this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado',
+                defaultValue: 'legado', editing: this.editingKey === 'dir',
+                draft: this.inputDraft,
+                onBegin: () => this.openSettingInput('dir', this.webDavSettings.dir.length > 0 ? this.webDavSettings.dir : 'legado'),
+                onDraft: (value: string) => this.inputDraft = value,
+                onConfirm: (value: string) => this.setWebDavField('dir', value) })
+            }
+            ThemeGroupItem() {
+              BackupInputRow({ cardSurface: true, title: '设备名称', detail: '',
+                value: this.webDavSettings.deviceName, defaultValue: '', editing: this.editingKey === 'deviceName',
+                draft: this.inputDraft,
+                onBegin: () => this.openSettingInput('deviceName', this.webDavSettings.deviceName),
+                onDraft: (value: string) => this.inputDraft = value,
+                onConfirm: (value: string) => this.setWebDavField('deviceName', value) })
+            }
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: '测试 WebDav 配置', detail: '测试 WebDav 服务工作状态',
+                onSelect: () => this.onTestWebDav() })
+            }
+            ThemeGroupItem() {
+              BackupPreviewSwitchRow({ cardSurface: true, title: '同步阅读进度',
+                detail: '进入退出阅读界面时同步阅读进度',
+                checked: this.webDavSettings.syncBookProgress,
+                onChange: (value: boolean) => this.setSyncBookProgress(value) })
+            }
+            if (this.webDavSettings.syncBookProgress) {
+              ThemeGroupItem() {
+                BackupPreviewSwitchRow({ cardSurface: true, title: '同步增强',
+                  detail: '重新进入页面（息屏、后台返回等）或者网络变为可用时同步云端进度',
+                  checked: this.webDavSettings.syncBookProgressPlus,
+                  onChange: (value: boolean) => this.setSyncBookProgressPlus(value)
+                }).transition(TransitionEffect.OPACITY.animation({ duration: DURATION_FADE }))
+              }
+            }
+            ThemeGroupItem() {
+              BackupPreviewSwitchRow({ cardSurface: true, title: '自动检查新备份',
+                detail: '打开软件时检查是否有新备份，有新备份时提示是否更新',
+                checked: this.webDavSettings.autoCheckNewBackup,
+                onChange: (value: boolean) => this.setAutoCheckNewBackup(value) })
+            }
+            ThemeGroupItem() {
+              UiDropdown({ cardSurface: true, title: '自动备份同步', detail: '选择自动备份时的同步行为',
+                option: this.webDavSettings.backupSyncMode,
+                options: ['both', 'local', 'webdav'],
+                labelOf: (value: string) => this.syncModeLabel(value),
+                onSelect: (value: string) => this.setBackupSyncMode(value), showDivider: false })
+            }
           }
 
-          Text('兼容说明').fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
-            .alignSelf(ItemAlign.Start).margin({ left: 10, top: 16, bottom: 7 })
-          Text('备份沿用 Android 原项目的 ZIP 根目录 JSON/XML 条目和文件名，不增加自定义封装。当前支持的数据会映射到本地书架与阅读设置；尚未迁移的书源、规则、RSS、历史等条目只原样保留，不能在 HarmonyOS 中使用，也不会执行其中的脚本。Android ZIP 不包含 TXT/EPUB 正文。')
-            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).lineHeight(TITLE_SMALL_LINE_HEIGHT)
-            .width('100%').padding(15).backgroundColor(this.themeColorSurfaceSecondary).borderRadius(14)
-        }.padding({ left: 16, right: 16, top: 8, bottom: 20 })
+          ThemeGroupColumn({ title: '备份与恢复', surfaceFill: false }) {
+            ThemeGroupItem({ first: true }) {
+              BackupActionRow({ cardSurface: true, title: '备份路径',
+                detail: this.webDavSettings.backupPath.trim().length === 0 ? '请选择备份路径' : this.webDavSettings.backupPath,
+                onSelect: () => this.activeSheet = BackupSheetKind.CHOOSE_BACKUP_PATH })
+            }
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: '备份', detail: '本地和 WebDav 一起备份',
+                onSelect: () => this.activeSheet = BackupSheetKind.BACKUP_OPTIONS })
+            }
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: '恢复', detail: '选择从本地或网络恢复备份',
+                onSelect: () => this.activeSheet = BackupSheetKind.RESTORE_OPTIONS })
+            }
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: '恢复忽略列表', detail: '选择恢复忽略内容',
+                onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_RESTORE_ITEMS) })
+            }
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: '备份忽略列表', detail: '选择备份忽略内容',
+                onSelect: () => this.openIgnoreSheet(BackupSheetKind.IGNORE_BACKUP_ITEMS) })
+            }
+            ThemeGroupItem() {
+              BackupActionRow({ cardSurface: true, title: '导入旧版数据', detail: '选择旧版备份文件夹',
+                onSelect: () => this.onImportOldShelf() })
+            }
+            ThemeGroupItem() {
+              BackupPreviewSwitchRow({ cardSurface: true, title: '仅保留最新备份',
+                detail: '本地备份仅保留最新备份文件',
+                checked: this.webDavSettings.onlyLatestBackup,
+                onChange: (value: boolean) => this.setOnlyLatestBackup(value) })
+            }
+          }
+        }.padding({ left: 16, right: 16, top: 16, bottom: 120 })
       }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off).onScroll(() => this.updateHeader())
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.activeSheet !== BackupSheetKind.NONE, this.backupSheetContent(), {
@@ -473,36 +486,26 @@ export struct AppBackupSettingsPage {
   private backupSheetContent() {
     Column() {
       Row() {
-        Text(this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH ? '选择备份路径' :
+        Text(this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH ? '选择操作' :
           this.activeSheet === BackupSheetKind.BACKUP_OPTIONS ? '备份' :
           this.activeSheet === BackupSheetKind.RESTORE_OPTIONS ? '恢复' :
           this.activeSheet === BackupSheetKind.RESTORE_FILES ? '选择恢复文件' :
           this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ? '备份忽略列表' :
           this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS ? '恢复忽略列表' : '')
-          .fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          .textAlign(TextAlign.Center).maxLines(1).layoutWeight(1)
         if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
             this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
           AppGlyph({ name: 'profileSave', glyphSize: 22, tint: this.themeColorAccent })
             .accessibilityText('保存')
             .onClick(() => this.dismissSheet())
-        } else {
-          Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).onClick(() => this.dismissSheet())
         }
       }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 14 })
       if (this.activeSheet === BackupSheetKind.CHOOSE_BACKUP_PATH) {
         Grid() {
           GridItem() {
-            BackupOptionCard({ icon: 'folder', title: '选择系统目录',
+            BackupOptionCard({ icon: 'folder', title: '系统文件夹选择器',
               onSelect: () => { this.dismissSheet(); this.onChooseBackupPath(); } })
-          }
-          GridItem() {
-            BackupOptionCard({ icon: 'download', title: '使用应用备份目录',
-              onSelect: () => { this.dismissSheet(); this.onUseDownloadDir(); } })
-          }
-          GridItem() {
-            BackupOptionCard({ icon: 'clearAll', title: '恢复默认',
-              disabled: this.webDavSettings.backupPath.trim().length === 0,
-              onSelect: () => { this.dismissSheet(); this.onClearBackupPath(); } })
           }
         }.columnsTemplate('1fr 1fr').columnsGap(12).rowsGap(12).padding({ left: 16, right: 16 })
       } else if (this.activeSheet === BackupSheetKind.BACKUP_OPTIONS) {
@@ -543,34 +546,37 @@ export struct AppBackupSettingsPage {
       } else if (this.activeSheet === BackupSheetKind.IGNORE_BACKUP_ITEMS ||
                  this.activeSheet === BackupSheetKind.IGNORE_RESTORE_ITEMS) {
         Column() {
-          Row({ space: 24 }) {
-            Text('配置忽略')
-              .fontSize(TITLE_MEDIUM).fontWeight(this.ignoreTab === 0 ? FontWeight.Medium : FontWeight.Normal)
-              .fontColor(this.ignoreTab === 0 ? this.themeColorAccent : this.themeColorTextSecondary)
+          Row({ space: 8 }) {
+            Column() {
+              Text('配置忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
+                .fontWeight(this.ignoreTab === 0 ? FontWeight.Bold : FontWeight.Normal)
+                .fontColor(this.ignoreTab === 0 ? this.themeColorTextPrimary : this.themeColorTextSecondary)
+                .maxLines(1).textAlign(TextAlign.Center)
+            }.layoutWeight(1).height(40).borderRadius(12)
+              .backgroundColor(this.ignoreTab === 0 ? this.themeColorSurfaceElevated : this.themeColorSurfaceTertiary)
+              .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
               .onClick(() => this.ignoreTab = 0)
-            Text('数据库忽略')
-              .fontSize(TITLE_MEDIUM).fontWeight(this.ignoreTab === 1 ? FontWeight.Medium : FontWeight.Normal)
-              .fontColor(this.ignoreTab === 1 ? this.themeColorAccent : this.themeColorTextSecondary)
+            Column() {
+              Text('数据库忽略').fontSize(LABEL_MEDIUM_EMPHASIZED)
+                .fontWeight(this.ignoreTab === 1 ? FontWeight.Bold : FontWeight.Normal)
+                .fontColor(this.ignoreTab === 1 ? this.themeColorTextPrimary : this.themeColorTextSecondary)
+                .maxLines(1).textAlign(TextAlign.Center)
+            }.layoutWeight(1).height(40).borderRadius(12)
+              .backgroundColor(this.ignoreTab === 1 ? this.themeColorSurfaceElevated : this.themeColorSurfaceTertiary)
+              .padding({ left: 8, right: 8, top: 8, bottom: 8 }).justifyContent(FlexAlign.Center)
               .onClick(() => this.ignoreTab = 1)
-          }.width('100%').padding({ left: 18, bottom: 8 })
+          }.width('100%').padding({ left: 16, right: 16, bottom: 8 })
           Scroll() {
             Column({ space: 4 }) {
               ForEach(this.visibleIgnoreItems(), (item: BackupIgnoreItem) => {
-                Row() {
-                  Text(item.title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                  UiSwitchControl({
-                    checked: item.checked,
-                    interactive: false,
-                    onChange: (checked: boolean) => this.toggleIgnoreItem(item.key, checked)
-                  })
-                }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                  .onClick(() => this.toggleIgnoreItem(item.key, !item.checked))
+                BackupCheckItem({ title: item.title, checked: item.checked,
+                  onChange: (checked: boolean) => this.toggleIgnoreItem(item.key, checked) })
               }, (item: BackupIgnoreItem) => item.key)
             }.width('100%').padding({ left: 8, right: 8 })
           }.layoutWeight(1).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
         }.width('100%').layoutWeight(1)
       }
-    }.width('100%').padding({ bottom: 24 })
+    }.width('100%').padding({ bottom: 16 })
   }
 
   @Builder
@@ -610,10 +616,10 @@ export struct AppBackupSettingsPage {
               .backgroundColor(this.themeColorAccent).borderRadius(20)
               .onClick(() => {
                 this.activeDialog = BackupDialogKind.NONE;
-                this.onSaveWebDavAuth(this.accountDraft.trim(), this.passwordDraft);
+                this.onSaveWebDavAuth(this.accountDraft, this.passwordDraft);
               })
           }.width('100%').margin({ top: 24 })
-        }.width(312).padding(24).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
+        }.width(312).padding(24).backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
       } else if (this.activeDialog === BackupDialogKind.CONFIRM_LOCAL_RESTORE_FALLBACK) {
         Column() {
           Text('恢复').fontSize(HEADLINE_SMALL).fontColor(this.themeColorTextPrimary).width('100%')
@@ -631,26 +637,28 @@ export struct AppBackupSettingsPage {
                 this.onConfirmLocalRestoreFallback();
               })
           }.width('100%').margin({ top: 24 })
-        }.width(312).padding(24).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
+        }.width(312).padding(24).backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
       } else {
         Column() {
           LoadingProgress().width(40).height(40).color(this.themeColorAccent)
-          Text(this.webDavTesting ? '测试中…' : '处理中…')
+          Text(this.webDavTesting ? '测试中…' : '加载中…')
             .fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 12 })
-        }.width(240).padding(28).backgroundColor(this.themeColorSurfaceTertiary).borderRadius(28)
+        }.width(240).padding(28).backgroundColor(this.themeColorSurfaceElevated).borderRadius(28)
         .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       }
     }
   }
 }
 
-/** 行内输入行：默认态显示标题/描述/当前值，点击后在行内展开输入框 + 恢复默认/确认。 */
+/** 行内输入行：默认态显示标题/描述/当前值，点击后在行内展开输入框 + 默认/确认。 */
 @Component
 struct BackupInputRow {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  /** 真时本行自填 surfaceContainerLow + 4dp 圆角小卡（对齐 SettingItem.kt:53,73-79）。 */
+  @Prop cardSurface: boolean = false;
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop value: string = '';
@@ -666,30 +674,33 @@ struct BackupInputRow {
         TextInput({ text: this.draft })
           .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
           .backgroundColor(Color.Transparent).border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(4)
-          .margin({ left: 15, right: 15, top: 8 })
+          .margin({ left: 16, right: 16, top: 8 })
           .onChange((value: string) => this.onDraft(value))
         Row({ space: 12 }) {
-          Button('恢复默认').type(ButtonType.Normal).layoutWeight(1).height(36).fontSize(TITLE_SMALL)
+          Button('默认').type(ButtonType.Normal).layoutWeight(1).height(36).fontSize(TITLE_SMALL)
             .fontColor(this.themeColorAccent).backgroundColor(Color.Transparent)
             .border({ width: 1, color: this.themeColorTextTertiary }).borderRadius(18)
             .onClick(() => this.onDraft(this.defaultValue))
           Button('确认').type(ButtonType.Normal).layoutWeight(1).height(36).fontSize(TITLE_SMALL)
             .backgroundColor(this.themeColorAccent).borderRadius(18)
             .onClick(() => this.onConfirm(this.draft))
-        }.width('calc(100% - 30vp)').margin({ left: 15, right: 15, top: 10, bottom: 12 })
+        }.width('calc(100% - 32vp)').margin({ left: 16, right: 16, top: 10, bottom: 12 })
       } else {
         Row() {
           Column() {
-            Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
+            Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
             if (this.detail.length > 0) {
-              Text(this.detail).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+              Text(this.detail).fontSize(BODY_SMALL_EMPHASIZED).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
             }
             if (this.value.length > 0) {
-              Text(this.value).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent).margin({ top: 4 })
+              Text(this.value).fontSize(BODY_SMALL).fontColor(this.themeColorAccent).margin({ top: 2 })
             }
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
-        }.padding({ left: 15, right: 15, top: 16, bottom: 16 }).onClick(() => this.onBegin())
+          Image($r('app.media.reader_next')).width(24).height(24).fillColor(this.themeColorTextTertiary)
+        }.padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .backgroundColor(this.cardSurface ? this.themeColorSurfaceSecondary : Color.Transparent)
+          .borderRadius(this.cardSurface ? 4 : 0)
+          .onClick(() => this.onBegin())
       }
     }.width('100%')
   }
@@ -708,7 +719,7 @@ struct BackupOptionCard {
   build() {
     Column() {
       AppGlyph({ name: this.icon, glyphSize: 32, tint: this.disabled ? '#656873' : this.themeColorAccent })
-      Text(this.title).fontSize(13).fontColor(this.disabled ? this.themeColorTextPrimary : this.themeColorTextPrimary)
+      Text(this.title).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 8 })
     }.width('100%').height(100).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
       .backgroundColor(this.themeColorSurfacePrimary).borderRadius(12)
@@ -738,10 +749,14 @@ struct BackupSheetOption {
   }
 }
 
+/** 开关行：标题 +（可选）描述 + 右侧开关，整行可点。 */
 @Component
 struct BackupPreviewSwitchRow {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  /** 真时本行自填 surfaceContainerLow + 4dp 圆角小卡（对齐 SettingItem.kt:53,73-79）。 */
+  @Prop cardSurface: boolean = false;
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop checked: boolean = false;
@@ -749,46 +764,66 @@ struct BackupPreviewSwitchRow {
   build() {
     Row() {
       Column() {
-        Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary)
-        Text(this.detail).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
+        Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text(this.detail).fontSize(BODY_SMALL_EMPHASIZED).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       UiSwitchControl({
         checked: this.checked,
         interactive: false,
         onChange: (checked: boolean) => this.onChange(checked)
       })
-    }.width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
+    }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+      .backgroundColor(this.cardSurface ? this.themeColorSurfaceSecondary : Color.Transparent)
+      .borderRadius(this.cardSurface ? 4 : 0)
       .onClick(() => this.onChange(!this.checked))
   }
 }
 
+/** 点击行：上游 ClickableSettingItem 无 leading 图标，标题左缘与文字列对齐。 */
 @Component
 struct BackupActionRow {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
-  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
-  @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
-  @StorageProp('themeAppBackground') themeAppBackground: string = '';
-  @StorageProp('themePureBlack') themePureBlack: boolean = false;
-  @Prop icon: AppGlyphName = 'folder';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  /** 真时本行自填 surfaceContainerLow + 4dp 圆角小卡（对齐 SettingItem.kt:53,73-79）。 */
+  @Prop cardSurface: boolean = false;
   @Prop title: string = '';
   @Prop detail: string = '';
-  @Prop last: boolean = false;
-  @Prop disabled: boolean = false;
   onSelect: () => void = () => {};
   build() {
-    Column() {
-      Row() {
-        AppGlyph({ name: this.icon, glyphSize: 20, tint: this.disabled ? '#656873' : this.themeColorAccent }).width(36)
-        Column() {
-          Text(this.title).fontSize(TITLE_MEDIUM).fontColor(this.disabled ? this.themeColorTextTertiary : this.themeColorTextSecondary)
-          Text(this.detail).fontSize(TITLE_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 4 })
-        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Image($r('app.media.reader_next')).width(18).height(18).fillColor(this.themeColorTextTertiary)
-      }.padding({ left: 15, right: 15, top: 16, bottom: 16 }).onClick(() => {
-        if (!this.disabled) { this.onSelect(); }
-      })
-      if (!this.last) { Row().height(1).width('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary)).margin({ left: 51, right: 12 }) }
-    }.width('100%')
+    Row() {
+      Column() {
+        Text(this.title).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        Text(this.detail).fontSize(BODY_SMALL_EMPHASIZED).fontColor(this.themeColorTextTertiary).margin({ top: 2 })
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Image($r('app.media.reader_next')).width(24).height(24).fillColor(this.themeColorTextTertiary)
+    }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+      .backgroundColor(this.cardSurface ? this.themeColorSurfaceSecondary : Color.Transparent)
+      .borderRadius(this.cardSurface ? 4 : 0)
+      .onClick(() => this.onSelect())
+  }
+}
+
+/** 排除项清单行：左侧圆角复选框 + 标题，对齐上游 CheckboxItem。 */
+@Component
+struct BackupCheckItem {
+  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @Prop title: string = '';
+  @Prop checked: boolean = false;
+  onChange: (checked: boolean) => void = (_checked: boolean) => {};
+  build() {
+    Row() {
+      Checkbox({ name: this.title })
+        .shape(CheckBoxShape.ROUNDED_SQUARE)
+        .select(this.checked)
+        .selectedColor(this.themeColorAccent)
+      Text(this.title).fontSize(BODY_MEDIUM_EMPHASIZED).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).margin({ left: 12 }).layoutWeight(1)
+    }.width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
+      .borderRadius(12)
+      .backgroundColor(this.checked ? this.themeColorSurfaceElevated : Color.Transparent)
+      .onClick(() => this.onChange(!this.checked))
   }
 }

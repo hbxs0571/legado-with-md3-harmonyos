@@ -6780,7 +6780,7 @@ private canWriteInto(dir: string): boolean {
     this.backupBusy = true;
     try {
       const options = new picker.DocumentSelectOptions();
-      options.fileSuffixFilters = ['JSON 文件|.json'];
+      // 对齐上游 importOldData 的 OpenDocument + launch(arrayOf("*/*"))（BackupConfigScreen.kt:98-100），不过滤后缀。
       options.maxSelectNumber = 1;
       const uris = await new picker.DocumentViewPicker(context).select(options);
       const uri = uris[0];
@@ -6906,7 +6906,8 @@ private canWriteInto(dir: string): boolean {
   /** 账号密码对话框保存：写入配置后串一次连接测试，对齐上游 saveWebDavAuth。 */
   private async saveWebDavAuth(account: string, password: string): Promise<void> {
     const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
-    next.account = account;
+    // 对齐上游 saveWebDavAuth 的 account.trim()（BackupConfigViewModel.kt:144-147）。
+    next.account = account.trim();
     next.password = password;
     await this.saveWebDavSettings(next);
     await this.testWebDav();
@@ -6946,7 +6947,8 @@ private canWriteInto(dir: string): boolean {
     this.webDavTesting = true;
     try {
       const result = await WebDavSync.test(context);
-      this.showUnavailableAction(result.message);
+      // 对齐上游 testSync 的 ShowMessage（strings.xml:1584/1585），不直接显示底层返回文本。
+      this.showUnavailableAction(result.ok ? 'WebDav 配置正确' : 'WebDav 配置错误');
       if (result.ok) {
         this.webDavBackupNames = await WebDavSync.listBackups(context);
       }

@@ -25,6 +25,9 @@ export struct UiDropdown {
   @StorageProp('themeAppBackground') themeAppBackground: string = '';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
 
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
+  /** 真时本行自填 surfaceContainerLow + 4dp 圆角小卡（对齐 SettingItem.kt:53,73-79），供备份页逐行还原上游卡形态。 */
+  @Prop cardSurface: boolean = false;
   @Prop title: string = '';
   @Prop detail: string = '';
   @Prop option: string = '';
@@ -98,9 +101,11 @@ export struct UiDropdown {
     }
     .width('100%')
     .padding({ left: ROW_PADDING_H, right: ROW_PADDING_H, top: ROW_PADDING_V, bottom: ROW_PADDING_V })
+    .backgroundColor(this.cardSurface ? this.themeColorSurfaceSecondary : Color.Transparent)
+    .borderRadius(this.cardSurface ? 4 : 0)
     .stateStyles({
       pressed: { .backgroundColor(this.pressedBackground()) },
-      normal: { .backgroundColor(Color.Transparent) }
+      normal: { .backgroundColor(this.cardSurface ? this.themeColorSurfaceSecondary : Color.Transparent) }
     })
 
     .onClick(() => { this.menuVisible = !this.menuVisible; })

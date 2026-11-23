@@ -2108,3 +2108,70 @@ grep -c '已接\|未接\|不适用\|要接\|不接\|应该\|建议\|可以补\|�
 bash scripts/build-hap.sh
 # BUILD SUCCESSFUL in 17 s 689 ms；既有 WARN :321:45 / :456:105
 ```
+
+## r361 备份与恢复页：对照表剩余差异项逐条对齐（2026-11-23）
+
+### 改了哪些文件
+- `entry/src/main/ets/pages/AppBackupSettingsPage.ets`：整份重写，794 行 → 829 行。
+- `entry/src/main/ets/components/settings/ThemeGroupColumn.ets`：加 `@Prop surfaceFill: boolean = true`（`:53`），组容器底色由它决定（`:76`）。
+- `entry/src/main/ets/components/settings/UiDropdown.ets`：加 `themeColorSurfaceSecondary` 与 `@Prop cardSurface: boolean = false`，行卡底色与 4dp 圆角由它控制。
+- `entry/src/main/ets/components/CollapsingSettingsHeader.ets`：加 `@Prop collapseFraction: number = -1`（`:20`）并透传给 `AppTopBar`（`:31`）。
+- `entry/src/main/ets/pages/Index.ets`：`:6910` 账号 `trim()`、`:6783` 去掉旧版导入的 `.json` 后缀过滤、`:6951` 测试结果显示按 `result.ok` 取上游文案。
+- `tmp/settings-backup-uicheck/property-diff-backup.md`（工作区外对照表）：42 行结论符号回写，末尾追加 H.8 节。
+
+### 改了哪些行为
+- 页面骨架与分组：`build()` 用 `CollapsingSettingsHeader` 传 `collapseFraction: this.headerFraction`（`:366`），滚动回调 `updateHeader()` 按阈值算连续进度（`:346-359`）；两组改 `ThemeGroupColumn({ title, surfaceFill: false })`（`:371`/`:435`），组内每行 `ThemeGroupItem({first})`，首行不画分隔线。对照上游 `SplicedColumnGroup.kt:41-138` 的三档圆角、组内 2vp 缝、8vp 外边距与组内标题。
+- 每行独立小卡：三个自绘行组件加 `cardSurface`，16 行全部传 `true`，行底 `themeColorSurfaceSecondary` + 4dp 圆角（`:701-702`/`:776-777`/`:801-802`），组容器透明让 2vp 缝透底。对齐 `SettingItem.kt:53,73-80` 的 `SettingCard(cornerRadius = 4.dp, containerColor = surfaceContainerLow)`。为避免影响其余 16 个设置页，`surfaceFill` 与 `cardSurface` 默认保持原行为。
+- 行体精度：去掉点击行 leading 图标列（`BackupActionRow:784-805`），标题 `TITLE_MEDIUM` + `FontWeight.Medium`，描述 `BODY_SMALL_EMPHASIZED`（12），箭头 `reader_next` 24vp，行内边距 16/10，标题左缘与文字列对齐；删掉行内手插分隔线。
+- 提示与进行中：页内常驻 `statusMessage` 条、进度条与兼容说明段删除，状态改走宿主 `showToast`，忙碌由独立对话框承载（`syncDialog()`/`Loading` 分支），文案为「测试中…」/「加载中…」（`values-zh-rCN/strings.xml:1583`/`:357`）。
+- 弹层：标题 `TITLE_MEDIUM`（16）+ Medium（`:495`）；备份路径收敛为一张卡「系统文件夹选择器」（`:507`，对齐 `FilePickerSheet.kt:38-44` 只传 `onSelectSysDir`）；头部右侧仅忽略面板给保存图标（`:499-502`），对应上游 `endAction` 的 Save 按钮；高度按分支三档 560/420/320（`:335-344`）。
+- 忽略面板：两 Tab 卡片化（`:551-567`，选中 Bold + 圆角12），清单行改 `BackupCheckItem`（`:809-829`），左侧 `Checkbox` + `ROUNDED_SQUARE` + `BODY_MEDIUM_EMPHASIZED` + padding12，对齐 `CheckboxItem.kt:20-65`；配置 9 项与数据库 19 项分 Tab 呈现，关闭时一次性写盘。
+- 文案：账号行描述固定「输入你的 WebDav 账号」（`:156-158`，`strings.xml:805`）；行内按钮「默认」/「确认」（`:680`/`:684`）；测试行描述固定「测试 WebDav 服务工作状态」（`:402`）；兜底文案「默认（坚果云）」「（根目录）」「正在处理 Android 备份」「兼容说明」全清。
+- 宿主接线：`account.trim()` 对齐 `BackupConfigViewModel.kt:144-147`；旧版导入去掉 `.json` 过滤，对齐 `BackupConfigScreen.kt:98-100` 的 `launch(arrayOf("*/*"))`；测试结果显示「WebDav 配置正确」/「WebDav 配置错误」（`strings.xml:1584`/`:1585`）。
+
+### 没改什么
+- 7 行平台机制或既定架构差异保持原结论符号：`:47` 页面容器、`:50` 滚动容器、`:57` 滚动回弹、`:58` 页面背景、`:62` 弹层容器、`:125` 弹层高度、`:187` 状态层形态（本仓无 ViewModel/StateFlow 基础设施）。
+- 上游 `ChooseBackupAndRun` 那条「先选目录再备份」分支未造入口：`BackupConfigScreen.kt` 的 `OpenSheet` 只有 `:237`/`:244`/`:251` 三处，该项无 UI 触发点。
+- 未连真实 WebDAV 服务、未申请账号；账号对话框只做弹出与可见性切换的运行时核对，保存链路未触发。
+- 上游仓 `legado-with-MD3` 保持只读；并行会话文件未碰。
+
+### 没验什么
+- 仅在 `127.0.0.1:5555`（API 26 模拟器）核对，未覆盖其它分辨率与真机。
+- 数据库忽略 Tab（19 项）本轮未逐项截图核对，首屏配置 Tab 9 项已核。
+- 远端备份文件选择弹层、导入旧版数据选择器、测试结果的成功/失败分支未做运行时触发。
+- 主题分组圆角三档开关的联动未在本页切换验证。
+
+### 对不齐的地方
+- 上节「没改什么」列出的 7 行仍记 `⚠`，对照表 H.8 有逐行说明。
+- 箭头用 `reader_next` 位图 24vp，上游是 `Icons.Default.ChevronRight` 24dp 矢量；本仓无该矢量资源，按平台近似处理，符号已随「行尾箭头」行回写。
+- 弹层高度用三档固定值，上游是 `heightIn(max = 屏高 0.8)`；ArkUI `bindSheet` 无同名上限属性，记平台近似。
+
+### 上机证据（设备 127.0.0.1:5555，API 26）
+导航路径：书架 →「我的」(896,2626) →「设置」(640,2326) →「备份与恢复」(640,1858)。证据目录 `.hvigor/outputs/backup-verify-20261123/`。
+- 备份页 `screen-c4-page.jpeg`（sha256 c1326664…）：每行独立圆角小卡、行间透 2vp 缝、组标题内缩 16、无 leading 图标、描述 12sp、箭头 24vp、子文件夹显示 legado、自动备份同步「备份至本地与网络」排在首位；「同步增强」因父开关关闭不显示，条件联动正确。
+- 账号对话框 `screen-acct-c4.jpeg`（sha256 abe76e30…）：点账号行 (640,974) 弹出独立对话框，标题「WebDav 账号」、账号/密码两输入框、单眼睛图标、取消/确认按钮、背后遮罩变暗；`layout-acct-c4.json` 78125 字节。
+- 组 2 `screen-ignore-scroll.jpeg`：七行同为小卡形态，备份路径副标题「请选择备份路径」。
+- 忽略面板 `screen-ignore-panel-c4.jpeg`（sha256 da5073de…）：点「恢复忽略列表」(640,1956) 弹出，配置忽略 Tab 9 项、左侧圆角复选框、选中项 Bold、右上角保存图标、顺序与 `BackupConfig.kt:145-155` 一致。
+
+### 对照表回写
+- 42 行 `⚠`/`⚠*` → `✓（剩余差异项已改，见 VALIDATION r361）`，分布 A10 / B6 / C11 / D3 / E4 / F4 / G4。
+- 回写后 A–G 区 `✓` 109 行、`⚠` 7 行、`❓` 0 行；H.1 统计表保留开工基线快照不变；H.8 节记口径与分布。
+- 全部回写先 dry-run 再落盘，脚本 `tmp/backup-writeback.ps1`；对照表 BOM=False、CRLF=0、LF=312。
+
+```bash
+cd /n/HarmonyProjects/legado-with-md3-harmonyos
+# 关键形态
+grep -n 'collapseFraction\|surfaceFill\|cardSurface\|BackupCheckItem\|系统文件夹选择器\|测试中' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+grep -n 'surfaceFill' entry/src/main/ets/components/settings/ThemeGroupColumn.ets
+grep -n 'collapseFraction' entry/src/main/ets/components/CollapsingSettingsHeader.ets
+grep -n 'account.trim()\|配置正确\|配置错误' entry/src/main/ets/pages/Index.ets
+# 已清文案（0 命中）
+grep -c '默认（坚果云）\|（根目录）\|正在处理 Android 备份\|兼容说明\|选择系统目录' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# 对照表回写（42 命中，A–G 区 check=109 warn=7）
+grep -c '剩余差异项已改' /n/HarmonyProjects/tmp/settings-backup-uicheck/property-diff-backup.md
+# 禁词（正文 0；命令行的 grep 字面量不计正文）
+grep -c '已接\|未接\|不适用\|要接\|不接\|应该\|建议\|可以补\|实现思路\|优先级\|工作量估计\|风险\|这是 bug' entry/src/main/ets/pages/AppBackupSettingsPage.ets
+# BOM=False CRLF=0；页面 LF=829，VALIDATION LF=2177，对照表 LF=312
+bash scripts/build-hap.sh
+# BUILD SUCCESSFUL in 4 s 749 ms；49 tasks（21 executed, 28 up-to-date）；无 ERROR
+```
