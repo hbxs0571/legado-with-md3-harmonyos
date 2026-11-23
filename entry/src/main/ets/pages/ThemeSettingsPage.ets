@@ -35,6 +35,7 @@ import {
   orderedMainNavigation,
   tabletInterfaceLabel
 } from '../data/MainNavigationSettings';
+import { MULTI_PANE_VALUES, multiPaneModeLabel } from '../data/MainPaneLayout';
 import {
   BAR_BLUR_ALPHA_MAX,
   BAR_BLUR_ALPHA_MIN,
@@ -268,6 +269,12 @@ export struct ThemeSettingsPage {
    */
   @Prop tabletInterface: string = 'auto';
   onTabletInterfaceChange: (value: string) => void = () => {};
+  /**
+   * 多栏布局四档（A19）。上游 `ThemeConfigScreen.kt:389-395` 的 `DropdownListSettingItem`，
+   * 键 `PreferKey.kt:364 multiPaneMode`，默认 auto；判据在 `data/MainPaneLayout.ets`。
+   */
+  @Prop multiPaneMode: string = 'auto';
+  onMultiPaneModeChange: (value: string) => void = () => {};
   /** 「首页与导航」组是否展开。上游是一个 sheet，本地用可展开组承接。 */
   @State navigationExpanded: boolean = false;
   @State followCoverColor: boolean = true;
@@ -833,6 +840,17 @@ export struct ThemeSettingsPage {
                 options: TABLET_INTERFACE_VALUES,
                 labelOf: (value: string) => tabletInterfaceLabel(value),
                 onSelect: (value: string) => this.onTabletInterfaceChange(value)
+              })
+            }
+            // 多栏布局：上游 `ThemeConfigScreen.kt:389-395`，紧跟在「平板界面」之后。
+            // 四档 auto/landscape/always/off，判据与断点（840/744vp）在 data/MainPaneLayout.ets。
+            ThemeGroupItem() {
+              UiDropdown({showDivider: false,
+                title: '多栏布局',
+                option: this.multiPaneMode,
+                options: MULTI_PANE_VALUES,
+                labelOf: (value: string) => multiPaneModeLabel(value),
+                onSelect: (value: string) => this.onMultiPaneModeChange(value)
               })
             }
             ThemeGroupItem() {

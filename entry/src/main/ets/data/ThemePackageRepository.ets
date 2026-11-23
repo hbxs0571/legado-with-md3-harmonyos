@@ -93,6 +93,8 @@ export interface ThemePortableConfig {
   labelVisibilityMode: string;
   /** 平板界面导航方式（auto/always/landscape/off），随主题包一起存，对齐上游 tabletInterface。 */
   tabletInterface: string;
+  /** 多栏布局档位（auto/landscape/always/off），随主题包一起存，对齐上游 multiPaneMode。 */
+  multiPaneMode: string;
   defaultHomePage: string;
   mainNavigationOrder: string;
   useFlexibleTopAppBar: boolean;
@@ -213,6 +215,7 @@ function emptyConfig(): ThemePortableConfig {
     useFloatingBottomBarLiquidGlass: false,
     labelVisibilityMode: 'auto',
     tabletInterface: 'auto',
+    multiPaneMode: 'auto',
     defaultHomePage: 'bookshelf',
     mainNavigationOrder: 'home,bookshelf,explore,rss,my',
     useFlexibleTopAppBar: true,
@@ -332,6 +335,7 @@ export function toPortableConfig(source: ThemePackageSource): ThemePortableConfi
   config.useFloatingBottomBarLiquidGlass = snapshot.useFloatingBottomBarLiquidGlass;
   config.labelVisibilityMode = snapshot.labelVisibilityMode;
   config.tabletInterface = snapshot.tabletInterface;
+  config.multiPaneMode = snapshot.multiPaneMode;
   config.defaultHomePage = snapshot.defaultHomePage;
   config.mainNavigationOrder = snapshot.mainNavigationOrder;
   config.useFlexibleTopAppBar = snapshot.useFlexibleTopAppBar;
@@ -399,6 +403,8 @@ export interface ThemeConfigPatch {
   labelVisibilityMode: string;
   /** 平板界面导航方式（auto/always/landscape/off），随主题包一起存，对齐上游 tabletInterface。 */
   tabletInterface: string;
+  /** 多栏布局档位（auto/landscape/always/off），随主题包一起存，对齐上游 multiPaneMode。 */
+  multiPaneMode: string;
   defaultHomePage: string;
   mainNavigationOrder: string;
   useFlexibleTopAppBar: boolean;
@@ -484,6 +490,7 @@ export function fromPortableConfig(config: ThemePortableConfig): ThemeConfigPatc
     useFloatingBottomBarLiquidGlass: source.useFloatingBottomBarLiquidGlass === true,
     labelVisibilityMode: source.labelVisibilityMode,
     tabletInterface: source.tabletInterface,
+    multiPaneMode: source.multiPaneMode,
     defaultHomePage: source.defaultHomePage,
     mainNavigationOrder: source.mainNavigationOrder,
     useFlexibleTopAppBar: source.useFlexibleTopAppBar !== false,
@@ -566,6 +573,7 @@ export function parsePortableConfig(raw: string): ThemePortableConfig | undefine
       base.useFloatingBottomBarLiquidGlass),
     labelVisibilityMode: readString('labelVisibilityMode', base.labelVisibilityMode),
     tabletInterface: readString('tabletInterface', base.tabletInterface),
+    multiPaneMode: readString('multiPaneMode', base.multiPaneMode),
     defaultHomePage: readString('defaultHomePage', base.defaultHomePage),
     mainNavigationOrder: readString('mainNavigationOrder', base.mainNavigationOrder),
     useFlexibleTopAppBar: readBoolean('useFlexibleTopAppBar', base.useFlexibleTopAppBar),

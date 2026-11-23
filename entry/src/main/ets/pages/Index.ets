@@ -136,6 +136,17 @@ import {
   visibleMainNavigation
 } from '../data/MainNavigationSettings';
 import {
+  MAIN_PANE_GAP,
+  MULTI_PANE_DEFAULT,
+  MULTI_PANE_VALUES,
+  multiPaneModeLabel,
+  normalizeMultiPaneMode,
+  listPaneWidthOf,
+  MainPaneLayout,
+  paneLayout,
+  shouldUseListDetail
+} from '../data/MainPaneLayout';
+import {
   CARD_BORDER_WIDTH_DEFAULT,
   CARD_RADIUS_DEFAULT,
   CONTAINER_OPACITY_DEFAULT,
@@ -234,6 +245,11 @@ const EMPTY_BOOK: Book = {
   progress: 0,
   isLocal: false
 };
+
+/** `routeContent` 的路由参数。用对象字面量传入，ArkUI 按引用传递，路由变化会重建内容。 */
+interface RouteParam {
+  route: AppRoute;
+}
 
 @Entry
 @Component
@@ -793,9 +809,37 @@ struct Index {
    * 判据在 `data/MainNavigationSettings.ets` 的 `shouldUseNavigationRail()`。
    */
   @State themeTabletInterface: string = TABLET_INTERFACE_DEFAULT;
+  /**
+   * 应用内多栏档位（auto/landscape/always/off），上游 `PreferKey.kt:364 multiPaneMode`。
+   * 判据在 `data/MainPaneLayout.ets` 的 `paneLayout()` / `shouldUseListDetail()`。
+   */
+  @State themeMultiPaneMode: string = MULTI_PANE_DEFAULT;
   /** 导航区可用宽高（vp），由外层容器 onAreaChange 灌入，供侧栏判据使用。 */
   @State navigatorWidthVp: number = 0;
   @State navigatorHeightVp: number = 0;
+  /**
+   * 内容层（侧栏右侧那一块）的宽高（vp）。
+   *
+   * `navigatorWidthVp` 量的是整个窗口，含侧栏那 88vp；双栏是在内容层里并排，
+   * 用它算窗格宽度会让右栏越过屏幕右缘（实测右栏贴边被裁）。上游
+   * `MainAdaptiveLayout.kt:139` 的 `bounds` 也是内容区矩形，不是窗口矩形。
+   */
+  @State paneAreaWidthVp: number = 0;
+  @State paneAreaHeightVp: number = 0;
+  /**
+   * 双栏的返回栈，只含参与双栏的路由。
+   *
+   * 上游用 Navigation 3 的 back stack 承载（`ui/main/MainPaneNavigation.kt`），栈顶是详情、
+   * 其下是列表，最后两项成对时并排渲染。本地没有场景策略，用这个数组模拟同一件事：
+   * 栈尾两项分别渲染到右栏与左栏，栈里只有一项时单栏。
+   */
+  @State paneStack: AppRoute[] = [AppRoute.HOME];
+  /**
+   * 双栏展开进度 0..1，对齐上游 `ListDetailSceneStrategy.kt:93` 的 `PaneExpansionAnimations`。
+   * 0 = 左栏占满窗口（单栏形态），1 = 左右两栏各占自己的宽度。
+   */
+  @State paneExpansion: number = 0;
+
   /** 预见性返回手势；上游 `AppShellSettings.kt:9 predictiveBackEnabled`。ArkUI 无等价能力，只落盘。 */
   @State themePredictiveBack: boolean = true;
   /** 阅读界面共享元素动画；上游 `AppShellSettings.kt:10 readerSharedElementEnabled`。 */
@@ -2956,6 +3000,7 @@ struct Index {
     this.themeUseFloatingBottomBarLiquidGlass = patch.useFloatingBottomBarLiquidGlass;
     this.themeLabelVisibilityMode = patch.labelVisibilityMode;
     this.themeTabletInterface = patch.tabletInterface;
+    this.themeMultiPaneMode = patch.multiPaneMode;
     this.themeDefaultHomePage = patch.defaultHomePage;
     this.themeMainNavigationOrder = patch.mainNavigationOrder;
     this.themeUseFlexibleTopAppBar = patch.useFlexibleTopAppBar;
@@ -3046,6 +3091,7 @@ struct Index {
         mainNavigationOrder: this.themeMainNavigationOrder,
         labelVisibilityMode: this.themeLabelVisibilityMode,
         tabletInterface: this.themeTabletInterface,
+        multiPaneMode: this.themeMultiPaneMode,
         predictiveBack: this.themePredictiveBack,
         readerSharedElement: this.themeReaderSharedElement,
         enableBlur: this.themeEnableBlur,
@@ -3139,6 +3185,7 @@ struct Index {
     this.themeMainNavigationOrder = theme.mainNavigationOrder;
     this.themeLabelVisibilityMode = theme.labelVisibilityMode;
     this.themeTabletInterface = theme.tabletInterface;
+    this.themeMultiPaneMode = theme.multiPaneMode;
     this.themePredictiveBack = theme.predictiveBack;
     this.themeReaderSharedElement = theme.readerSharedElement;
     this.themeEnableBlur = theme.enableBlur;
@@ -3549,6 +3596,18 @@ struct Index {
     this.themeTabletInterface = normalizeTabletInterface(value);
     this.saveThemeSettings(context).catch(() => {
       this.showUnavailableAction('平板界面设置保存失败，请重试');
+    });
+  }
+
+  /**
+   * 多栏布局档位回调（A19）。上游 `ThemeConfigScreen.kt:389-395` → `SetMultiPaneMode`，
+   * 落盘 `PreferKey.kt:364 multiPaneMode`；本地落盘后 `this.themeMultiPaneMode` 变化会重算
+   * `paneLayout()`，双栏壳随之出现或消失。
+   */
+  private selectThemeMultiPaneMode(context: Context, value: string): void {
+    this.themeMultiPaneMode = normalizeMultiPaneMode(value);
+    this.saveThemeSettings(context).catch(() => {
+      this.showUnavailableAction('多栏布局设置保存失败，请重试');
     });
   }
 
@@ -4006,6 +4065,7 @@ struct Index {
     this.themeMainNavigationOrder = MAIN_NAVIGATION_ORDER_DEFAULT;
     this.themeLabelVisibilityMode = LABEL_VISIBILITY_DEFAULT;
     this.themeTabletInterface = TABLET_INTERFACE_DEFAULT;
+    this.themeMultiPaneMode = MULTI_PANE_DEFAULT;
     this.themePredictiveBack = true;
     this.themeReaderSharedElement = true;
     this.themeEnableBlur = false;
@@ -4146,6 +4206,7 @@ struct Index {
       mainNavigationOrder: this.themeMainNavigationOrder,
       labelVisibilityMode: this.themeLabelVisibilityMode,
       tabletInterface: this.themeTabletInterface,
+      multiPaneMode: this.themeMultiPaneMode,
       predictiveBack: this.themePredictiveBack,
       readerSharedElement: this.themeReaderSharedElement,
       enableBlur: this.themeEnableBlur,
@@ -5409,6 +5470,8 @@ struct Index {
 
   /** 进出阅读页时开关环境光订阅；上游是 repeatOnLifecycle(RESUMED) 里起、离开即停。 */
   private onReaderRouteChanged(): void {
+    this.syncPaneStack();
+    this.syncPaneExpansion();
     if (this.route === AppRoute.READER) {
       this.startReaderAmbientLightWatch();
     } else {
@@ -6840,6 +6903,43 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /** 账号密码对话框保存：写入配置后串一次连接测试，对齐上游 saveWebDavAuth。 */
+  private async saveWebDavAuth(account: string, password: string): Promise<void> {
+    const next: WebDavSettings = cloneWebDavSettings(this.webDavSettings);
+    next.account = account;
+    next.password = password;
+    await this.saveWebDavSettings(next);
+    await this.testWebDav();
+  }
+
+  /** 从 RestoreFiles 弹层选中指定远端备份恢复。latestBackup 仍保留给其它场景。 */
+  private async restoreNetwork(name: string): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined || this.backupBusy) { return; }
+    this.backupBusy = true;
+    this.backupStatusMessage = '';
+    this.pendingBackup = undefined;
+    let zipPath = '';
+    let selection: BackupSelection | undefined = undefined;
+    try {
+      zipPath = `${context.cacheDir}/legado-webdav-restore-${Date.now()}.zip`;
+      await WebDavSync.downloadBackup(context, name, zipPath);
+      selection = await BackupRepository.selectBackupFromPath(context, zipPath);
+      this.pendingBackup = selection;
+      this.backupStatusMessage = `已下载 ${name}，正在导入。`;
+    } catch (error) {
+      this.backupStatusMessage = error instanceof Error ? `从 WebDAV 恢复失败：${error.message}` : '从 WebDAV 恢复失败';
+    } finally {
+      if (zipPath.length > 0) {
+        try { fileIo.unlinkSync(zipPath); } catch (error) { console.error(`[Index] 清理临时 zip 失败: ${error}`); }
+      }
+      this.backupBusy = false;
+    }
+    if (selection !== undefined) {
+      await this.restoreWithSelection(selection);
+    }
+  }
+
   private async testWebDav(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined || this.webDavTesting) { return; }
@@ -7277,6 +7377,16 @@ private canWriteInto(dir: string): boolean {
     } catch (_) {
       this.backupStatusMessage = '排除项保存失败';
     }
+  }
+
+  /** 忽略面板关闭时一次性提交内存态；面板开着时四个 JSON 不落盘。 */
+  private async saveIgnoreItemsFromSheet(side: string, keys: string[]): Promise<void> {
+    if (side === 'backup') {
+      this.backupIgnoreKeys = keys;
+    } else {
+      this.restoreIgnoreKeys = keys;
+    }
+    await this.saveBackupIgnoreLists();
   }
 
   /**
@@ -10722,46 +10832,16 @@ private canWriteInto(dir: string): boolean {
     this.updateReadingProgress(chapterProgress, chapterPosition, androidCoordinate);
   }
 
-  build() {
-    Stack() {
-    // P9 书源脚本 ArkWeb 宿主：常驻隐藏 Web，为登录/脚本提供 StageWebRuntime 控制器。
-    BookSourceStageRuntimeHost()
-    // 全 App 背景图：上游 `ui/theme/AppBackground.kt:17-48` 把背景图铺在内容层之下、按日夜选路径与虚化度。
-    // 本地放在根 Stack 的首个子节点，`ImageFit.Cover` 填满。
-    // 上游 `AppScaffold.kt:248-268`：开模糊时背景图挂 `hazeSource(hazeState)`（自己不做 blur，由上层
-    // haze 效果采样时模糊）；关模糊时才按 `backgroundImageBlurring` 直接 `.blur()`。
-    // 本地 `backdropBlur` 采样的就是「组件自身背后」，栏上的模糊会把背景图一起糊掉，
-    // 所以这里同样只在关模糊时给背景图加 blur —— 两档语义与上游一致，不是省略。
-    if (this.appBackgroundSource().length > 0) {
-      Image(`file://${this.appBackgroundSource()}`)
-        .width('100%').height('100%')
-        .objectFit(ImageFit.Cover)
-        .blur(this.themeEnableBlur ? 0 : this.appBackgroundBlur())
-        .hitTestBehavior(HitTestMode.None)
-    }
-    Column() {
-      if (!this.onboardingLoaded || !this.privateReady) {
-        Column() {
-          LoadingProgress().width(28).height(28).color(this.themeColorAccent)
-        }.width('100%').height('100%').justifyContent(FlexAlign.Center)
-      } else if (!this.onboardingComplete) {
-        OnboardingPage({
-          localBooksPath: `${this.getAppFilesDirectory()}/books`,
-          readerNightMode: this.readerNightMode,
-          onThemeModeChange: (themeMode: number) => this.selectOnboardingThemeMode(themeMode),
-          onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex),
-          onComplete: (themeMode: number, paletteIndex: number) => this.finishOnboarding(themeMode, paletteIndex)
-        })
-      } else {
-      // 平板界面（批6 :385）：侧栏与内容并排。上游在 rail 档位把底栏整个换成左侧 NavigationRail
-      // （`AppAdaptiveNavigation.kt:33-53` 判据），本地用同一个 Row 承载：左侧固定宽侧栏、
-      // 右侧 layoutWeight(1) 内容。非 rail 档位 shouldUseRail() 为 false，这里等同原来的单子节点。
-      Row() {
-        if (this.shouldUseRail()) {
-          this.NavigationRail()
-        }
-      Stack() {
-        if (this.isPrimaryTabRoute()) {
+  /**
+   * 按给定路由渲染对应页面。
+   *
+   * 上游用 Navigation 3 的 back stack 承载（`ui/main/MainPaneNavigation.kt`），一个场景策略
+   * 可以同时渲染列表页与详情页两个 entry；本地没有场景策略，所以把「渲染哪条路由」做成参数，
+   * 双栏时对左栏与右栏各调一次。
+   */
+  @Builder
+  routeContent(routeParam: RouteParam) {
+        if (this.isPrimaryTabRouteOf(routeParam.route)) {
         Swiper() {
         HomePage({
           books: this.books,
@@ -10842,9 +10922,9 @@ private canWriteInto(dir: string): boolean {
           onExit: () => this.exitApplication(),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
-        }.width('100%').height('100%').index(this.selectedTab).loop(false).indicator(false)
+        }.width('100%').height('100%').index(this.tabIndexOf(routeParam.route)).loop(false).indicator(false)
           .onChange((index: number) => this.selectTab(index))
-        } else if (this.route === AppRoute.BOOK_INFO) {
+        } else if (routeParam.route === AppRoute.BOOK_INFO) {
         BookInfoPage({
           book: this.selectedBook,
           groups: this.bookGroups,
@@ -10909,7 +10989,7 @@ private canWriteInto(dir: string): boolean {
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.BOOK_INFO_EDIT) {
+        } else if (routeParam.route === AppRoute.BOOK_INFO_EDIT) {
         BookInfoEditPage({
           book: this.selectedBook,
           groups: this.bookGroups,
@@ -10928,7 +11008,7 @@ private canWriteInto(dir: string): boolean {
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.LOCAL_BOOK_IMPORT) {
+        } else if (routeParam.route === AppRoute.LOCAL_BOOK_IMPORT) {
         LocalBookImportPage({
           candidates: this.localBookImportCandidates,
           archiveUri: this.localBookArchiveUri,
@@ -10943,32 +11023,32 @@ private canWriteInto(dir: string): boolean {
           onImportArchiveEntries: (entryNames: string[]) => this.importArchiveEntries(entryNames)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.SUBSCRIPTION_RULES) {
+        } else if (routeParam.route === AppRoute.SUBSCRIPTION_RULES) {
         SubscriptionRulesPage({
           onBack: () => this.route = AppRoute.SUBSCRIPTIONS,
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.SUBSCRIPTION_FAVORITES) {
+        } else if (routeParam.route === AppRoute.SUBSCRIPTION_FAVORITES) {
         SubscriptionFavoritesPage({
           onBack: () => this.route = AppRoute.SUBSCRIPTIONS,
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.SUBSCRIPTION_SOURCE_MANAGE) {
+        } else if (routeParam.route === AppRoute.SUBSCRIPTION_SOURCE_MANAGE) {
         SubscriptionSourceManagePage({
           onBack: () => this.route = AppRoute.SUBSCRIPTIONS,
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.READER || this.route === AppRoute.CATALOG ||
-        (this.route === AppRoute.READER_SETTINGS && this.settingsReturnRoute === AppRoute.READER) ||
-        this.route === AppRoute.READ_ALOUD_SETTINGS) {
+        } else if (routeParam.route === AppRoute.READER || routeParam.route === AppRoute.CATALOG ||
+        (routeParam.route === AppRoute.READER_SETTINGS && this.settingsReturnRoute === AppRoute.READER) ||
+        routeParam.route === AppRoute.READ_ALOUD_SETTINGS) {
         Stack() {
           // 阅读设置是异步载入的（restoreReaderSettings 不能 await，aboutToAppear 是同步生命周期），
           // 设置没到位就开门会让阅读页先用默认值排一遍版，数值到达后再整页跳一次。
           // 上游 ReadBookActivity 也是把配置装好再起 UI，这里同样先给占位。
-          if (this.readerSettingsLoaded || this.route !== AppRoute.READER) {
+          if (this.readerSettingsLoaded || routeParam.route !== AppRoute.READER) {
           ReaderPage({
             startAtChapterBeginning: this.readerStartAtChapterBeginning,
             // 共享元素键：由书架卡片算好（见 data/BookCoverSharedElement.ets），
@@ -11263,7 +11343,7 @@ private canWriteInto(dir: string): boolean {
               .height(28)
               .color(this.themeColorAccent)
           }
-          if (this.route === AppRoute.CATALOG) {
+          if (routeParam.route === AppRoute.CATALOG) {
             CatalogPage({
               book: this.selectedBook,
               selectedChapter: this.selectedChapter,
@@ -11310,7 +11390,7 @@ private canWriteInto(dir: string): boolean {
               onClose: () => this.markingEditor = undefined
             })
           }
-          if (this.route === AppRoute.READER_SETTINGS) {
+          if (routeParam.route === AppRoute.READER_SETTINGS) {
             ReaderSettingsPage({
               fontSize: this.readerFontSize,
         paragraphSpacing: this.readerParagraphSpacing,
@@ -11627,7 +11707,7 @@ private canWriteInto(dir: string): boolean {
               onRemoveBackgroundStyle: (index: number): void => this.removeReaderBackgroundStyle(index),
               onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
             })
-          } else if (this.route === AppRoute.READ_ALOUD_SETTINGS) {
+          } else if (routeParam.route === AppRoute.READ_ALOUD_SETTINGS) {
             Stack() {
               ReaderAloudSettingsPage({
                 aloudState: this.aloudStateNum,
@@ -11672,7 +11752,7 @@ private canWriteInto(dir: string): boolean {
           }
         }.width('100%').height('100%')
           .transition(this.readerRouteTransition())
-        } else if (this.route === AppRoute.READER_SEARCH) {
+        } else if (routeParam.route === AppRoute.READER_SEARCH) {
         ReaderSearchPage({
           book: this.selectedBook,
           bookTitle: this.selectedBook.title,
@@ -11685,7 +11765,7 @@ private canWriteInto(dir: string): boolean {
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.SEARCH) {
+        } else if (routeParam.route === AppRoute.SEARCH) {
         SearchPage({
           books: this.books,
           groups: this.bookGroups,
@@ -11707,7 +11787,7 @@ private canWriteInto(dir: string): boolean {
           onExactMatchChange: (enabled: boolean) => this.searchPageExactMatch = enabled
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.EXPLORE_SHOW) {
+        } else if (routeParam.route === AppRoute.EXPLORE_SHOW) {
         ExploreShowPage({
           title: this.exploreShowTitle,
           sourceUrl: this.exploreShowSourceUrl,
@@ -11721,7 +11801,7 @@ private canWriteInto(dir: string): boolean {
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
-        } else if (this.route === AppRoute.PROFILE_SUBPAGE) {
+        } else if (routeParam.route === AppRoute.PROFILE_SUBPAGE) {
         if (this.profileSubpage === ProfileRoute.BOOK_SOURCE_MANAGE) {
           BookSourceManagePage({
             onBack: () => this.route = this.profileDetailReturnRoute,
@@ -12188,9 +12268,14 @@ private canWriteInto(dir: string): boolean {
             mainNavigationOrder: this.themeMainNavigationOrder,
             labelVisibilityMode: this.themeLabelVisibilityMode,
             tabletInterface: this.themeTabletInterface,
+            multiPaneMode: this.themeMultiPaneMode,
             onTabletInterfaceChange: (value: string) => {
               const themeContext = this.getUIContext().getHostContext();
               if (themeContext !== undefined) { this.selectThemeTabletInterface(themeContext, value); }
+            },
+            onMultiPaneModeChange: (value: string) => {
+              const themeContext = this.getUIContext().getHostContext();
+              if (themeContext !== undefined) { this.selectThemeMultiPaneMode(themeContext, value); }
             },
             onNavigationVisibilityChange: (route: string, visible: boolean) => {
               const themeContext = this.getUIContext().getHostContext();
@@ -12655,7 +12740,6 @@ private canWriteInto(dir: string): boolean {
             webDavSettings: this.webDavSettings,
             webDavTesting: this.webDavTesting,
             webDavConfigured: isWebDavConfigured(this.webDavSettings),
-            webDavBackupNames: this.webDavBackupNames,
             onCreateBackup: () => this.createLocalBackup(),
             onSelectRestore: () => this.selectLocalBackup(),
             onToggleBackupIgnore: (key: string, ignored: boolean) => this.toggleBackupIgnore(key, ignored),
@@ -12669,7 +12753,11 @@ private canWriteInto(dir: string): boolean {
             onChooseBackupPath: () => this.chooseBackupPath(),
             onUseDownloadDir: () => this.useDownloadDirAsBackupPath(),
             onClearBackupPath: () => this.clearBackupPath(),
-            onImportOldShelf: () => this.importOldBookShelf()
+            onImportOldShelf: () => this.importOldBookShelf(),
+            onSaveWebDavAuth: (account: string, password: string) => this.saveWebDavAuth(account, password),
+            onRestoreNetwork: (name: string) => this.restoreNetwork(name),
+            onConfirmLocalRestoreFallback: () => this.selectLocalBackup(),
+            onSaveIgnoreItems: (side: string, keys: string[]) => this.saveIgnoreItemsFromSheet(side, keys)
           })
         .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.APP_LAB_SETTINGS) {
@@ -13281,6 +13369,186 @@ private canWriteInto(dir: string): boolean {
           onMoveBackgroundStyle: (from: number, to: number): void => this.moveReaderBackgroundStyle(from, to)
         })
         }
+  }
+
+  /** 路由对应的主标签页序号（Swiper 的 index）。非主标签页返回 0。 */
+
+  /**
+   * 该路由是否参与双栏。
+   *
+   * 对齐上游 `ui/main/MainPaneNavigation.kt` 的 `standaloneMainRoutes`：阅读页、阅读内搜索、
+   * 阅读设置、目录、朗读设置、本地导入这六类在本地是「全屏内容」，不并排。
+   * 上游那八类里 ReadManga / SourceLogin / WebView / RssRead 本地没有独立路由（书源登录与
+   * 网页在 ProfileSubPage 内部、RSS 正文在订阅页内部），所以只剩这六条。
+   */
+  private supportsMainPanes(route: AppRoute): boolean {
+    return route !== AppRoute.READER && route !== AppRoute.READER_SEARCH &&
+      route !== AppRoute.READER_SETTINGS && route !== AppRoute.CATALOG &&
+      route !== AppRoute.READ_ALOUD_SETTINGS && route !== AppRoute.LOCAL_BOOK_IMPORT;
+  }
+
+  /**
+   * 维护双栏返回栈。路由变化时调用。
+   *
+   * 规则对齐上游 `MainPaneNavigation.kt:selectMainPaneChild` 的栈语义：
+   * 回到主标签页时栈只剩它自己；进入详情时压在栈顶；退回上一级时截断到那一级。
+   */
+  private syncPaneStack(): void {
+    const route = this.route;
+    if (this.isPrimaryTabRouteOf(route)) {
+      if (this.paneStack.length !== 1 || this.paneStack[0] !== route) {
+        this.paneStack = [route];
+      }
+      return;
+    }
+    const existing = this.paneStack.indexOf(route);
+    if (existing >= 0) {
+      // 退回栈里已有的一级：把它之后的都弹掉。
+      if (existing !== this.paneStack.length - 1) {
+        this.paneStack = this.paneStack.slice(0, existing + 1);
+      }
+      return;
+    }
+    this.paneStack = this.paneStack.concat([route]);
+  }
+
+  /**
+   * 当前的双栏矩形；返回 null 表示单栏。
+   *
+   * 尺寸取内容层（`paneAreaWidthVp`），不取整窗宽度：侧栏那 88vp 不在并排区内。
+   * `isContainer` 对齐上游 `MainActivity.kt:512` 的 `paneParentIsHome`——左栏是首页时用 420vp。
+   */
+  private currentPaneLayout(): MainPaneLayout | null {
+    if (this.paneAreaWidthVp <= 0 || this.paneAreaHeightVp <= 0) { return null; }
+    const listRoute = this.paneListRoute();
+    if (listRoute === null) { return null; }
+    return paneLayout(this.themeMultiPaneMode, this.paneAreaWidthVp, this.paneAreaHeightVp,
+      0, listRoute === AppRoute.HOME);
+  }
+
+  /**
+   * 双栏时左栏渲染的路由；单栏返回 null。
+   *
+   * 栈尾两项都要参与双栏才成对（上游 `MainActivity.kt:515` 的 `hasAdaptivePair`）。
+   */
+  private paneListRoute(): AppRoute | null {
+    if (this.paneStack.length < 2) { return null; }
+    const listRoute = this.paneStack[this.paneStack.length - 2];
+    const detailRoute = this.paneStack[this.paneStack.length - 1];
+    if (!this.supportsMainPanes(listRoute) || !this.supportsMainPanes(detailRoute)) { return null; }
+    return listRoute;
+  }
+
+  /**
+   * 双栏展开/收回动画，对齐上游 `ListDetailSceneStrategy.kt:275-292` 的 `LaunchedEffect`：
+   * 从单栏进来时从 0 播到 1（左栏从占满收到窗格宽、右栏从右侧滑入）；
+   * 换右栏内容或下钻时直接置 1（`snapTo(1f)`，不重播）；返回时从 1 播回 0。
+   * 时长取 `ui/main/ModalOverlaySceneStrategy.kt:37` 的 `NAV_SLIDE_DURATION_MILLIS = 480`。
+   */
+  private syncPaneExpansion(): void {
+    const target = this.currentPaneLayout() === null ? 0 : 1;
+    if (this.paneExpansion === target) { return; }
+    this.getUIContext().animateTo({ duration: 480, curve: Curve.FastOutSlowIn }, () => {
+      this.paneExpansion = target;
+    });
+  }
+
+  /** 左栏宽度（vp），对齐上游 `ListDetailSceneStrategy.kt:303` 的 `listPaneWidthOf`。 */
+  private listPaneWidthNow(): number {
+    return listPaneWidthOf(this.paneAreaWidthVp, this.paneListRoute() === AppRoute.HOME);
+  }
+
+  /** 右栏宽度（vp），对齐上游 `ListDetailSceneStrategy.kt:304` 的 `detailWidth`。 */
+  private detailPaneWidthNow(): number {
+    return Math.max(0, this.paneAreaWidthVp - this.listPaneWidthNow() - MAIN_PANE_GAP);
+  }
+
+  private tabIndexOf(route: AppRoute): number {
+    if (route === AppRoute.BOOKSHELF) { return 1; }
+    if (route === AppRoute.DISCOVER) { return 2; }
+    if (route === AppRoute.SUBSCRIPTIONS) { return 3; }
+    if (route === AppRoute.PROFILE) { return 4; }
+    return 0;
+  }
+
+  /** 按参数判定是否为主标签页之一（对齐 `isPrimaryTabRoute()`，供双栏左栏使用）。 */
+  private isPrimaryTabRouteOf(route: AppRoute): boolean {
+    return route === AppRoute.HOME || route === AppRoute.BOOKSHELF ||
+      route === AppRoute.DISCOVER || route === AppRoute.SUBSCRIPTIONS ||
+      route === AppRoute.PROFILE;
+  }
+
+  build() {
+    Stack() {
+    // P9 书源脚本 ArkWeb 宿主：常驻隐藏 Web，为登录/脚本提供 StageWebRuntime 控制器。
+    BookSourceStageRuntimeHost()
+    // 全 App 背景图：上游 `ui/theme/AppBackground.kt:17-48` 把背景图铺在内容层之下、按日夜选路径与虚化度。
+    // 本地放在根 Stack 的首个子节点，`ImageFit.Cover` 填满。
+    // 上游 `AppScaffold.kt:248-268`：开模糊时背景图挂 `hazeSource(hazeState)`（自己不做 blur，由上层
+    // haze 效果采样时模糊）；关模糊时才按 `backgroundImageBlurring` 直接 `.blur()`。
+    // 本地 `backdropBlur` 采样的就是「组件自身背后」，栏上的模糊会把背景图一起糊掉，
+    // 所以这里同样只在关模糊时给背景图加 blur —— 两档语义与上游一致，不是省略。
+    if (this.appBackgroundSource().length > 0) {
+      Image(`file://${this.appBackgroundSource()}`)
+        .width('100%').height('100%')
+        .objectFit(ImageFit.Cover)
+        .blur(this.themeEnableBlur ? 0 : this.appBackgroundBlur())
+        .hitTestBehavior(HitTestMode.None)
+    }
+    Column() {
+      if (!this.onboardingLoaded || !this.privateReady) {
+        Column() {
+          LoadingProgress().width(28).height(28).color(this.themeColorAccent)
+        }.width('100%').height('100%').justifyContent(FlexAlign.Center)
+      } else if (!this.onboardingComplete) {
+        OnboardingPage({
+          localBooksPath: `${this.getAppFilesDirectory()}/books`,
+          readerNightMode: this.readerNightMode,
+          onThemeModeChange: (themeMode: number) => this.selectOnboardingThemeMode(themeMode),
+          onPaletteChange: (paletteIndex: number) => this.selectThemePalette(paletteIndex),
+          onComplete: (themeMode: number, paletteIndex: number) => this.finishOnboarding(themeMode, paletteIndex)
+        })
+      } else {
+      // 平板界面（批6 :385）：侧栏与内容并排。上游在 rail 档位把底栏整个换成左侧 NavigationRail
+      // （`AppAdaptiveNavigation.kt:33-53` 判据），本地用同一个 Row 承载：左侧固定宽侧栏、
+      // 右侧 layoutWeight(1) 内容。非 rail 档位 shouldUseRail() 为 false，这里等同原来的单子节点。
+      Row() {
+        if (this.shouldUseRail()) {
+          this.NavigationRail()
+        }
+      Stack() {
+        // 多栏布局（上游 `ui/main/MainAdaptiveLayout.kt` + `ListDetailSceneStrategy.kt`）：
+        // 栈尾两项成对且空间够时并排，否则单栏。展开进度 0 时左栏宽度等于内容宽度、
+        // 右栏整体右移一格，视觉上仍是单栏，所以不需要额外的 if/else 两份结构。
+        if (this.currentPaneLayout() !== null) {
+          Stack() {
+            // 左栏：宽度随展开进度从「占满内容区」收到「窗格宽度」。
+            Stack() {
+              this.routeContent({ route: this.paneStack[this.paneStack.length - 2] })
+            }
+            .width(this.paneAreaWidthVp + (this.listPaneWidthNow() - this.paneAreaWidthVp) * this.paneExpansion)
+            .height('100%')
+            .clip(true)
+            .align(Alignment.TopStart)
+            // 右栏：从右侧滑入，展开进度 0 时整体在内容区之外。
+            Stack() {
+              this.routeContent({ route: this.paneStack[this.paneStack.length - 1] })
+            }
+            .width(this.detailPaneWidthNow())
+            .height('100%')
+            .clip(true)
+            .position({ x: this.listPaneWidthNow() + MAIN_PANE_GAP, y: 0 })
+            .translate({ x: this.detailPaneWidthNow() * (1 - this.paneExpansion) })
+          }
+          .width('100%')
+          .height('100%')
+          // Stack 默认按 Alignment.Center 摆子节点，左栏会跟着居中、右侧留出半屏空白。
+          // 上游 `ListDetailSceneStrategy.kt:316` 用 `absoluteOffset(listBounds.left, listBounds.top)`
+          // 把左栏钉在内容区左上角，这里用 TopStart 表达同一件事。
+          .align(Alignment.TopStart)
+        } else {
+          this.routeContent({ route: this.route })
+        }
         // 书签编辑面板挂在外层 Stack，阅读页与「所有书签」页都能唤起
         if (this.bookmarkEditor !== undefined) {
           ReaderBookmarkEditor({
@@ -13292,6 +13560,22 @@ private canWriteInto(dir: string): boolean {
           })
         }
       }.width('100%').layoutWeight(1)
+        // 内容层尺寸：双栏并排的可用区就是这一块（侧栏已在这一层之外）。
+        // 上游 `MainAdaptiveLayout.kt:139` 的 `bounds` 同样取内容区矩形而非窗口矩形。
+        // `Area.width` / `Area.height` 的单位是 vp（`units.d.ts:2074-2093`），不要再换算。
+        .onAreaChange((oldValue: Area, newValue: Area) => {
+          const width = Number(newValue.width);
+          const height = Number(newValue.height);
+          if (width > 0 && Math.abs(width - this.paneAreaWidthVp) > 0.5) {
+            this.paneAreaWidthVp = width;
+          }
+          if (height > 0 && Math.abs(height - this.paneAreaHeightVp) > 0.5) {
+            this.paneAreaHeightVp = height;
+          }
+          // 尺寸到位后要重算展开进度：首次进详情时尺寸可能还没测出来，
+          // 那一刻 `currentPaneLayout()` 返回 null、进度被判成 0，之后尺寸灌进来也不会自己重算。
+          this.syncPaneExpansion();
+        })
       }.width('100%').layoutWeight(1)
       // 侧栏档位下底栏不出现：上游是同一判据二选一（有 rail 就无 bottom bar），不是两层叠着。
       if (!this.shouldUseRail() && this.themeShowBottomView &&

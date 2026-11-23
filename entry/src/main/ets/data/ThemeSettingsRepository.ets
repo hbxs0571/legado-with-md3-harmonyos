@@ -5,6 +5,7 @@ import {
 } from './CustomThemeColors';
 import { preferences } from '@kit.ArkData';
 import { normalizeLabelVisibility, normalizeTabletInterface } from './MainNavigationSettings';
+import { normalizeMultiPaneMode } from './MainPaneLayout';
 import {
   BAR_BLUR_ALPHA_MAX, BAR_BLUR_ALPHA_MIN, BOTTOM_BAR_BLUR_ALPHA_DEFAULT, BOTTOM_BAR_BLUR_RADIUS_DEFAULT,
   BOTTOM_BAR_LENS_RADIUS_DEFAULT, BOTTOM_BAR_OPACITY_DEFAULT, TOP_BAR_BLUR_ALPHA_DEFAULT,
@@ -130,6 +131,12 @@ export interface ThemeSnapshot {
    * 的 `shouldUseNavigationRail()`，对齐上游 `AppAdaptiveNavigation.kt:33-53`。
    */
   tabletInterface: string;
+  /**
+   * 应用内多栏（列表-详情双栏）档位，对齐上游 `PreferKey.kt:364 multiPaneMode`（默认 auto）。
+   * 四档 auto/landscape/always/off，判据在 `data/MainPaneLayout.ets` 的 `shouldUseListDetail()`
+   * 与 `paneLayout()`，对齐上游 `AppAdaptiveNavigation.kt:71-85`、`MainAdaptiveLayout.kt:154-186`。
+   */
+  multiPaneMode: string;
   /**
    * 预见性返回手势，对齐上游 `AppShellSettings.kt:9 predictiveBackEnabled`（默认 true）。
    * ArkUI 没有对应的系统能力（SDK 里 `predictiveBack` 零命中），只落盘不驱动渲染。
@@ -345,6 +352,7 @@ export class ThemeSettingsRepository {
       mainNavigationOrder: 'home,bookshelf,explore,rss,my',
       labelVisibilityMode: 'auto',
       tabletInterface: 'auto',
+      multiPaneMode: 'auto',
       predictiveBack: true,
       readerSharedElement: true,
       enableBlur: false,
@@ -417,6 +425,7 @@ export class ThemeSettingsRepository {
       const mainNavigationOrder = await store.get('mainNavigationOrder', defaults.mainNavigationOrder);
       const labelVisibilityMode = await store.get('labelVisibilityMode', defaults.labelVisibilityMode);
       const tabletInterface = await store.get('tabletInterface', defaults.tabletInterface);
+      const multiPaneMode = await store.get('multiPaneMode', defaults.multiPaneMode);
       const predictiveBack = await store.get('predictiveBack', defaults.predictiveBack);
       const readerSharedElement = await store.get('readerSharedElement', defaults.readerSharedElement);
       const enableBlur = await store.get('enableBlur', defaults.enableBlur);
@@ -512,6 +521,8 @@ export class ThemeSettingsRepository {
           ? normalizeLabelVisibility(labelVisibilityMode) : defaults.labelVisibilityMode,
         tabletInterface: typeof tabletInterface === 'string'
           ? normalizeTabletInterface(tabletInterface) : defaults.tabletInterface,
+        multiPaneMode: typeof multiPaneMode === 'string'
+          ? normalizeMultiPaneMode(multiPaneMode) : defaults.multiPaneMode,
         predictiveBack: typeof predictiveBack === 'boolean' ? predictiveBack : defaults.predictiveBack,
         readerSharedElement: typeof readerSharedElement === 'boolean'
           ? readerSharedElement : defaults.readerSharedElement,
@@ -636,6 +647,7 @@ export class ThemeSettingsRepository {
     await store.put('mainNavigationOrder', snapshot.mainNavigationOrder);
     await store.put('labelVisibilityMode', normalizeLabelVisibility(snapshot.labelVisibilityMode));
     await store.put('tabletInterface', normalizeTabletInterface(snapshot.tabletInterface));
+    await store.put('multiPaneMode', normalizeMultiPaneMode(snapshot.multiPaneMode));
     await store.put('predictiveBack', snapshot.predictiveBack);
     await store.put('readerSharedElement', snapshot.readerSharedElement);
     await store.put('enableBlur', snapshot.enableBlur);

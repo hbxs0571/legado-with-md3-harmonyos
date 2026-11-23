@@ -530,6 +530,7 @@ export class BackupRepository {
     ['screenOrientation', 'string'], ['largeContainerBackgroundImageLight', 'string'], ['largeContainerBackgroundImageDark', 'string'],
     ['itemBackgroundImageLight', 'string'], ['itemBackgroundImageDark', 'string'], ['defaultHomePage', 'string'],
     ['mainNavigationOrder', 'string'], ['labelVisibilityMode', 'string'], ['tabletInterface', 'string'],
+    ['multiPaneMode', 'string'],
     ['appFontPath', 'string'],
     ['readBrightnessMode', 'string'], ['readBrightnessControlPosition', 'string'], ['backgroundImage', 'string'],
     ['backgroundImageNight', 'string'], ['keep_light', 'string'], ['titleBarCustomIcons', 'string'],
