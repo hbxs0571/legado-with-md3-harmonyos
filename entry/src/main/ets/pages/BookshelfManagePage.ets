@@ -1169,7 +1169,20 @@ export struct BookshelfManagePage {
       options.maxSelectNumber = 1;
       const uris = await new picker.DocumentViewPicker(context).select(options);
       const uri = uris[0];
-      if (uri === undefined) { return; }
+      if (uri === undefined) {
+        // 用户没选出目录（取消，或该设备的目录选择器选不出东西）：
+        // 上游 `BookshelfManageScreen.kt:279-312` 在 `!isReadyPath` 时直接 return，什么也不做；
+        // 但本地 `BookExporter.ets:70` 本来就有「目录为空 → 每本弹一次系统保存框」的兜底路径，
+        // 把这条路彻底掐掉会让导出在这类设备上完全不可用（实测本机模拟器 FOLDER 模式
+        // 进入目录后底部「完成」按钮消失，无法选中任何目录）。所以这里退到兜底：
+        // 目录留空，那批书照常导出，只是每本弹一次保存框。
+        const waiting = this.pendingExportBooks;
+        this.pendingExportBooks = [];
+        if (waiting.length === 0) { return; }
+        this.showExportSheet = false;
+        await this.exportBooksInOrder(context, waiting, false);
+        return;
+      }
       try {
         await fileShare.persistPermission([{
           uri: uri,
@@ -1192,8 +1205,9 @@ export struct BookshelfManagePage {
       const pending = this.pendingExportBooks;
       this.pendingExportBooks = [];
       if (pending.length === 0) { return; }
-      if (!writable) { return; }
-      if (pending.length === 1 && this.isCustomEpubExportEnabled()) {
+      // 不可写时上面已把 exportFolderPath 清空、并提示过用户；这里不 return，
+      // 让它落到「目录为空 → 每本弹一次系统保存框」的兜底路径，导出照样能完成。
+      if (writable && pending.length === 1 && this.isCustomEpubExportEnabled()) {
         const only = pending[0];
         if (only !== undefined) {
           this.openCustomExportDialog(only);
