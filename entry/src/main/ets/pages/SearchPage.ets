@@ -1919,33 +1919,45 @@ export struct SearchPage {
       }
 
       // 预览面板（上游 `SearchBookPreviewSheet`）。
+      // 预览面板（上游 `SearchScreen.kt:1200-1207` 的 `SearchBookPreviewSheet`，
+      // 上游由 `AppModalBottomSheet` 承载：遮罩在底层、面板贴底、面板自带 surface 底。
+      // 本仓这里是自绘的，所以遮罩与面板必须用 `Stack` 叠放（`Column` 会把面板挤到
+      // 遮罩下面且抢走高度），面板的 surface 底色也要自己补上。
       if (this.previewVisible) {
-        Column() {
+        Stack({ alignContent: Alignment.Bottom }) {
           Column()
             .width('100%')
-            .layoutWeight(1)
+            .height('100%')
             .backgroundColor('#99000000')
             .onClick(() => { this.previewVisible = false; })
-          SearchBookPreviewSheet({
-            item: this.previewBook,
-            shelfState: this.shelfStateOf(this.previewBook),
-            coverSettings: this.coverSettings,
-            isNight: this.isNight,
-            sharedKey: this.previewSharedKey,
-            onOpenDetail: () => {
-              this.previewVisible = false;
-              const intent = this.intentOf('OpenSearchBook');
-              intent.book = this.previewBook;
-              intent.sharedCoverKey = this.previewSharedKey;
-              this.onIntent(intent);
-            },
-            onAddToShelf: () => {
-              this.previewVisible = false;
-              const intent = this.intentOf('AddToShelf');
-              intent.book = this.previewBook;
-              this.onIntent(intent);
-            }
-          })
+          Column() {
+            SearchBookPreviewSheet({
+              item: this.previewBook,
+              shelfState: this.shelfStateOf(this.previewBook),
+              coverSettings: this.coverSettings,
+              isNight: this.isNight,
+              sharedKey: this.previewSharedKey,
+              onOpenDetail: () => {
+                this.previewVisible = false;
+                const intent = this.intentOf('OpenSearchBook');
+                intent.book = this.previewBook;
+                intent.sharedCoverKey = this.previewSharedKey;
+                this.onIntent(intent);
+              },
+              onAddToShelf: () => {
+                this.previewVisible = false;
+                const intent = this.intentOf('AddToShelf');
+                intent.book = this.previewBook;
+                this.onIntent(intent);
+              }
+            })
+          }
+          .width('100%')
+          // 面板左右内边距由宿主提供（见 `SearchBookPreviewSheet` 末尾注释），
+          // 底色对应上游 `AppModalBottomSheet` 的 `surfaceContainerLow`。
+          .padding({ left: SPACE_16, right: SPACE_16, top: SPACE_16 })
+          .backgroundColor(this.themeColorSurfaceContainerLow)
+          .borderRadius({ topLeft: 28, topRight: 28 })
         }
         .width('100%')
         .height('100%')
