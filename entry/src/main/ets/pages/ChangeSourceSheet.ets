@@ -1,19 +1,29 @@
 // 换源面板（P8）：候选源列表 + 迁移选项 + 换源执行。
 // 挂 Index 根的条件覆盖组件（不用 bindSheet：BookInfoPage 已占用同组件的 sheet 槽），
 // 搜索与校验在面板内完成，确认后把候选交给 Index 落库（Index 持有书架与进度写入能力）。
+//
+// 迁移选项：上游 `ui/widget/components/changeSource/ChangeSourceSheet.kt:575-583` 是右上角齿轮
+// （`MediumTonalButton(icon = Icons.Outlined.Settings, contentDescription = R.string.setting)`）
+// 打开公共的 `ChangeSourceMigrationOptionsSheet(title = "换源选项")`，确认后
+// `viewModel.setMigrationOptions(options)` 记住、下次打开用它做 `initialOptions`。
+// 本地原来把两个开关直接摊在候选列表下面，字段只有两项且与上游八项口径不符 —— 改为同一个公共组件。
 import { Book } from '../model/Book';
 import {
   ChangeSourceCoordinator, ChangeSourceCandidate, ChangeSourceMigrationOptions, defaultMigrationOptions
 } from '../bookSource/ChangeSourceCoordinator';
 import { BookSourceRepository } from '../data/BookSourceRepository';
-import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import { ChangeSourceMigrationOptionsSheet } from '../components/booksource/ChangeSourceMigrationOptionsSheet';
+import { AppGlyph } from '../components/AppGlyph';
+import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 @Component
 export struct ChangeSourceSheet {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
+  @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themePureBlack') themePureBlack: boolean = false;
   book: Book | null = null;
   onClose: () => void = () => {};
@@ -26,6 +36,8 @@ export struct ChangeSourceSheet {
   @State searching: boolean = true;
   @State options: ChangeSourceMigrationOptions = defaultMigrationOptions();
   @State resultMessage: string = '';
+  /** 迁移选项面板显隐（上游 `showMigrationOptions`，`:128`）。 */
+  @State showMigrationOptions: boolean = false;
 
   aboutToAppear(): void {
     this.runSearch();
@@ -96,13 +108,27 @@ export struct ChangeSourceSheet {
     return this.themePureBlack ? '#1E1F26' : this.themeColorSurfaceElevated;
   }
 
+  /**
+   * 迁移选项面板。
+   *
+   * 对齐上游 `ChangeSourceSheet.kt:575-583`：
+   * `ChangeSourceMigrationOptionsSheet(show = showMigrationOptions, title = "换源选项",
+   *   initialOptions = settings.migrationOptions(), onDismissRequest = { showMigrationOptions = false },
+   *   onConfirm = { options -> viewModel.setMigrationOptions(options); showMigrationOptions = false })`。
+   */
   @Builder
-  OptionRow(label: string, checked: boolean, onChange: (v: boolean) => void) {
-    Row() {
-      Text(label).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-      Toggle({ type: ToggleType.Checkbox, isOn: checked })
-        .onChange((v: boolean) => onChange(v))
-    }.width('100%').padding({ top: 8, bottom: 8 })
+  MigrationOptionsPanel() {
+    ChangeSourceMigrationOptionsSheet({
+      title: '换源选项',
+      subtitle: '',
+      showDeleteDownloaded: true,
+      initialOptions: this.options,
+      onDismissRequest: () => { this.showMigrationOptions = false; },
+      onConfirm: (options: ChangeSourceMigrationOptions) => {
+        this.options = options;
+        this.showMigrationOptions = false;
+      }
+    })
   }
 
   build() {
@@ -116,7 +142,15 @@ export struct ChangeSourceSheet {
       Column() {
         Row() {
           Text('换源').fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+          // 上游 `:300-305`：右上角齿轮打开迁移选项面板（`MediumTonalButton(icon = Settings)`）。
+          Row() {
+            AppGlyph({ name: 'settings', glyphSize: 20, tint: this.themeColorTextSecondary })
+          }
+          .width(40).height(40).justifyContent(FlexAlign.Center).borderRadius(20)
+          .accessibilityText('设置')
+          .onClick(() => { this.showMigrationOptions = true; })
           Text('✕').fontSize(TITLE_LARGE).fontColor(this.themeColorTextTertiary)
+            .margin({ left: 4 })
             .onClick(() => this.onClose())
         }.width('100%').padding({ bottom: 12 })
 
@@ -132,15 +166,6 @@ export struct ChangeSourceSheet {
               }, (item: ChangeSourceCandidate) => item.sourceUrl)
             }.width('100%')
           }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
-
-          Column() {
-            this.OptionRow('迁移阅读进度', this.options.migrateProgress, (v: boolean) => {
-              this.options = { migrateProgress: v, migrateMetadata: this.options.migrateMetadata };
-            })
-            this.OptionRow('迁移封面与简介', this.options.migrateMetadata, (v: boolean) => {
-              this.options = { migrateProgress: this.options.migrateProgress, migrateMetadata: v };
-            })
-          }.width('100%').padding({ top: 8, bottom: 8 })
         } else {
           Row() {
             Text(this.resultMessage.length > 0 ? this.resultMessage : '没有候选源')
@@ -170,6 +195,13 @@ export struct ChangeSourceSheet {
       .borderRadius({ topLeft: 20, topRight: 20 })
       .padding({ left: 20, right: 20, top: 20, bottom: 24 })
       .onClick((_e: ClickEvent) => { /* 阻止冒泡到遮罩 */ })
+      .bindSheet(this.showMigrationOptions, this.MigrationOptionsPanel(), {
+        backgroundColor: this.themeColorSurfaceElevated,
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        onDisappear: () => { this.showMigrationOptions = false; }
+      })
     }.width('100%').height('100%')
   }
 }

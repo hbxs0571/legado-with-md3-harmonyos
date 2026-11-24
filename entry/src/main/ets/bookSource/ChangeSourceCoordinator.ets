@@ -23,14 +23,39 @@ export interface ChangeSourceOutcome {
   message: string;
 }
 
-/** 迁移选项：对齐上游 ChangeSourceMigrationOptionsSheet 的勾选项（本仓落地其中两项）。 */
+/**
+ * 迁移选项：逐字段对齐上游 `domain/usecase/ChangeBookSourceUseCase.kt:23-33`
+ * `data class ChangeSourceMigrationOptions`。
+ *
+ * 第十表 G-6：本地原先只落地 `migrateProgress`（阅读进度）与 `migrateMetadata`（简介/封面/分类/最新章节）
+ * 两项，把上游七个独立维度（分组、封面、分类、备注、作者、阅读设置）压进一个开关里 —— 用户没法只迁移
+ * 其中一部分。上游 `ChangeSourceMigrationOptionsSheet.kt:78-99` 是八个勾选项（`migrateChapters` 恒为
+ * true、不出现在 UI 上，故面板只有八项），这里补齐同一组字段，执行端按字段各管一段。
+ */
 export interface ChangeSourceMigrationOptions {
-  migrateProgress: boolean;   // 阅读进度
-  migrateMetadata: boolean;   // 简介/封面/分类/最新章节
+  migrateChapters: boolean;              // 章节（面板不展示，恒 true，对齐上游 :106）
+  migrateProgress: boolean;              // 阅读进度（上游 migrateReadingProgress）
+  migrateGroup: boolean;                 // 分组和排序
+  migrateCover: boolean;                 // 自定义封面
+  migrateCategory: boolean;              // 分类与标签
+  migrateRemark: boolean;                // 备注和自定义简介
+  migrateAuthor: boolean;                // 作者
+  migrateReadConfig: boolean;            // 阅读设置
+  deleteDownloadedChapters: boolean;     // 删除已下载章节（默认 false）
 }
 
 export function defaultMigrationOptions(): ChangeSourceMigrationOptions {
-  return { migrateProgress: true, migrateMetadata: true };
+  return {
+    migrateChapters: true,
+    migrateProgress: true,
+    migrateGroup: true,
+    migrateCover: true,
+    migrateCategory: true,
+    migrateRemark: true,
+    migrateAuthor: true,
+    migrateReadConfig: true,
+    deleteDownloadedChapters: false,
+  };
 }
 
 export class ChangeSourceCoordinator {

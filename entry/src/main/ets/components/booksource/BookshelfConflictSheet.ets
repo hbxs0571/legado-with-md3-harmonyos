@@ -6,13 +6,12 @@
 // - 多个候选时用单选决定「对哪一本」执行操作，默认选中第一本（上游按最近阅读时间倒序排好）；
 // - 底部「共存 / 迁移」复用换源的携带数据选项，右上角齿轮单独打开选项面板。
 //
-// 与上游的差别（记入 `tmp/appearance-impl-report.md` 待办账本）：
-// 上游 `ChangeSourceMigrationOptions` 有九个布尔字段（章节/阅读进度/分组/封面/分类/备注/作者/阅读配置/删除已下载），
-// 本地 `bookSource/ChangeSourceCoordinator.ets:27-30` 的迁移选项只有两个（`migrateProgress` 阅读进度、
-// `migrateMetadata` 简介封面分类最新章节）—— 这是本地换源链路既有的口径，本面板沿用同一口径，
-// 不在这里另造七个上游有、本地换源用不上的字段。
+// 选项面板直接复用 `ChangeSourceMigrationOptionsSheet`：上游 `BookshelfConflictSheet.kt:182` 调的就是
+// 那个公共 composable（`title = bookshelf_conflict_options_title`「要携带的数据」、`showDeleteDownloaded = false`，
+// 因为共存场景两本书都留在书架，删缓存没有意义）。
 import { Book } from '../../model/Book';
 import { ChangeSourceMigrationOptions, defaultMigrationOptions } from '../../bookSource/ChangeSourceCoordinator';
+import { ChangeSourceMigrationOptionsSheet } from './ChangeSourceMigrationOptionsSheet';
 import { BookCover } from '../BookCover';
 import { AppGlyph } from '../AppGlyph';
 import {
@@ -212,51 +211,28 @@ export struct BookshelfConflictSheet {
     return this.conflict.candidates.length > 0;
   }
 
-  /** 选项面板里的一项（本地迁移选项只有两个字段，见文件头说明）。 */
-  @Builder
-  OptionRow(title: string, value: boolean, onToggle: (next: boolean) => void) {
-    Row() {
-      Text(title)
-        .fontSize(LABEL_LARGE)
-        .fontColor(this.themeColorTextPrimary)
-        .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: value })
-        .selectedColor(this.themeColorAccent)
-        .onChange((next: boolean) => { onToggle(next); })
-    }
-    .width('100%')
-    .padding({ top: SPACE_12, bottom: SPACE_12 })
-    .accessibilityText(title)
-  }
-
+  /**
+   * 选项面板。
+   *
+   * 对齐上游 `BookshelfConflictSheet.kt:182-188`：
+   * `ChangeSourceMigrationOptionsSheet(show = showOptions && conflict != null,
+   *   title = stringResource(R.string.bookshelf_conflict_options_title),
+   *   initialOptions = options, showDeleteDownloaded = false, onConfirm = { options = it; showOptions = false })`。
+   * `showDeleteDownloaded = false` 的理由见上游注释：「共存场景两本书都留在书架，删缓存没有意义」。
+   */
   @Builder
   OptionsPanel() {
-    Column() {
-      Text('要携带的数据')
-        .fontSize(TITLE_SMALL)
-        .fontColor(this.themeColorTextPrimary)
-        .width('100%')
-        .margin({ bottom: SPACE_8 })
-      this.OptionRow('迁移阅读进度', this.options.migrateProgress, (next: boolean) => {
-        this.options = { migrateProgress: next, migrateMetadata: this.options.migrateMetadata };
-      });
-      this.OptionRow('迁移封面与简介', this.options.migrateMetadata, (next: boolean) => {
-        this.options = { migrateProgress: this.options.migrateProgress, migrateMetadata: next };
-      });
-      Text('完成')
-        .fontSize(LABEL_LARGE)
-        .fontColor(this.themeColorOnPrimary)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .padding({ top: SPACE_12, bottom: SPACE_12 })
-        .backgroundColor(this.themeColorAccent)
-        .borderRadius(12)
-        .margin({ top: SPACE_12 })
-        .onClick(() => { this.showOptions = false; })
-    }
-    .width('100%')
-    .padding(SPACE_16)
-    .alignItems(HorizontalAlign.Start)
+    ChangeSourceMigrationOptionsSheet({
+      title: '要携带的数据',
+      subtitle: '',
+      showDeleteDownloaded: false,
+      initialOptions: this.options,
+      onDismissRequest: () => { this.showOptions = false; },
+      onConfirm: (options: ChangeSourceMigrationOptions) => {
+        this.options = options;
+        this.showOptions = false;
+      }
+    })
   }
 
   build() {

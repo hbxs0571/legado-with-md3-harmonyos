@@ -502,8 +502,13 @@ export struct BookshelfPage {
   /** 批量设/取消单本私密标记（:294 / :147）；由 Index 落库后刷新 books。 */
   onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => Promise<void> =
     async (_bookKeys: string[], _isPrivate: boolean) => {};
-  /** 进书架管理页（:482）：带上当前生效的分组名，空串表示全部。 */
-  onOpenBookshelfManage: (groupName: string) => void = (_groupName: string) => {};
+  /**
+   * 进书架管理页（上游 `BookshelfScreen.kt:744-752`）：
+   * `onNavigateToCache(uiState.groups.getOrNull(uiState.selectedGroupIndex)?.groupId ?: -1L)`。
+   * 第十表 H-8：入口参数就是 **groupId**，不是分组名——上游 `MainRouteCache(groupId)` 一路带进去，
+   * 管理页 `LaunchedEffect(groupId) { Initialize(groupId) }` 再按它取书单。
+   */
+  onOpenBookshelfManage: (groupId: number) => void = (_groupId: number) => {};
 
   /** 目录或进度变更后让书架卡片重建，避免 ArkUI 复用旧章节角标。 */
   /** 书卡 Grid 的数据源（:154）；只覆盖书卡，分组卡 Grid 仍是 ForEach。 */
@@ -665,6 +670,28 @@ export struct BookshelfPage {
   private activeFilter(): string {
     const names = this.getGroupNames();
     return names.includes(this.selectedFilter) ? this.selectedFilter : '全部';
+  }
+
+  /**
+   * 当前生效分组的 groupId（第十表 H-8）。
+   *
+   * 对齐上游 `BookshelfScreen.kt:747-749`：
+   * `uiState.groups.getOrNull(uiState.selectedGroupIndex)?.groupId ?: -1L`。
+   * 上游页签列表里的第一项是「全部」，它的 groupId 就是 `BookGroup.IdAll = -1L`；
+   * 本地页签按名字组织，所以这里按名字反查：
+   * - 「全部」→ `-1`（IdAll）
+   * - 「本地未分组」→ `BookGroupRepository.LOCAL_NONE_GROUP_ID`（`-5`，与上游 IdLocalNone 同值）
+   * - 其余 → 分组定义里的 groupId
+   * - 查不到（页签被过滤掉时已回落到「全部」，理论上不会走到）→ `-1`
+   */
+  private activeGroupId(): number {
+    const name = this.activeFilter();
+    if (name === '全部') { return -1; }
+    if (name === BookGroupRepository.LOCAL_NONE_GROUP_NAME) {
+      return BookGroupRepository.LOCAL_NONE_GROUP_ID;
+    }
+    const group = this.groups.find((item: BookGroup) => item.groupName === name);
+    return group !== undefined ? group.groupId : -1;
   }
 
   /**
@@ -3917,7 +3944,7 @@ export struct BookshelfPage {
       return;
     }
     if (key === 'shelf_manage') {
-      this.onOpenBookshelfManage(this.activeFilter());
+      this.onOpenBookshelfManage(this.activeGroupId());
       return;
     }
     if (key === 'export_list') {

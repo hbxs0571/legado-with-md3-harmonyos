@@ -313,8 +313,13 @@ struct Index {
   @State profileDetailReturnRoute: AppRoute = AppRoute.PROFILE;
   @State profileSubpage: ProfileRoute = ProfileRoute.BOOK_SOURCE_MANAGE;
   @State profileSettingsReturn: ProfileRoute = ProfileRoute.APP_SETTINGS;
-  /** 书架管理整页时带上的分组名（:482），空串表示全部。 */
-  @State bookshelfManageGroupName: string = '';
+  /**
+   * 书架管理整页时带上的分组 **groupId**（上游 `MainRouteCache(groupId)`）。
+   * 第十表 H-8：上游入口参数是 groupId（`BookshelfScreen.kt:747-750`
+   * `uiState.groups.getOrNull(selectedGroupIndex)?.groupId ?: -1L`），
+   * `-1` 即 `BookGroup.IdAll`「全部」。
+   */
+  @State bookshelfManageGroupId: number = -1;
   /** 本地书多选后的候选列表；非空表示停在导入确认页（批 10 的 :555）。 */
   @State localBookImportCandidates: ImportCandidate[] = [];
   /** 批7（:1162）：正在挑选条目的压缩包。非空时确认页列的是包内条目。 */
@@ -326,6 +331,14 @@ struct Index {
   @State changeSourceBook: Book | null = null;
   /** 批量换源面板（批10 :564）：非空即显示，值是选择模式里勾中的书。 */
   @State batchChangeSourceBooks: Book[] | null = null;
+  /**
+   * 第十表 G-12：批量换源「确认」信号。
+   *
+   * 上游 `BookshelfManageScreen.kt:806-816` 确认后既派发 `BatchChangeBookSource` 又立刻
+   * `clearSelection()`。本地批量换源面板挂在 Index 上，选择态在管理页里，
+   * 所以确认时把这个值加一，管理页 `@Watch` 到就清空选择。
+   */
+  @State batchSourceConfirmSignal: number = 0;
   /** P9 正在登录的书源 URL；非空即显示登录弹层。 */
   @State loginSourceUrl: string = '';
   /** P9 登录弹层显隐（bindSheet 双向绑定；对齐上游 modalOverlay 的进出）。 */
@@ -8829,7 +8842,8 @@ private canWriteInto(dir: string): boolean {
       );
       const target = candidate.chapters[newIndex];
 
-      // ② 构造新书：保留书架字段（分组/顺序/私密/阅读设置），替换来源与目录。
+      // ② 构造新书：替换来源与目录，再按勾选项逐段迁移（对齐上游
+      //    `domain/usecase/BookMigration.kt:19-77 Book.migrateInto`，只搬勾选的部分）。
       const newBook: Book = BookRepository.copyBook(oldBook);
       newBook.origin = candidate.sourceUrl;
       newBook.originName = candidate.sourceName;
@@ -8838,24 +8852,71 @@ private canWriteInto(dir: string): boolean {
       newBook.tocRule = undefined;                     // 在线书不用本地目录正则
       newBook.isLocal = false;
       newBook.chapterCount = String(candidate.chapters.length);
+      // 阅读进度（`BookMigration.kt:27-47`）：勾选则按三档算法迁移并保留章内位置与阅读时间，
+      // 未勾选则回到第一章、章内位置清零、阅读时间取当前。
       if (options.migrateProgress) {
         newBook.chapterIndex = newIndex;
         newBook.chapterProgress = 0;
         newBook.lastChapter = target !== undefined ? target.title : oldBook.lastChapter;
         newBook.progress = candidate.chapters.length > 0
           ? (newIndex / candidate.chapters.length) * 100 : 0;
+        newBook.durChapterTime = oldBook.durChapterTime;
       } else {
         newBook.chapterIndex = 0;
         newBook.chapterProgress = 0;
         newBook.lastChapter = '';
         newBook.progress = 0;
+        newBook.durChapterTime = Date.now();
       }
-      if (options.migrateMetadata) {
-        newBook.coverUri = candidate.book.coverUrl.length > 0 ? candidate.book.coverUrl : newBook.coverUri;
-        newBook.description = candidate.book.intro.length > 0 ? candidate.book.intro : newBook.description;
-        newBook.category = candidate.book.kind.length > 0 ? candidate.book.kind : newBook.category;
-        newBook.latestChapterTitle = candidate.book.lastChapter.length > 0
-          ? candidate.book.lastChapter : newBook.latestChapterTitle;
+      // 分组和排序（`:48-51`）：`group` 与 `order` 同属一项，不能只搬一半。
+      if (options.migrateGroup) {
+        newBook.groupNames = oldBook.groupNames !== undefined ? oldBook.groupNames.slice(0) : undefined;
+        newBook.groupName = oldBook.groupName;
+        newBook.order = oldBook.order;
+      }
+      // 自定义封面（`:52-54`）：搬的是用户自选封面，书源自带封面由新源决定。
+      if (options.migrateCover) {
+        newBook.customCoverUri = oldBook.customCoverUri;
+      }
+      // 分类与标签（`:55-57`）。
+      if (options.migrateCategory) {
+        newBook.customTag = oldBook.customTag;
+      }
+      // 备注和自定义简介（`:58-61`）。
+      if (options.migrateRemark) {
+        newBook.customIntro = oldBook.customIntro;
+        newBook.remark = oldBook.remark;
+      }
+      // 作者（`:62-64`）：新源给的书名作者可能带后缀，勾了才沿用旧书的作者。
+      if (options.migrateAuthor) {
+        newBook.author = oldBook.author;
+      }
+      // 阅读设置（`:70-72`）：上游搬整份 readConfig，本地按字段搬同一组。
+      if (options.migrateReadConfig) {
+        newBook.imageStyle = oldBook.imageStyle;
+        newBook.pageAnim = oldBook.pageAnim;
+        newBook.readSimulating = oldBook.readSimulating;
+        newBook.startDate = oldBook.startDate;
+        newBook.startChapter = oldBook.startChapter;
+        newBook.dailyChapters = oldBook.dailyChapters;
+        newBook.reSegment = oldBook.reSegment;
+        newBook.splitLongChapter = oldBook.splitLongChapter;
+        newBook.delTag = oldBook.delTag;
+        newBook.useReplaceRule = oldBook.useReplaceRule;
+      }
+      // 这三项上游无条件搬运（`:65-66`、`:73-75`、`:76`）。
+      newBook.canUpdate = oldBook.canUpdate;
+      newBook.disableReadRecord = oldBook.disableReadRecord;
+      if (newBook.wordCount === undefined || newBook.wordCount.length === 0) {
+        newBook.wordCount = oldBook.wordCount;
+      }
+      newBook.upError = false;   // 上游 `removeType(BookType.updateError)`
+      // 删除已下载章节（`ChangeBookSourceUseCase.kt:104-108`）：勾了就清旧书缓存目录，
+      // 否则把旧缓存目录搬到新目录（书名没变时目录名不变，等价空操作）。
+      if (options.deleteDownloadedChapters) {
+        BookRepository.clearOnlineBookCache(oldBook);
+      } else {
+        OnlineBookService.moveCacheFolder(context, oldBook, newBook);
       }
 
       // ③ 单事务落库：删旧书主键+旧章节、插新书（对齐上游 changeTo），失败整体回滚。
@@ -8929,6 +8990,81 @@ private canWriteInto(dir: string): boolean {
     // 批量换源会改主键，书架要按新主键重载一次（applyChangeSource 只做了内存原位替换）。
     await this.reloadLibraryAfterBulkChange();
     return { succeeded: succeeded, failed: failed, skipped: skipped };
+  }
+
+  /**
+   * G-7：批量换源预览里的单本迁移（上游 `MigratePreviewItem`，
+   * `BookshelfManageScreenViewModel.kt:897-923`）。
+   *
+   * 上游只迁移这一本、成功后该行从预览列表移除（由面板做），失败保持原样并提示。
+   * 本地复用 `applyChangeSource`：它硬依赖 `this.selectedBook`，所以临时指过去、跑完还原。
+   * 不重载整份书架——面板只移掉一行，其余行还要继续可操作。
+   */
+  private async migrateBatchPreviewItem(
+    item: BatchChangeSourcePreviewItem, options: ChangeSourceMigrationOptions
+  ): Promise<boolean> {
+    if (item.candidate === null) { return false; }
+    const target = this.findShelfBookByKey(item.bookUrl);
+    if (target === undefined) {
+      this.showUnavailableAction('这本书已不在书架，无法迁移');
+      return false;
+    }
+    const previousSelected = this.selectedBook;
+    this.selectedBook = target;
+    try {
+      await this.applyChangeSource(item.candidate, options, true);
+      // 主键已变，内存里的书架要跟着换掉这一条，否则面板后续操作仍指向旧键。
+      await this.reloadLibraryAfterBulkChange();
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      this.selectedBook = previousSelected;
+    }
+  }
+
+  /**
+   * G-7：把候选作为新书加入书架（上游 `AddPreviewItemToShelf`，
+   * `BookshelfManageScreenViewModel.kt:990-1012`）。
+   *
+   * 与「迁移」的区别：**旧书保持不动，只新增一本**。本地复用
+   * `addExploreBookToShelf`——它已经处理了同名同作者冲突（返回候选列表）与
+   * `notShelf=false` + 排序落位，与上游 addToShelf 同口径。有冲突时这里不弹面板
+   * （批量预览的语境下逐本弹冲突会把流程打断），直接判失败并说明。
+   */
+  private async addBatchPreviewToShelf(item: BatchChangeSourcePreviewItem): Promise<boolean> {
+    if (item.candidate === null || item.candidate.book === null) { return false; }
+    try {
+      const conflicts = await this.addExploreBookToShelf(item.candidate.book);
+      if (conflicts.length > 0) {
+        this.showUnavailableAction(`《${item.title}》在书架里已有同名同作者的书，未重复添加`);
+        return false;
+      }
+      await this.reloadLibraryAfterBulkChange();
+      return true;
+    } catch (error) {
+      this.showUnavailableAction(
+        `《${item.title}》加入书架失败：` + (error instanceof Error ? error.message : String(error)));
+      return false;
+    }
+  }
+
+  /**
+   * G-7：预览里的「详情」（上游 `OpenBookInfoPreview(book, inBookshelf)`，
+   * `BookshelfManageScreen.kt:1558`）。
+   *
+   * `inBookshelf` 为真表示这本已经在架（原书那一侧），直接进详情页；
+   * 为假是候选（还没进架），走 `openOnlineBookInfo` 的未上架落库语义。
+   */
+  private openPreviewBookInfo(book: SearchBookItem, inBookshelf: boolean): void {
+    if (inBookshelf) {
+      const shelfBook = this.findShelfBookByKey(book.bookUrl);
+      if (shelfBook !== undefined) {
+        this.openBookInfo(shelfBook);
+        return;
+      }
+    }
+    this.openRelatedBookInfo(book);
   }
 
   /** 书名/作者规范化：对齐上游 BookMatchKey.of（空白归一、转小写）。 */
@@ -11838,9 +11974,9 @@ private canWriteInto(dir: string): boolean {
     const parentIndex = filesDirectory.lastIndexOf('/');
     return parentIndex > 0 ? filesDirectory.substring(0, parentIndex) : filesDirectory;
   }
-  /** 书架管理页入口（:482）：带上当前分组名，空串表示全部。 */
-  private openBookshelfManage(groupName: string): void {
-    this.bookshelfManageGroupName = groupName;
+  /** 书架管理页入口（上游 `BookshelfScreen.kt:744-752`）：带上当前分组的 groupId，`-1` 表示全部。 */
+  private openBookshelfManage(groupId: number): void {
+    this.bookshelfManageGroupId = groupId;
     this.profileDetailReturnRoute = this.route;
     this.profileSubpage = ProfileRoute.BOOKSHELF_MANAGE;
     this.route = AppRoute.PROFILE_SUBPAGE;
@@ -12180,7 +12316,7 @@ private canWriteInto(dir: string): boolean {
           onDeleteBooks: (books: Book[], deleteSource: boolean) => this.deleteBooksFromShelf(books, deleteSource),
           onMoveBooks: (ordered: Book[]) => this.moveBooksInShelf(ordered),
           onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => this.setBooksPrivateByKeys(bookKeys, isPrivate),
-          onOpenBookshelfManage: (groupName: string) => this.openBookshelfManage(groupName),
+          onOpenBookshelfManage: (groupId: number) => this.openBookshelfManage(groupId),
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         DiscoverPage({
@@ -13264,7 +13400,8 @@ private canWriteInto(dir: string): boolean {
           BookshelfManagePage({
             books: this.books,
             groups: this.bookGroups,
-            initialGroupName: this.bookshelfManageGroupName,
+            initialGroupId: this.bookshelfManageGroupId,
+            batchSourceConfirmSignal: this.batchSourceConfirmSignal,
             onBack: () => this.route = this.profileDetailReturnRoute,
             onOpenBookInfo: (book: Book) => this.openBookInfo(book),
             onLibraryChanged: () => this.reloadLibraryAfterBulkChange(),
@@ -15039,9 +15176,25 @@ private canWriteInto(dir: string): boolean {
       BatchChangeSourceSheet({
         books: this.batchChangeSourceBooks,
         onClose: () => { this.batchChangeSourceBooks = null; },
+        // 第十表 G-12：上游确认批量换源后紧接 `clearSelection()`
+        // （`BookshelfManageScreen.kt:806-816`）。管理页选择态在页面自己手里，
+        // 这里把确认信号加一，管理页监听到就清空选择。
         onConfirm: (sourceUrls: string[], options: ChangeSourceMigrationOptions,
-          preview: BatchChangeSourcePreviewItem[]): Promise<BatchChangeSourceResult> =>
-          this.runBatchChangeSource(this.batchChangeSourceBooks ?? [], sourceUrls, options, preview)
+          preview: BatchChangeSourcePreviewItem[]): Promise<BatchChangeSourceResult> => {
+          this.batchSourceConfirmSignal = this.batchSourceConfirmSignal + 1;
+          return this.runBatchChangeSource(this.batchChangeSourceBooks ?? [], sourceUrls, options, preview);
+        },
+        // G-7：预览卡片上的四个动作。上游 `BatchChangePreviewSheet` 把这些全部交回页面层
+        // （`BookshelfManageScreen.kt:819-833`），面板只负责把选中的候选递出去。
+        onOpenPreviewBook: (book: SearchBookItem, inBookshelf: boolean) =>
+          this.openPreviewBookInfo(book, inBookshelf),
+        // 上游 `onManualSearch = { book -> manualSearchPreviewBook = book }`：重开单本换源面板。
+        onManualSearch: (book: Book) => { this.changeSourceBook = book; },
+        onAddPreviewToShelf: (item: BatchChangeSourcePreviewItem): Promise<boolean> =>
+          this.addBatchPreviewToShelf(item),
+        onMigratePreview: (item: BatchChangeSourcePreviewItem,
+          options: ChangeSourceMigrationOptions): Promise<boolean> =>
+          this.migrateBatchPreviewItem(item, options)
       })
     }
     // P9 书源登录：对齐上游 MainNavGraph.kt:390-408 的模态覆盖层（modalOverlay），

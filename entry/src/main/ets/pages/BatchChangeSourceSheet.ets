@@ -1,20 +1,28 @@
 // 批量换源向导（批10 :564 :566 :567 :568）。
 //
-// 为什么做成一个组件而不是三个：上游 BookshelfManageScreen.kt 里「选择目标书源」(BookSourcePickerSheet)
-// 「批量换源选项」(ChangeSourceMigrationOptionsSheet)「批量换源预览」(BatchChangePreviewSheet) 是同一流程的
-// 三个步骤，拆成三个组件就要在 Index 里维护三份状态与三次跳转，中间任何一步被系统回收就丢上下文。
-// 一个组件 + @State step 最省。
+// 与上游的对应：上游 `BookshelfManageScreen.kt:790-870` 把「选择目标书源」(`BookSourcePickerSheet`)、
+// 「批量换源选项」(`ChangeSourceMigrationOptionsSheet`)、「批量换源预览」(`BatchChangePreviewSheet`)
+// 做成三个独立面板，由三个 `show*` 状态串起来。本地仍是一个组件 + `@State step` 承载三步流程
+// （三个独立面板需要在 Index 里维护三份状态与三次跳转，中间任何一步被系统回收就丢上下文），
+// 但**每一步的面板本体都是上游同名组件的本地实现，不是在本文件里另写一份**：
+//   · step 0 = 复用公共组件 `BookSourcePickerSheet`（搜索框 / 已选源可长按拖拽排序 / 可选源）
+//   · step 1 = 复用公共组件 `ChangeSourceMigrationOptionsSheet`（title「批量换源选项」+ subtitle）
+//   · step 2 = `BatchChangePreviewSheet` 的等价内容（双书卡 + 5 个动作按钮 + 「查看其他源信息」）
+//   · step 3 = 执行结果汇总
 //
 // 与单本换源的关系：单本用 ChangeSourceSheet（自动搜候选、只换一本），批量用这个（人从列表里挑源 +
-// 逐本自动搜 + 先预览再执行）。两者共用 ChangeSourceCoordinator，不共用 UI。
+// 逐本自动搜 + 先预览再执行）。两者共用 ChangeSourceCoordinator 与 ChangeSourceMigrationOptionsSheet。
 import { Book } from '../model/Book';
 import { BookSource } from '../model/BookSource';
 import {
   ChangeSourceCandidate, ChangeSourceCoordinator, ChangeSourceMigrationOptions, defaultMigrationOptions
 } from '../bookSource/ChangeSourceCoordinator';
 import { BookSourceRepository } from '../data/BookSourceRepository';
+import { SearchBookItem } from '../bookSource/SourceModels';
 import { AppGlyph } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
+import { ChangeSourceMigrationOptionsSheet } from '../components/booksource/ChangeSourceMigrationOptionsSheet';
+import { BookSourcePickerSheet } from '../components/booksource/BookSourcePickerSheet';
 import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 /** 预览状态：对齐上游 BatchChangeSourcePreviewStatus（ChangeBookSourceUseCase.kt:65-69）。 */
@@ -50,14 +58,13 @@ export interface BatchChangeSourceResult {
   skipped: number;
 }
 
-/** 选源列表的一行。ArkTS 不允许未声明类型的对象字面量，先定接口。 */
-interface BatchSourceRow {
-  url: string;
-  name: string;
-  group: string;
-  checked: boolean;
-}
-
+/**
+ * 批量换源向导。
+ *
+ * G-2：选源那一步不再在本文件里另画一份列表，而是复用公共组件 `BookSourcePickerSheet`
+ * ——上游 `BookshelfManageScreen.kt:790-799` 调的也是独立的 `BookSourcePickerSheet`，
+ * 面板本体（筛选框 / 已选源拖拽 / 可选源）只该有一份实现。
+ */
 @Component
 export struct BatchChangeSourceSheet {
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
@@ -80,9 +87,37 @@ export struct BatchChangeSourceSheet {
       _preview: BatchChangeSourcePreviewItem[]): Promise<BatchChangeSourceResult> =>
       ({ succeeded: 0, failed: 0, skipped: 0 });
 
+  /**
+   * G-7：预览卡片上的「搜索 / 迁移 / 新增 / 详情」四个动作与九个回调。
+   *
+   * 上游 `BatchChangePreviewSheet`（`BookshelfManageScreen.kt:1518-1566`）把这些动作全部交回
+   * 页面层（`onManualSearch` / `onMigrate` / `onAddToShelf` / `onOpenBook` / `onShowOtherSources`
+   * / `onMigrateAll` / `onAddAllToShelf`），面板自己不碰仓库——因为它只是「看一眼再决定」的
+   * 中间层。本地沿用同一分工：落库与换源都在 Index，面板只负责把选中的候选递出去。
+   */
+
+  /** 打开候选书的详情页（上游 `OpenBookInfoPreview(book, inBookshelf)`）。 */
+  onOpenPreviewBook: (book: SearchBookItem, inBookshelf: boolean) => void = () => {};
+
+  /** 手动搜索：拿这本旧书去单本换源面板重搜候选（上游 `manualSearchPreviewBook = book`）。 */
+  onManualSearch: (book: Book) => void = () => {};
+
+  /** 把命中的候选作为新书加入书架（上游 `AddPreviewItemToShelf`）。返回是否成功。 */
+  onAddPreviewToShelf: (item: BatchChangeSourcePreviewItem) => Promise<boolean> =
+    async (_item: BatchChangeSourcePreviewItem): Promise<boolean> => false;
+
+  /** 单本迁移（上游 `MigratePreviewItem`）。返回是否成功；成功后该行从预览列表移除。 */
+  onMigratePreview: (item: BatchChangeSourcePreviewItem, options: ChangeSourceMigrationOptions) =>
+    Promise<boolean> =
+    async (_item: BatchChangeSourcePreviewItem,
+      _options: ChangeSourceMigrationOptions): Promise<boolean> => false;
+
   /** 0 = 选源，1 = 选项，2 = 预览，3 = 执行中/结果。 */
   @State step: number = 0;
-  @State sources: BatchSourceRow[] = [];
+  /** 全部已导入书源（原样保存；「启用 + 文本 + 有搜索地址」的过滤在面板里做，与上游同口径）。 */
+  @State allSources: BookSource[] = [];
+  /** 已选源地址，按已选区顺序；预览与执行都按这个顺序走。 */
+  @State selectedUrls: string[] = [];
   @State options: ChangeSourceMigrationOptions = defaultMigrationOptions();
   @State preview: BatchChangeSourcePreviewItem[] = [];
   @State result: BatchChangeSourceResult = { succeeded: 0, failed: 0, skipped: 0 };
@@ -91,10 +126,6 @@ export struct BatchChangeSourceSheet {
   @State previewDone: number = 0;
   @State running: boolean = false;
   @State message: string = '';
-  /** G-3：源搜索框（上游 `BookshelfManageScreen.kt:1423-1429` `AppTextField(label=screen)`）。 */
-  @State searchKey: string = '';
-  /** G-4：已选源拖拽排序时正在拖的 url（上游 ReorderableSelectionItem）。 */
-  @State draggingUrl: string = '';
   /** G-11：正在看「其它源信息」的那本（上游 `otherSourcePreviewItem`）。 */
   @State otherSourceBookUrl: string = '';
   /** 预览/执行的可取消标志：置 true 后循环在每本之前退出，已处理的书不回滚（与上游一致）。 */
@@ -113,105 +144,23 @@ export struct BatchChangeSourceSheet {
       return;
     }
     const all = await BookSourceRepository.load(context);
-    const rows: BatchSourceRow[] = [];
+    this.allSources = all;
+    this.loading = false;
+    let pickable: number = 0;
     for (let index = 0; index < all.length; index++) {
-      const source: BookSource = all[index];
+      const source: BookSource | undefined = all[index];
       if (source === undefined) { continue; }
       if (!source.enabled) { continue; }
       if (source.bookSourceType !== 0) { continue; }
       if (source.bookSourceUrl.length === 0) { continue; }
-      rows.push({
-        url: source.bookSourceUrl,
-        name: source.bookSourceName.length > 0 ? source.bookSourceName : source.bookSourceUrl,
-        group: source.bookSourceGroup ?? '',
-        checked: false
-      });
+      pickable = pickable + 1;
     }
-    this.sources = rows;
-    this.loading = false;
-    if (rows.length === 0) { this.message = '还没有导入任何启用的文本书源'; }
+    if (pickable === 0) { this.message = '还没有导入任何启用的文本书源'; }
   }
 
+  /** 已选源地址（顺序即预览/执行顺序，上游 `selectedSources`）。 */
   private selectedSourceUrls(): string[] {
-    const urls: string[] = [];
-    for (let index = 0; index < this.sources.length; index++) {
-      const row = this.sources[index];
-      if (row !== undefined && row.checked) { urls.push(row.url); }
-    }
-    return urls;
-  }
-
-  /** G-3：上游按 bookSourceName / bookSourceGroup / bookSourceUrl 三字段 contains 过滤（:1400-1405）。 */
-  private filteredSources(): BatchSourceRow[] {
-    const key = this.searchKey.trim();
-    if (key.length === 0) { return this.sources; }
-    const lower = key.toLowerCase();
-    const rows: BatchSourceRow[] = [];
-    for (let index = 0; index < this.sources.length; index++) {
-      const row = this.sources[index];
-      if (row === undefined) { continue; }
-      if (row.name.toLowerCase().indexOf(lower) >= 0 ||
-        row.group.toLowerCase().indexOf(lower) >= 0 ||
-        row.url.toLowerCase().indexOf(lower) >= 0) {
-        rows.push(row);
-      }
-    }
-    return rows;
-  }
-
-  /** G-4：已选源列表（按已选顺序，可长按拖动排序）。 */
-  private selectedRows(): BatchSourceRow[] {
-    const rows: BatchSourceRow[] = [];
-    for (let index = 0; index < this.sources.length; index++) {
-      const row = this.sources[index];
-      if (row !== undefined && row.checked) { rows.push(row); }
-    }
-    return rows;
-  }
-
-  /**
-   * G-4：把已选源里的 from 位搬到 to 位（上游 `ReorderableSelectionItem` 的
-   * `move(from.index, to.index)`）。整表重排后写回，保证「已选顺序 = 预览/执行顺序」。
-   */
-  private moveSelectedSource(fromUrl: string, toUrl: string): void {
-    if (fromUrl === toUrl) { return; }
-    const selected = this.selectedRows();
-    const fromIndex = selected.findIndex((row: BatchSourceRow) => row.url === fromUrl);
-    const toIndex = selected.findIndex((row: BatchSourceRow) => row.url === toUrl);
-    if (fromIndex < 0 || toIndex < 0) { return; }
-    const moved = selected[fromIndex];
-    if (moved === undefined) { return; }
-    const rest = selected.filter((row: BatchSourceRow) => row.url !== fromUrl);
-    const ordered: BatchSourceRow[] = [];
-    for (let index = 0; index < rest.length; index++) {
-      const row = rest[index];
-      if (row === undefined) { continue; }
-      if (index === toIndex) { ordered.push(moved); }
-      ordered.push(row);
-    }
-    if (ordered.length < rest.length + 1) { ordered.push(moved); }
-    // 未选中的源保持原相对顺序接在后面。
-    const tail = this.sources.filter((row: BatchSourceRow) => !row.checked);
-    const next: BatchSourceRow[] = [];
-    for (let index = 0; index < ordered.length; index++) {
-      const row = ordered[index];
-      if (row !== undefined) { next.push(row); }
-    }
-    for (let index = 0; index < tail.length; index++) {
-      const row = tail[index];
-      if (row !== undefined) { next.push(row); }
-    }
-    this.sources = next;
-  }
-
-  private toggleSource(url: string, checked: boolean): void {
-    const next: BatchSourceRow[] = [];
-    for (let index = 0; index < this.sources.length; index++) {
-      const row = this.sources[index];
-      if (row === undefined) { continue; }
-      next.push({ url: row.url, name: row.name, group: row.group, checked: row.url === url ? checked : row.checked });
-    }
-    this.sources = next;
+    return this.selectedUrls.slice(0);
   }
 
   /**
@@ -345,6 +294,99 @@ export struct BatchChangeSourceSheet {
     this.preview = next;
   }
 
+  /** 从预览列表里移除一条（上游 `removePreviewItem`）。 */
+  private removePreviewItem(bookUrl: string): void {
+    const next: BatchChangeSourcePreviewItem[] = [];
+    for (let index = 0; index < this.preview.length; index++) {
+      const item = this.preview[index];
+      if (item === undefined) { continue; }
+      if (item.bookUrl === bookUrl) { continue; }
+      next.push(item);
+    }
+    this.preview = next;
+  }
+
+  /**
+   * G-7：手动搜索（上游 `onManualSearch` → `manualSearchPreviewBook = book`，搜到后
+   * `UpdatePreviewItem`，见 `BookshelfManageScreenViewModel.kt:959-988`）。
+   *
+   * 上游复用单本 `ChangeSourceSheet` 的搜索界面；本地复用同一次搜索
+   * （`ChangeSourceCoordinator.searchCandidates`）并把结果放回本组件已有的候选面板，
+   * 由人在这里挑。落点与上游 `UpdatePreviewItem` 一致：新候选插到该行候选列表最前面、
+   * `selectedCandidateIndex = 0`、状态回到「已匹配」。
+   */
+  private async manualSearchPreview(item: BatchChangeSourcePreviewItem): Promise<void> {
+    this.message = `正在搜索《${item.title}》的候选源…`;
+    let found: ChangeSourceCandidate[] = [];
+    try {
+      found = await ChangeSourceCoordinator.searchCandidates(item.title, item.author, '');
+    } catch (error) {
+      this.message = '手动搜索失败：' + (error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const verified: ChangeSourceCandidate[] = [];
+    for (let index = 0; index < found.length; index++) {
+      const candidate = found[index];
+      if (candidate !== undefined && candidate.verified) { verified.push(candidate); }
+    }
+    if (verified.length === 0) {
+      this.message = '没有搜到校验通过的候选源';
+      return;
+    }
+    // 上游 UpdatePreviewItem：candidates = listOf(新候选) + 旧候选，选中第 0 条。
+    const merged: ChangeSourceCandidate[] = verified.concat(item.candidates);
+    const best = merged[0];
+    if (best === undefined) { return; }
+    const next: BatchChangeSourcePreviewItem[] = [];
+    for (let index = 0; index < this.preview.length; index++) {
+      const current = this.preview[index];
+      if (current === undefined) { continue; }
+      if (current.bookUrl !== item.bookUrl) { next.push(current); continue; }
+      next.push({
+        bookUrl: current.bookUrl, title: current.title, oldSourceName: current.oldSourceName,
+        newSourceName: best.sourceName, chapterCount: best.chapterCount,
+        status: BATCH_PREVIEW_MATCHED, candidate: best, candidates: merged,
+        selectedCandidateIndex: 0, author: current.author
+      });
+    }
+    this.preview = next;
+    // 搜到多条时直接把候选面板摊开，让人挑——这是上游「打开单本换源面板」那一步的落点。
+    if (merged.length > 1) { this.otherSourceBookUrl = item.bookUrl; }
+    this.message = `已更新《${item.title}》的候选（${merged.length} 个）`;
+  }
+
+  /**
+   * G-7：单本迁移（上游 `onMigrate` → `MigratePreviewItem`，
+   * `BookshelfManageScreenViewModel.kt:897-923`）：成功后该行从预览列表移除。
+   */
+  private async migratePreviewItem(item: BatchChangeSourcePreviewItem): Promise<void> {
+    if (item.status !== BATCH_PREVIEW_MATCHED || item.candidate === null) { return; }
+    this.message = `正在迁移《${item.title}》…`;
+    const ok = await this.onMigratePreview(item, this.options);
+    if (ok) {
+      this.removePreviewItem(item.bookUrl);
+      if (this.otherSourceBookUrl === item.bookUrl) { this.otherSourceBookUrl = ''; }
+      this.message = `《${item.title}》迁移完成`;
+    } else {
+      this.message = `《${item.title}》迁移失败`;
+    }
+  }
+
+  /**
+   * G-7：把候选作为新书加入书架（上游 `onAddToShelf` → `AddPreviewItemToShelf`，
+   * `BookshelfManageScreenViewModel.kt:990-1012`）：旧书保持不动，只新增。
+   */
+  private async addPreviewItemToShelf(item: BatchChangeSourcePreviewItem): Promise<void> {
+    if (item.status !== BATCH_PREVIEW_MATCHED || item.candidate === null) { return; }
+    this.message = `正在把《${item.title}》的新源加入书架…`;
+    const ok = await this.onAddPreviewToShelf(item);
+    if (ok) {
+      this.message = `《${item.title}》已加入书架`;
+    } else {
+      this.message = `《${item.title}》加入书架失败`;
+    }
+  }
+
   /** 第四步（:564）：逐本执行。一本失败不能中断整批——执行在 Index 侧逐本 try/catch。 */
   private async runExecute(): Promise<void> {
     const urls = this.selectedSourceUrls();
@@ -386,9 +428,14 @@ export struct BatchChangeSourceSheet {
     // 统一用外层 Column 收口。
     Column() {
       Row() {
-        Text(this.step === 0 ? '选择目标书源' : (this.step === 1 ? '批量换源选项'
-          : (this.step === 2 ? '换源预览' : '换源结果')))
-          .fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        // step 0 的标题由 `BookSourcePickerSheet` 自己画（上游面板自带 title），
+        // 这里不再重复一份，只留右上角关闭。
+        if (this.step === 0) {
+          Blank()
+        } else {
+          Text(this.step === 1 ? '批量换源选项' : (this.step === 2 ? '换源预览' : '换源结果'))
+            .fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        }
         Text('✕').fontSize(TITLE_LARGE).fontColor(this.themeColorTextTertiary)
           .onClick(() => this.onClose())
       }.width('100%').padding({ bottom: 12 })
@@ -397,6 +444,14 @@ export struct BatchChangeSourceSheet {
     }.width('100%')
   }
 
+  /**
+   * 第一步：选源。
+   *
+   * G-2：上游 `BookshelfManageScreen.kt:790-799` 调的是独立的 `BookSourcePickerSheet`
+   * （title「选择目标书源」，`onConfirm` 把已选源交给 `pendingBatchSources`）。
+   * 本地不再在本文件里另画一份「筛选框 + 已选区 + 可选区」，直接复用同名公共组件，
+   * 保证面板本体只有一份实现（单本换源、批量换源、以后别的入口都走它）。
+   */
   @Builder
   private SourceStep() {
     if (this.loading) {
@@ -404,107 +459,44 @@ export struct BatchChangeSourceSheet {
         Text('正在读取书源…').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
       }.width('100%').justifyContent(FlexAlign.Center).padding(24)
     } else {
-      Column() {
-        // G-3：上游 `AppTextField(value=searchKey, label=screen「筛选」)`（:1423-1429）。
-        TextInput({ text: this.searchKey, placeholder: '筛选书源名称 / 分组 / 地址' })
-          .height(44).fontSize(BODY_SMALL).width('100%')
-          .onChange((value: string) => { this.searchKey = value; })
-        Scroll() {
-          Column() {
-            // G-4：已选源区（上游 :1431-1468，可长按拖动排序，max 280dp）。
-            if (this.selectedRows().length > 0) {
-              Text('已选书源（长按拖动排序）').fontSize(LABEL_MEDIUM)
-                .fontColor(this.themeColorAccent).width('100%').margin({ top: 12, bottom: 8 })
-              // G-4：已选源可长按拖拽排序（上游 `ReorderableSelectionItem` 的
-              // `rememberReorderableLazyListState` + `move(from.index, to.index)`，
-              // `BookshelfManageScreen.kt:1431-1468`）。ArkUI 用 List 的
-              // editMode(true) + onItemDragStart/onItemDrop 承载同一交互。
-              List({ space: 8 }) {
-                ForEach(this.selectedRows(), (row: BatchSourceRow) => {
-                  ListItem() {
-                    this.SourceRow(row, true)
-                  }
-                }, (row: BatchSourceRow) => 'sel-' + row.url)
-              }.width('100%').height(Math.min(280, this.selectedRows().length * 60))
-                .scrollBar(BarState.Off)
-                .editMode(true)
-                .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
-                  const rows = this.selectedRows();
-                  if (itemIndex >= 0 && itemIndex < rows.length) {
-                    const row = rows[itemIndex];
-                    this.draggingUrl = row !== undefined ? row.url : '';
-                  }
-                })
-                .onItemDrop((_event: ItemDragInfo, itemIndex: number, insertIndex: number,
-                  isSuccess: boolean) => {
-                  if (!isSuccess) { this.draggingUrl = ''; return; }
-                  const rows = this.selectedRows();
-                  if (itemIndex < 0 || itemIndex >= rows.length ||
-                    insertIndex < 0 || insertIndex >= rows.length) {
-                    this.draggingUrl = '';
-                    return;
-                  }
-                  const from = rows[itemIndex];
-                  const to = rows[insertIndex];
-                  if (from !== undefined && to !== undefined) {
-                    this.moveSelectedSource(from.url, to.url);
-                  }
-                  this.draggingUrl = '';
-                })
-            }
-            // G-5：可选源列表（上游 :1470-1491，max 560dp + spacedBy(8.dp)）。
-            Text('可选书源').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
-              .width('100%').margin({ top: 12, bottom: 8 })
-            ForEach(this.filteredSources(), (row: BatchSourceRow) => {
-              if (!row.checked) {
-                this.SourceRow(row, false)
-              }
-            }, (row: BatchSourceRow) => 'avail-' + row.url)
-          }.width('100%')
-        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
-      }.width('100%').layoutWeight(1)
+      BookSourcePickerSheet({
+        title: '选择目标书源',
+        sources: this.allSources,
+        initialSelectedUrls: this.selectedUrls,
+        onDismissRequest: () => this.onClose(),
+        onConfirm: (selected: BookSource[]) => {
+          const urls: string[] = [];
+          for (let index = 0; index < selected.length; index++) {
+            const source: BookSource | undefined = selected[index];
+            if (source !== undefined) { urls.push(source.bookSourceUrl); }
+          }
+          this.selectedUrls = urls;
+          this.message = '';
+          this.step = 1;
+        }
+      })
     }
-  }
-
-  /** 选源行：勾选框 + 名称 + 分组/地址；已选态显示拖拽把手提示（G-4）。 */
-  @Builder
-  private SourceRow(row: BatchSourceRow, selected: boolean) {
-    Row() {
-      Column() {
-        Text(row.name).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
-        Text(row.group.length > 0 ? row.group : row.url)
-          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 }).maxLines(1)
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      if (selected) {
-        // 上游 ReorderableSelectionItem 的拖拽把手（长按可拖）。
-        AppGlyph({ name: 'unfoldMore', glyphSize: 16, tint: this.themeColorTextTertiary })
-          .margin({ right: 8 })
-      }
-      Toggle({ type: ToggleType.Checkbox, isOn: selected })
-        .onChange((value: boolean) => this.toggleSource(row.url, value))
-    }.width('100%').padding(12).backgroundColor(this.rowBackground()).borderRadius(12).margin({ bottom: 8 })
   }
 
   @Builder
   private OptionStep() {
     Column() {
-      // :568：选项逐项对应 ChangeSourceMigrationOptions 的两个字段，不自造字段。
-      Row() {
-        Text('迁移阅读进度').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Toggle({ type: ToggleType.Checkbox, isOn: this.options.migrateProgress })
-          .onChange((value: boolean) => {
-            this.options = { migrateProgress: value, migrateMetadata: this.options.migrateMetadata };
-          })
-      }.width('100%').padding({ top: 10, bottom: 10 })
-      Row() {
-        Text('迁移封面与简介').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        Toggle({ type: ToggleType.Checkbox, isOn: this.options.migrateMetadata })
-          .onChange((value: boolean) => {
-            this.options = { migrateProgress: this.options.migrateProgress, migrateMetadata: value };
-          })
-      }.width('100%').padding({ top: 10, bottom: 10 })
-      Text('选项只对本次批量换源生效').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
-        .width('100%').margin({ top: 8 })
+      // G-6：上游 `BookshelfManageScreen.kt:801-817` 调的是公共组件
+      // `ChangeSourceMigrationOptionsSheet(title = "批量换源选项",
+      //   subtitle = "将对已选 ${selectedBookUrls.size} 本书执行换源；选项只对本次操作生效。")`。
+      // 本地原来只有两个开关（`migrateProgress` / `migrateMetadata`），与上游八项口径不符，
+      // 改为同一个公共组件，字段与三处调用点统一。
+      ChangeSourceMigrationOptionsSheet({
+        title: '批量换源选项',
+        subtitle: `将对已选 ${this.books.length} 本书执行换源；选项只对本次操作生效。`,
+        showDeleteDownloaded: true,
+        initialOptions: this.options,
+        onDismissRequest: () => { this.step = 0; },
+        onConfirm: (options: ChangeSourceMigrationOptions) => {
+          this.options = options;
+          this.runPreview();
+        }
+      })
     }.width('100%').layoutWeight(1)
   }
 
@@ -538,12 +530,17 @@ export struct BatchChangeSourceSheet {
               }.width('100%').alignItems(VerticalAlign.Top)
               // G-9：5 个动作按钮（上游 SmallTonalButton）。
               Row() {
-                this.PreviewActionButton('搜索', () => { this.message = '手动搜索暂未接入'; })
+                // G-7：上游 `onManualSearch = { book -> manualSearchPreviewBook = book }`
+                // （`BookshelfManageScreen.kt:822`）——拿这本旧书重开单本换源面板搜候选，
+                // 搜到后用 `UpdatePreviewItem` 把新候选插到本行候选列表最前面。
+                this.PreviewActionButton('搜索', () => this.manualSearchPreview(item))
                 this.PreviewActionButton('不迁移', () => this.skipPreviewItem(item.bookUrl))
-                this.PreviewActionButton('迁移', () => {
-                  if (item.status === BATCH_PREVIEW_MATCHED) { this.runExecute(); }
-                })
-                this.PreviewActionButton('新增', () => { this.message = '新增到书架暂未接入'; })
+                // G-7：上游 `onMigrate = { bookUrl -> dispatch(MigratePreviewItem(bookUrl)) }`
+                // （`:824`）——只迁移这一本，成功后该行从预览列表移除（`removePreviewItem`）。
+                this.PreviewActionButton('迁移', () => { void this.migratePreviewItem(item); })
+                // G-7：上游 `onAddToShelf = { bookUrl -> dispatch(AddPreviewItemToShelf(bookUrl)) }`
+                // （`:826`）——把候选作为新书加入书架，旧书保持不动。
+                this.PreviewActionButton('新增', () => { void this.addPreviewItemToShelf(item); })
                 if (item.candidates.length > 1) {
                   this.PreviewActionButton('查看其他源信息',
                     () => this.otherSourceBookUrl = item.bookUrl)
@@ -633,7 +630,7 @@ export struct BatchChangeSourceSheet {
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Text('详情').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
                 .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                .onClick(() => { this.message = '候选详情暂未接入'; })
+                .onClick(() => this.openCandidateDetail(candidate))
             }.width('100%').padding(12)
               .backgroundColor(this.otherSourceCandidateSelected(index) ? this.themeColorSurfaceElevated : this.rowBackground())
               .borderRadius(12)
@@ -662,6 +659,19 @@ export struct BatchChangeSourceSheet {
       }
     }
     return false;
+  }
+
+  /**
+   * G-7：候选详情（上游 `OtherSourceOptionsSheet` 的 `trailingAction` →
+   * `onOpenBook(candidate.book)`，`BookshelfManageScreen.kt:1753`）。
+   * 打开的是候选书的详情页，`inBookshelf = false`——它还没进书架。
+   */
+  private openCandidateDetail(candidate: ChangeSourceCandidate): void {
+    if (candidate.book === null) {
+      this.message = '该候选没有可用的详情地址';
+      return;
+    }
+    this.onOpenPreviewBook(candidate.book, false);
   }
 
   @Builder
@@ -701,19 +711,14 @@ export struct BatchChangeSourceSheet {
       }
       Blank()
       if (this.step === 0) {
-        Text('下一步').fontSize(LABEL_LARGE).fontColor('#FFFFFF')
-          .backgroundColor(this.selectedSourceUrls().length > 0 ? this.themeColorAccent : '#8A8D99')
-          .borderRadius(10).padding({ left: 24, right: 24, top: 12, bottom: 12 })
-          .onClick(() => {
-            if (this.selectedSourceUrls().length === 0) { this.message = '请至少选择一个目标书源'; return; }
-            this.step = 1;
-            this.message = '';
-          })
+        // G-2：选源步骤的「确认」由 `BookSourcePickerSheet` 自己的按钮承担
+        // （上游 `MediumTonalButton(icon = PlayArrow, contentDescription = ok)`），
+        // 底栏不再重复放「下一步」。
+        Blank()
       } else if (this.step === 1) {
-        Text('开始预览').fontSize(LABEL_LARGE).fontColor('#FFFFFF')
-          .backgroundColor(this.themeColorAccent).borderRadius(10)
-          .padding({ left: 24, right: 24, top: 12, bottom: 12 })
-          .onClick(() => this.runPreview())
+        // G-6：选项步骤的「取消 / 确认」由 `ChangeSourceMigrationOptionsSheet` 自己的按钮承担
+        // （上游 `ConfirmDismissButtonsRow`），底栏不再重复放「开始预览」。
+        Blank()
       } else if (this.step === 2 && !this.previewing) {
         Text('执行换源').fontSize(LABEL_LARGE).fontColor('#FFFFFF')
           .backgroundColor(this.matchedCount() > 0 ? this.themeColorAccent : '#8A8D99')

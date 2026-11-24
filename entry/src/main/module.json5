@@ -41,7 +41,9 @@
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
         // 批7：允许 AUDIO_PLAYBACK 长时任务，朗读切后台后继续出声。
-        "backgroundModes": ["audioPlayback"],
+        // 第十表 F-12：加 dataTransfer，导出书籍走 DATA_TRANSFER 长时任务
+        // （对齐上游 `ExportBookService` 前台 Service，见 `data/ExportBackgroundTask.ets`）。
+        "backgroundModes": ["audioPlayback", "dataTransfer"],
         "skills": [
           {
             "entities": ["entity.system.home"],

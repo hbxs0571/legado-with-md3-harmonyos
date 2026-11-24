@@ -5,8 +5,11 @@ import { GroupEditorSheet } from '../components/booksource/GroupEditorSheet';
 import { Book } from '../model/Book';
 import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
+import { BookGroupRepository } from '../data/BookGroupRepository';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { BookExporter, ExportTarget } from '../data/BookExporter';
+// 第十表 F-12：导出的后台长时任务，对齐上游 `ExportBookService` 前台 Service。
+import { ExportBackgroundTask } from '../data/ExportBackgroundTask';
 import {
   BookExportSettings,
   BookExportSettingsStore,
@@ -16,7 +19,7 @@ import {
   episodeExportFileNameOf
 } from '../data/BookExportSettings';
 import { AppGlyph } from '../components/AppGlyph';
-import { AppLog, AppLogEntry } from '../lib/AppLog';
+import { AppLogSheet } from '../components/AppLogSheet';
 import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownloadQueue';
 import { fileIo, fileShare, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
@@ -74,8 +77,21 @@ const MANAGE_NO_GROUP_TEXT: string = '未分组';
 export struct BookshelfManagePage {
   @Prop books: Book[] = [];
   @Prop groups: BookGroup[] = [];
-  /** 进页时的分组名；空串或「全部」都表示全部。 */
-  @Prop initialGroupName: string = '';
+  /**
+   * 进页时的分组 **groupId**（上游 `BookshelfManageRouteScreen(groupId)` →
+   * `LaunchedEffect(groupId) { Initialize(groupId) }`，`BookshelfManageScreen.kt:139-153`）。
+   * 第十表 H-8：上游入口参数就是 groupId，`-1` 即 `BookGroup.IdAll`「全部」。
+   */
+  @Prop initialGroupId: number = -1;
+  /**
+   * 第十表 G-12：批量换源「确认」后的清空选择信号。
+   *
+   * 上游 `BookshelfManageScreen.kt:801-817` 的 `ChangeSourceMigrationOptionsSheet.onConfirm`
+   * 里在 `dispatch(BatchChangeBookSource(...))` 之后紧接 `clearSelection()` ——
+   * 选择态是页面自己的状态，批量换源面板拿不到它，所以由 Index 在确认后把这个值 +1，
+   * 这里监听到变化就清空选择，等价上游那次 `clearSelection()`。
+   */
+  @Prop @Watch('onBatchSourceConfirmSignal') batchSourceConfirmSignal: number = 0;
   onBack: () => void = () => {};
   onOpenBookInfo: (book: Book) => void = (_book: Book) => {};
   /** 批量改动后通知 Index 重载书架。 */
@@ -152,6 +168,16 @@ export struct BookshelfManagePage {
   @State showExportSheet: boolean = false;
   @State showExportSettings: boolean = false;
   @State exportBooks: Book[] = [];
+  /**
+   * 选目录这条路上「选完要继续导出」的那批书（第十表 F-4）。
+   *
+   * 对齐上游 `BookshelfManageScreen.kt:326-350 startExportForBooks(books)`：
+   * 目录为空/不可写时先 `selectExportFolder(books)` 把 books 记进 `pendingExportBooks`，
+   * 等目录选择器的回调（`:279-312`）拿着这批书继续判自定义导出或逐本导出。
+   * 本地原来 `chooseExportFolder()` 选完只保存路径就结束，那批书就丢了，
+   * 用户点了「导出」却什么都没发生 —— 这里补上同一个「待办批次」。
+   */
+  @State pendingExportBooks: Book[] = [];
   @State exportMsgByKey: Map<string, string> = new Map<string, string>();
   /**
    * 导出设置，10 个字段与上游 `BookExportSettings.kt:3-14` 一一对应，存 preferences
@@ -178,10 +204,7 @@ export struct BookshelfManagePage {
 
   @State showGroupSelect: boolean = false;
   /** 批2（:471）：分段导出的输入与目标书。 */
-  @State showSegmentedExport: boolean = false;
   @State segmentedExportBook: Book | undefined = undefined;
-  @State segmentedScope: string = '1-';
-  @State segmentedVolumeSize: string = '1';
   /**
    * 自定义导出对话框（上游 `BookshelfManageScreen.kt:1248-1371`）。
    * 上游的触发条件是「刚选完导出目录 + 只选了一本书 + `enableCustomExport && exportType == 1`」
@@ -209,9 +232,8 @@ export struct BookshelfManagePage {
   @State groupEditing: BookGroup | undefined = undefined;
   @State showGroupEditor: boolean = false;
   @State rowMenuKey: string = '';
-  /** 批2（:457）：日志面板显隐；内容取 AppLog 内存缓冲快照。 */
+  /** 日志面板显隐；面板内容由公共组件 AppLogSheet 自己从 AppLog 取。 */
   @State showLogSheet: boolean = false;
-  @State logEntries: AppLogEntry[] = [];
   /**
    * 批2（:455 :459 :466）：每本书的下载状态，键是 bookKey(book)。
    * ArkUI 里 Map 原地 set 不触发刷新，一律整体替换（同 exportMsgByKey 的坑）。
@@ -243,12 +265,34 @@ export struct BookshelfManagePage {
   private pendingEffects: ManageEffect[] = [];
 
   aboutToAppear(): void {
-    this.currentGroupName = this.initialGroupName;
+    // 第十表 H-8：上游 `initialize(groupId)` 末尾是 `refreshGroupName(groupId)`
+    // （`BookshelfManageScreenViewModel.kt:585-592`：
+    //  `bookGroupRepository.getByID(groupId)?.groupName ?: context.getString(R.string.no_group)`）。
+    // 本地按同一个口径反查：先按 groupId 找分组定义，找不到就回落「全部」。
+    this.currentGroupName = this.groupNameForId(this.initialGroupId);
     this.downloadUnsubscribe = ChapterDownloadQueue.subscribe(() => this.refreshDownloadStates());
     this.refreshDownloadStates();
     void this.loadExportSettings();
     // A-1/A-7：上游进页第一件事是 dispatch(Initialize(groupId))，把分组、书单、书源一次装满。
     this.dispatch(manageIntent(ManageIntentType.Initialize));
+  }
+
+  /**
+   * groupId → 分组名（第十表 H-8，对齐上游 `refreshGroupName`）。
+   *
+   * 上游的内置分组常量见 `data/entities/BookGroup.kt:31-44`：
+   * `IdAll = -1L`（全部）、`IdLocalNone = -5L`（本地未分组）等；
+   * 其余走 `bookGroupRepository.getByID(groupId)?.groupName`。
+   * 本地 `BookGroupRepository.LOCAL_NONE_GROUP_ID` 就是 `-5`，与上游同值。
+   * 返回空串表示「全部」（本地 `currentGroupName` 的既有约定）。
+   */
+  private groupNameForId(groupId: number): string {
+    if (groupId === -1) { return ''; }
+    if (groupId === BookGroupRepository.LOCAL_NONE_GROUP_ID) {
+      return BookGroupRepository.LOCAL_NONE_GROUP_NAME;
+    }
+    const group = this.groups.find((item: BookGroup) => item.groupId === groupId);
+    return group !== undefined ? group.groupName : '';
   }
 
   aboutToDisappear(): void {
@@ -906,6 +950,18 @@ export struct BookshelfManagePage {
   }
 
   /**
+   * 第十表 G-12：批量换源确认后清空选择。
+   *
+   * 上游 `BookshelfManageScreen.kt:806-816` 的 `onConfirm` 在派发 `BatchChangeBookSource`
+   * 之后立刻 `clearSelection()`；本地换源面板是 Index 上的覆盖层，拿不到本页的选择态，
+   * 所以由 Index 在确认那一刻把 `batchSourceConfirmSignal` 加一，这里监听到就清空。
+   */
+  private onBatchSourceConfirmSignal(): void {
+    if (this.batchSourceConfirmSignal <= 0) { return; }
+    this.clearSelection();
+  }
+
+  /**
    * H-2：选中书籍的实体列表。
    *
    * 上游（`BookshelfManageScreenViewModel.kt:382-405 resolveSelectedBooks`）从数据库按
@@ -1130,9 +1186,54 @@ export struct BookshelfManagePage {
       if (!writable) {
         this.onUnavailableAction('这个目录应用写不进去，已忽略');
       }
+      // 第十表 F-4：对齐上游目录选择回调（`BookshelfManageScreen.kt:279-312`）——
+      // 选完目录不是结束，而是拿着 `pendingExportBooks` 继续：
+      // 单本 + 开了自定义 EPUB 导出 → 弹自定义导出框；否则逐本导出。
+      const pending = this.pendingExportBooks;
+      this.pendingExportBooks = [];
+      if (pending.length === 0) { return; }
+      if (!writable) { return; }
+      if (pending.length === 1 && this.isCustomEpubExportEnabled()) {
+        const only = pending[0];
+        if (only !== undefined) {
+          this.openCustomExportDialog(only);
+          return;
+        }
+      }
+      this.showExportSheet = false;
+      await this.exportBooksInOrder(context, pending, false);
     } catch (error) {
       this.onUnavailableAction(error instanceof Error ? `选择导出文件夹失败：${error.message}` : '选择导出文件夹失败');
     }
+  }
+
+  /**
+   * 导出入口（第十表 F-4）：对齐上游 `startExportForBooks(books)`（`BookshelfManageScreen.kt:331-350`）。
+   *
+   * 上游三段判定，本地逐段照搬：
+   * 1. 目录为空或不可写 → 先记下这批书、弹目录选择（选完回调里继续导出，见 `chooseExportFolder`）；
+   * 2. 单本 + 开了自定义 EPUB 导出 → 弹自定义导出框（直接用已记住的目录）；
+   * 3. 其余 → 逐本导出。
+   */
+  private async startExportForBooks(books: Book[]): Promise<void> {
+    if (books.length === 0) { return; }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { this.onUnavailableAction('无法访问本地文件'); return; }
+    const hasFolder = this.exportFolderPath.length > 0 && this.exportFolderWritable;
+    if (!hasFolder) {
+      this.pendingExportBooks = books;
+      this.showExportFolderPicker = true;
+      return;
+    }
+    if (books.length === 1 && this.isCustomEpubExportEnabled()) {
+      const only = books[0];
+      if (only !== undefined) {
+        this.openCustomExportDialog(only);
+        return;
+      }
+    }
+    this.showExportSheet = false;
+    await this.exportBooksInOrder(context, books, false);
   }
 
   /**
@@ -1162,42 +1263,14 @@ export struct BookshelfManagePage {
     this.exportMsgByKey = next;
   }
 
-  /**
-   * 批2（:471）：打开分段导出输入。
-   * 上游 BookshelfManageScreen.kt:298 只在「单选一本书」时给这个入口，多选走普通导出，
-   * 所以这里只接受单本，且从来不在选择模式的批量菜单里出现。
-   */
-  private openSegmentedExport(book: Book): void {
-    this.segmentedExportBook = book;
-    this.segmentedScope = `1-${Math.max(1, this.chapterCountHint(book))}`;
-    this.segmentedVolumeSize = '1';
-    this.showSegmentedExport = true;
+  private exportMsgOf(book: Book): string {
+    return this.exportMsgByKey.get(this.rowKey(book)) ?? '';
   }
 
-  /** 没读到章节数时给一个能覆盖全书的默认范围（上游默认把整本当一段）。 */
+  /** 没读到章节数时给一个能覆盖全书的默认范围（上游自定义导出默认把整本当一段）。 */
   private chapterCountHint(book: Book): number {
     const total = Number(book.chapterCount ?? '0');
     return Number.isFinite(total) && total > 0 ? Math.floor(total) : 1;
-  }
-
-  private runSegmentedExport(): void {
-    const book = this.segmentedExportBook;
-    if (book === undefined) {
-      this.showSegmentedExport = false;
-      return;
-    }
-    const scopeSpec = this.segmentedScope.trim();
-    if (scopeSpec.length === 0) {
-      this.onUnavailableAction('请先填章节范围');
-      return;
-    }
-    const size = Math.floor(Number(this.segmentedVolumeSize));
-    this.showSegmentedExport = false;
-    this.onExportSegmented(book, scopeSpec, Number.isFinite(size) && size >= 1 ? size : 1);
-  }
-
-  private exportMsgOf(book: Book): string {
-    return this.exportMsgByKey.get(this.rowKey(book)) ?? '';
   }
 
   private openExportSheet(books: Book[]): void {
@@ -1208,21 +1281,16 @@ export struct BookshelfManagePage {
     this.showExportSheet = true;
   }
 
+  /**
+   * 「导出」按钮（第十表 F-4）。
+   *
+   * 上游没有这个按钮：它的等价动作是 `startExportForBooks(exportSheetBooks)`
+   * （`BookshelfManageScreen.kt:331-350`），由导出面板里的确认触发。
+   * 本地保留按钮形态，但判定链整段交给 `startExportForBooks`，
+   * 保证「没目录先选目录、选完继续导出」这条路径与上游一致。
+   */
   private async runExport(): Promise<void> {
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) { this.onUnavailableAction('无法访问本地文件'); return; }
-    // 上游在「选完导出目录」时判 `isCustomEpubExportEnabled`：单本 + 开了自定义导出 + 格式是 epub
-    // （`BookshelfManageScreen.kt:298`/`:336`，`BookshelfManageScreenViewModel.kt:93-94`）。
-    // 本地没有「选完目录」这个时机，等价时机是点「导出」这一刻。
-    if (this.exportBooks.length === 1 && this.isCustomEpubExportEnabled()) {
-      const book = this.exportBooks[0];
-      if (book !== undefined) {
-        this.openCustomExportDialog(book);
-        return;
-      }
-    }
-    this.showExportSheet = false;
-    await this.exportBooksInOrder(context, this.exportBooks, false);
+    await this.startExportForBooks(this.exportBooks);
   }
 
   /** 上游 `isCustomEpubExportEnabled`：`enableCustomExport && exportType == 1`。 */
@@ -1230,28 +1298,43 @@ export struct BookshelfManagePage {
     return this.exportSettings.enableCustomExport && this.exportSettings.exportType === 1;
   }
 
-  /** 逐本导出，把每本的提示写回行内文案。`scopeSpec` 非空时走分段导出。 */
+  /**
+   * 逐本导出，把每本的提示写回行内文案。`scopeSpec` 非空时走分段导出。
+   *
+   * 第十表 F-12：上游把导出交给 `ExportBookService`（前台 Service，`BookshelfManageScreen.kt:1332-1343`
+   * `startService<ExportBookService> { action = start; putExtra("bookUrl" / "exportType" / "exportPath") }`），
+   * 用户切走应用也继续导。本地用 `ExportBackgroundTask` 申请 DATA_TRANSFER 长时任务承载同一语义：
+   * 每本开始前刷新一次通知（既给用户看进度，也满足系统「持续更新否则取消」的要求），
+   * 全部结束才释放。申请失败时 `ExportBackgroundTask` 内部降级为前台导出，不影响落盘。
+   */
   private async exportBooksInOrder(context: Context, books: Book[], segmented: boolean,
     scopeSpec: string = '', chaptersPerVolume: number = 1): Promise<void> {
     const target = this.exportTarget();
     const total = books.length;
-    for (let i = 0; i < total; i++) {
-      const book = books[i];
-      if (book === undefined) { continue; }
-      const key = this.rowKey(book);
-      this.putExportMsg(key, `第 ${i + 1} / 共 ${total} 本，正在导出…`);
-      let message = '已导出';
-      try {
-        if (segmented) {
-          const written = await BookExporter.exportSegmented(context, book, scopeSpec, chaptersPerVolume, target);
-          message = written === 0 ? '已取消' : `已导出 ${written} 卷`;
-        } else {
-          message = await BookExporter.exportOne(context, book, target);
+    await ExportBackgroundTask.begin(context);
+    try {
+      for (let i = 0; i < total; i++) {
+        const book = books[i];
+        if (book === undefined) { continue; }
+        const key = this.rowKey(book);
+        this.putExportMsg(key, `第 ${i + 1} / 共 ${total} 本，正在导出…`);
+        await ExportBackgroundTask.updateProgress(book.title, i + 1, total);
+        let message = '已导出';
+        try {
+          if (segmented) {
+            const written = await BookExporter.exportSegmented(context, book, scopeSpec, chaptersPerVolume, target);
+            message = written === 0 ? '已取消' : `已导出 ${written} 卷`;
+          } else {
+            message = await BookExporter.exportOne(context, book, target);
+          }
+        } catch (error) {
+          message = error instanceof Error ? `导出失败：${error.message}` : '导出失败';
         }
-      } catch (error) {
-        message = error instanceof Error ? `导出失败：${error.message}` : '导出失败';
+        this.putExportMsg(key, message);
       }
-      this.putExportMsg(key, message);
+    } finally {
+      // 无论成功、失败还是中途抛错，都要释放长时任务，否则通知条会一直挂着。
+      await ExportBackgroundTask.end();
     }
   }
 
@@ -1528,7 +1611,6 @@ export struct BookshelfManagePage {
           // 确认后才 StartDownloadForVisibleBooks(state.books, downloadAllChapters=true)。
           this.showDownloadAllConfirm = true;
         } else if (key === 'log') {
-          this.logEntries = AppLog.getAll();
           this.showLogSheet = true;
         } else if (key === 'export_all') {
           this.openExportSheet(this.filteredBooks());
@@ -2144,37 +2226,6 @@ export struct BookshelfManagePage {
     }.width('100%')
   }
 
-  @Builder
-  private SegmentedExportSheetContent() {
-    Column() {
-      Text('分段导出').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
-        .width('100%')
-      Text(this.segmentedExportBook !== undefined ? this.segmentedExportBook.title : '')
-        .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
-      Text('章节范围').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
-        .width('100%').margin({ top: 14 })
-      TextInput({ placeholder: '如 1-10,15,20-22', text: this.segmentedScope })
-        .height(44).width('100%').backgroundColor('#2A2B33').borderRadius(12)
-        .fontColor('#ECEEF2').margin({ top: 6 })
-        .onChange((value: string) => this.segmentedScope = value)
-      Text('范围从 1 开始，逗号分隔多段，段内用 - 连起止。').fontSize(LABEL_SMALL)
-        .fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
-      Text('每卷章节数').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
-        .width('100%').margin({ top: 14 })
-      TextInput({ placeholder: '1', text: this.segmentedVolumeSize })
-        .height(44).width('100%').backgroundColor('#2A2B33').borderRadius(12)
-        .fontColor('#ECEEF2').type(InputType.Number).margin({ top: 6 })
-        .onChange((value: string) => this.segmentedVolumeSize = value)
-      Row() {
-        Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
-          .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
-          .onClick(() => this.showSegmentedExport = false)
-        Text('导出').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
-          .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
-          .margin({ left: 10 }).onClick(() => this.runSegmentedExport())
-      }.width('100%').margin({ top: 20 })
-    }.width('100%')
-  }
 
   /** 同一组件只挂一个 bindSheet，按状态分发内容（批3 同款，避免多个 bindSheet 只有最后生效）。 */
   @Builder
@@ -2194,8 +2245,6 @@ export struct BookshelfManagePage {
         this.ExportFolderPickerContent()
       } else if (this.showExportSheet) {
         this.ExportSheetContent()
-      } else if (this.showSegmentedExport) {
-        this.SegmentedExportSheetContent()
       } else if (this.showGroupEditor) {
         // 第十表 H-4：分组编辑表单与书架页共用同一个组件（上游 GroupSelectSheet → GroupEditSheet）。
         GroupEditorSheet({
@@ -2226,7 +2275,11 @@ export struct BookshelfManagePage {
       } else if (this.showGroupSelect) {
         this.GroupSelectContent()
       } else if (this.showLogSheet) {
-        this.LogSheetContent()
+        // D-8：日志面板改走公共组件（上游 BookshelfManageScreen.kt:1242-1245 的 AppLogSheet）。
+        AppLogSheet({
+          show: this.showLogSheet,
+          onDismissRequest: () => { this.showLogSheet = false; }
+        })
       }
     }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
   }
@@ -2327,42 +2380,6 @@ export struct BookshelfManagePage {
     }.width('100%')
   }
 
-  /**
-   * 批2（:457）：日志面板。内容与书架页 BookshelfPage.ets:2228 的 LogSheetContent 同源
-   * （都读 AppLog 的内存环形缓冲），两处看到的是同一批行，这是有意的设计。
-   */
-  @Builder
-  private LogSheetContent() {
-    Column() {
-      Row() {
-        Text('日志').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-        Blank()
-        Text('清空').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(6)
-          .onClick(() => { AppLog.clear(); this.logEntries = []; })
-      }.width('100%').padding({ top: 8, bottom: 12 })
-      if (this.logEntries.length === 0) {
-        Column() {
-          Text('暂无日志').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
-        }.width('100%').height(240).justifyContent(FlexAlign.Center)
-      } else {
-        List() {
-          ForEach(this.logEntries, (entry: AppLogEntry) => {
-            ListItem() {
-              // 上游 AppLogSheet.kt:115-135：时间行 labelMedium/outline，正文 bodyMedium/onSurface。
-              Column() {
-                Text(AppLog.formatTime(entry.timestamp)).fontSize(LABEL_MEDIUM)
-                  .fontColor(this.themeColorTextTertiary).width('100%')
-                Text(entry.content()).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
-                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .width('100%').margin({ top: 4 })
-              }.width('100%').alignItems(HorizontalAlign.Start)
-            }.padding({ top: 12, bottom: 12 })
-          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
-        }.width('100%').height(440).scrollBar(BarState.Off)
-      }
-    }.width('100%')
-  }
-
   build() {
     Column() {
       Row() {
@@ -2445,13 +2462,12 @@ export struct BookshelfManagePage {
       } else {
         Scroll(this.listScroller) {
           Column({ space: MANAGE_ROW_GAP }) {
+            // B-9：上游没有独立空态——`ListScaffold` 与 `FastScrollLazyColumn` 都不画空提示
+            // （`ListScaffold.kt` 全文只有 `selectedIds.isEmpty()` 一处 isEmpty，是选择态底栏条件；
+            // `BookshelfManageScreen.kt` 全文无 EmptyMessage）。列表为空就是空白，故删掉本地自造的空态行。
             ForEach(this.filteredBooks(), (book: Book) => {
               this.BookRow(book)
             }, (book: Book) => this.rowKey(book))
-            if (this.filteredBooks().length === 0) {
-              Text('没有符合条件的书籍').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-                .width('100%').textAlign(TextAlign.Center).margin({ top: 60 })
-            }
           }.width('100%')
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
       }
@@ -2491,7 +2507,7 @@ export struct BookshelfManagePage {
       }
     }.width('100%').height('100%').backgroundColor(this.themeColorSurfacePrimary)
       .bindSheet(this.showDeleteConfirm || this.showExportSheet || this.showGroupSelect || this.showLogSheet ||
-        this.showSegmentedExport || this.showBatchDownloadConfirm || this.showDownloadAllConfirm ||
+        this.showBatchDownloadConfirm || this.showDownloadAllConfirm ||
         this.showChangeSourceStatus || this.showExportFolderPicker || this.showGroupEditor,
         this.ManageSheet(), {
           height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
@@ -2500,7 +2516,6 @@ export struct BookshelfManagePage {
             this.showExportSheet = false;
             this.showGroupSelect = false;
             this.showLogSheet = false;
-            this.showSegmentedExport = false;
             this.showBatchDownloadConfirm = false;
             this.showDownloadAllConfirm = false;
             this.showChangeSourceStatus = false;
