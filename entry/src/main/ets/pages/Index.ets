@@ -12986,22 +12986,21 @@ private canWriteInto(dir: string): boolean {
         SearchPage({
           books: this.books,
           groups: this.bookGroups,
-          query: this.searchPageQuery,
-          selectedGroup: this.searchPageGroup,
-          sourceScope: this.searchPageSourceScope,
-          exactMatch: this.searchPageExactMatch,
+          initialQuery: this.searchPageQuery,
           coverSettings: this.coverSettings,
+          isNight: this.readerNightMode,
           onBack: () => this.route = this.searchReturnRoute,
-          onOpenBook: (book: Book) => this.openBook(book),
-          onAddOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item),
-          onOpenOnlineBookDetail: (item: MergedBook) => this.openOnlineBookInfo(item),
-          onOpenBookDetail: (book: Book) => this.openBookInfo(book),
+          onOpenBookInfo: (item: SearchBookItem, sharedCoverKey: string) =>
+            this.openRelatedBookInfoWithSharedKey(item, sharedCoverKey),
+          onAddToShelf: (item: SearchBookItem) => this.addExploreBookToShelf(item),
+          onResolveShelfConflict: (existingBookUrl: string, incomingBookUrl: string, mode: string,
+            options: ChangeSourceMigrationOptions) =>
+            this.resolveExploreShelfConflict(existingBookUrl, incomingBookUrl, mode, options),
           onOpenSourceManage: () => this.openProfileDetail(ProfileRoute.BOOK_SOURCE_MANAGE),
-          onUnavailableAction: (message: string) => this.showUnavailableAction(message),
-          onQueryChange: (query: string) => this.searchPageQuery = query,
-          onGroupChange: (group: string) => this.searchPageGroup = group,
-          onSourceScopeChange: (enabled: boolean) => this.searchPageSourceScope = enabled,
-          onExactMatchChange: (enabled: boolean) => this.searchPageExactMatch = enabled
+          onOpenBookshelfBook: (book: Book) => { void this.openBook(book); },
+          onMessage: (message: string) => this.showUnavailableAction(message),
+          onQueryPersist: (query: string) => this.searchPageQuery = query,
+          onScopePersist: (_scopeRaw: string) => {}
         })
         .transition(this.routeTransition())
         } else if (routeParam.route === AppRoute.EXPLORE_SHOW) {

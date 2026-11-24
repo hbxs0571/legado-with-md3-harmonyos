@@ -22,7 +22,8 @@ export class SearchResultMerger {
   private otherBooks: Bucket = new Map<string, MergedBook>();
   /** bookUrl → 所在桶的 key，处理同 URL 跨源重复。 */
   private urlIndex: Map<string, string> = new Map<string, string>();
-  private static readonly MAX_RESULTS: number = 1000;
+  /** 结果上限，等价上游 `merger.resultLimitReached`；搜索页用它算 `hasMore`，故对外可读。 */
+  static readonly MAX_RESULTS: number = 1000;
 
   constructor(keyword: string, exactMatch: boolean) {
     this.keyword = keyword.trim().toLocaleLowerCase();
