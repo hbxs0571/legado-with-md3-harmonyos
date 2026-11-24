@@ -406,13 +406,19 @@ export struct HomePage {
               }
             }.width('100%').alignItems(VerticalAlign.Center)
             if (this.backupLoadError && !this.backupLoading) {
-              // 上游 `:1213-1220`：加载失败时整行只给一个「重试」按钮，不给备份/恢复/设置。
-              this.BackupTonalButton('profileRefresh', '重试', !this.backupActionRunning, () => this.onRetryBackupInfo())
+              // 上游 `:1235-1241`：加载失败时整行只给一个「重试」按钮，不给备份/恢复/设置，
+              // 且该按钮是 `SmallTonalButton(modifier = Modifier.fillMaxWidth())`——只填宽度、高度自适应。
+              this.BackupTonalButton('profileRefresh', '重试', !this.backupActionRunning,
+                () => this.onRetryBackupInfo(), true)
             } else {
+              // 上游 `:1243-1268`：三按钮各 `Modifier.weight(1f)`，横向平分。
               Row({ space: 8 }) {
-                this.BackupTonalButton('cloudUpload', '备份', !this.backupActionRunning, () => this.onBackupClick())
-                this.BackupTonalButton('cloudDownload', '恢复', !this.backupActionRunning, () => this.onRestoreClick())
-                this.BackupTonalButton('settings', '设置', !this.backupActionRunning, () => this.onOpenBackup())
+                this.BackupTonalButton('cloudUpload', '备份', !this.backupActionRunning,
+                  () => this.onBackupClick(), false)
+                this.BackupTonalButton('cloudDownload', '恢复', !this.backupActionRunning,
+                  () => this.onRestoreClick(), false)
+                this.BackupTonalButton('settings', '设置', !this.backupActionRunning,
+                  () => this.onOpenBackup(), false)
               }.width('100%')
             }
           }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#121212' : this.themeColorSurfaceElevated)).borderRadius(this.homeCardRadius(16)).margin({ top: 12, bottom: 18 }).backgroundImage(this.themeItemBackground.length > 0 ? `file://${this.themeItemBackground}` : $r('app.media.transparent_pixel'), ImageRepeat.NoRepeat)
@@ -533,15 +539,23 @@ export struct HomePage {
    * 文字 + 18dp 图标、`labelMedium`、内距 8/4、间距 4、圆角 `RoundedCornerShape(50)`（胶囊）、
    * 容器 `surfaceContainerLow`、内容 `onSurfaceVariant`；禁用时容器换 `outlineVariant`、
    * 内容 alpha 0.38（`SeriesIconButton.kt:288-303`）。
+   *
+   * `fillRow` 对应上游两处不同的 modifier：错误态「重试」传 `fillMaxWidth()`（只填宽、高随内容），
+   * 三按钮态各传 `weight(1f)`（横向平分）。`layoutWeight` 沿父容器主轴分配空间
+   * （`common.d.ts:17448-17457`），挂在 Column 下会去分垂直剩余空间把整张卡撑满，
+   * 所以 fillRow 时不加它、改用 `width('100%')`。
    */
   @Builder
-  private BackupTonalButton(icon: AppGlyphName, label: string, buttonEnabled: boolean, action: () => void) {
+  private BackupTonalButton(icon: AppGlyphName, label: string, buttonEnabled: boolean, action: () => void,
+    fillRow: boolean) {
     Row({ space: 4 }) {
       AppGlyph({ name: icon, glyphSize: 18, tint: buttonEnabled ? this.themeColorOnSurfaceVariant : this.themeColorOnSurfaceVariant })
         .opacity(buttonEnabled ? 1 : 0.38)
       Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorOnSurfaceVariant).opacity(buttonEnabled ? 1 : 0.38)
     }
-    .layoutWeight(1).justifyContent(FlexAlign.Center)
+    .layoutWeight(fillRow ? 0 : 1)
+    .width(fillRow ? '100%' : undefined)
+    .justifyContent(FlexAlign.Center)
     .padding({ left: 8, right: 8, top: 4, bottom: 4 })
     .backgroundColor(buttonEnabled ? this.themeColorSurfaceSecondary : this.themeColorOutlineVariant)
     .borderRadius(50)
