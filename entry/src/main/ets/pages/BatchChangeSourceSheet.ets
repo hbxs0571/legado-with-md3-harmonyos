@@ -382,15 +382,19 @@ export struct BatchChangeSourceSheet {
 
   @Builder
   private StepHeader() {
-    Row() {
-      Text(this.step === 0 ? '选择目标书源' : (this.step === 1 ? '批量换源选项'
-        : (this.step === 2 ? '换源预览' : '换源结果')))
-        .fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-      Text('✕').fontSize(TITLE_LARGE).fontColor(this.themeColorTextTertiary)
-        .onClick(() => this.onClose())
-    }.width('100%').padding({ bottom: 12 })
-    Text(`已选 ${this.books.length} 本书`).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
-      .width('100%').margin({ bottom: 8 })
+    // 【单根节点】@Builder 多根时在部分宿主（bindSheet / 单参数位置）只渲染第一个，
+    // 统一用外层 Column 收口。
+    Column() {
+      Row() {
+        Text(this.step === 0 ? '选择目标书源' : (this.step === 1 ? '批量换源选项'
+          : (this.step === 2 ? '换源预览' : '换源结果')))
+          .fontSize(TITLE_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('✕').fontSize(TITLE_LARGE).fontColor(this.themeColorTextTertiary)
+          .onClick(() => this.onClose())
+      }.width('100%').padding({ bottom: 12 })
+      Text(`已选 ${this.books.length} 本书`).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
+        .width('100%').margin({ bottom: 8 })
+    }.width('100%')
   }
 
   @Builder

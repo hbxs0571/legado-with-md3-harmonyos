@@ -19,6 +19,10 @@ import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
+// 上游五个 AppAlertDialog（密码/添加网址/批量下载/批量删除/确认执行分组）都是居中对话框，
+// 本地用 openCustomDialog + AppAlertDialog 承载（showAlertDialog 带不了输入框）。
+import { AppAlertDialog } from '../components/AppAlertDialog';
+import { DialogCheckRow, DialogTextInput } from '../components/DialogInputs';
 import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
 import { cardRadiusOf } from '../data/ThemeCardStyle';
@@ -368,7 +372,6 @@ export struct BookshelfPage {
   @State aiErrorText: string = '';
   @State aiRevisionInstruction: string = '';
   @State aiNewGroupName: string = '';
-  @State aiShowApplyConfirm: boolean = false;
   @State aiBatchText: string = '';
   /** 当前展开「移动」菜单的书（bookUrl）；空串表示没有展开。 */
   @State aiMoveMenuKey: string = '';
@@ -387,15 +390,6 @@ export struct BookshelfPage {
    * ArkTS 的 @State 不认识 Set 的原地增删，全部改用 new Set(...) 整体赋值。
    */
   @State selectedBookKeys: Set<string> = new Set<string>();
-  /** 批量删除确认面板（:148 / :149）；与布局/日志/分组面板共用同一个 bindSheet。 */
-  @State showBatchDeleteSheet: boolean = false;
-  /**
-   * H-10：批量下载二次确认框。
-   *
-   * 上游 `BookshelfScreen.kt:1526-1538` `AppAlertDialog(showBatchDownloadConfirmDialog, sure_cache_book)`
-   * 是编辑态「下载」动作的前置确认；本地原先 `download_all` 直接入队，缺这一步。
-   */
-  @State showBatchDownloadConfirm: boolean = false;
   /** H-6：网址导入对话框（对齐上游 BookshelfOverlay.AddUrlDialog）。 */
   /**
    * H-4：拖动中的临时列表（上游 `BookshelfScreen.kt:1730` 的 `draggingBooks`）。
@@ -404,7 +398,7 @@ export struct BookshelfPage {
    */
   @State draggingBooks: Book[] = [];
   @State dragActive: boolean = false;
-  @State showAddUrlDialog: boolean = false;
+  /** H-6：网址导入对话框的输入内容（对话框关闭时清空）。 */
   @State addUrlInput: string = '';
   /**
    * A-29/A-30：书单导入/导出各自的上游 `FilePickerSheet` 面板
@@ -433,12 +427,26 @@ export struct BookshelfPage {
    */
   @StorageProp('privateGrantedBookKeys') privateGrantedBookKeys: string[] = [];
   @StorageProp('privateGrantedGroupIds') privateGrantedGroupIds: number[] = [];
-  /** 密码输入面板（:151）；pending* 记录这一次是为哪个分组/哪本书解锁。 */
-  @State showPasswordPanel: boolean = false;
+  /** 密码对话框的输入与错误（对话框关闭时清空）；pending* 记录这一次是为哪个分组/哪本书解锁。 */
   @State passwordInput: string = '';
   @State passwordError: string = '';
   @State pendingUnlockGroupId: number = 0;
   @State pendingUnlockBookKey: string = '';
+  /**
+   * 五个 M3 AlertDialog 的对话框 id 与 builder（口径同 BookshelfManagePage 的导出输入框）。
+   * 上游这五处都是 `AppAlertDialog`，不是底部 sheet；本地改用 openCustomDialog 承载，
+   * 所以它们既不在 `bindSheet` 条件里，也不在 `ShelfSheetContent()` 的分支链里。
+   */
+  private batchDeleteDialogId: number = -1;
+  private batchDeleteDialogBuilder: (() => void) | undefined = undefined;
+  private batchDownloadDialogId: number = -1;
+  private batchDownloadDialogBuilder: (() => void) | undefined = undefined;
+  private addUrlDialogId: number = -1;
+  private addUrlDialogBuilder: (() => void) | undefined = undefined;
+  private passwordDialogId: number = -1;
+  private passwordDialogBuilder: (() => void) | undefined = undefined;
+  private aiApplyDialogId: number = -1;
+  private aiApplyDialogBuilder: (() => void) | undefined = undefined;
   /** 记住上次分组只灌一次，避免后续设置对象刷新覆盖用户主动选择的页签。 */
   private tabPositionRestored: boolean = false;
   /** 书架窗口引用与尺寸回调，aboutToDisappear 时解绑，避免订阅泄漏。 */
@@ -1190,13 +1198,15 @@ export struct BookshelfPage {
     this.clearSelection();
   }
 
-  /** 删除选中的书（:148 / :149）；面板里才有「同时删除应用内副本」的勾选。 */
+  /** 删除选中的书（:148 / :149）；对话框里才有「删除源文件」的勾选。 */
   private async executeBatchDelete(): Promise<void> {
     const books = this.selectedBooks();
+    // 勾选值要在关框前取：closeBatchDeleteDialog 会把它复位。
+    const deleteOriginal = this.batchDeleteSource;
+    this.closeBatchDeleteDialog();
     if (books.length === 0) { return; }
-    this.showBatchDeleteSheet = false;
     try {
-      await this.onDeleteBooks(books, this.batchDeleteSource);
+      await this.onDeleteBooks(books, deleteOriginal);
     } finally {
       this.batchDeleteSource = false;
       this.clearSelection();
@@ -1285,43 +1295,58 @@ export struct BookshelfPage {
       });
   }
 
-  /** 批量删除确认面板（:148 / :149）。 */
+  /**
+   * 批量删除确认框，对齐上游 `BookshelfScreen.kt:1540-1573` 的 `AppAlertDialog`：
+   * 标题 `delete_selected`（删除选中）、正文 `bookshelf_selected_count`（已选%1$d本）、
+   * 有本地书时正文下方加一个「删除源文件」勾选（上游 `delete_book_file`）、按钮「删除」/「取消」。
+   */
   @Builder
-  private BatchDeleteSheet() {
-    Column() {
-      Row() {
-        Text('删除所选书籍').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
-          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-      }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
-      Column() {
-        Text(`将删除 ${this.selectedBookKeys.size} 本书，删除后无法恢复。`)
-          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
-        if (this.selectedBooks().some((book: Book) => book.isLocal)) {
-          Row() {
-            Checkbox()
-              .select(this.batchDeleteSource)
-              .onChange((checked: boolean) => { this.batchDeleteSource = checked; })
-            // 本地能删的只有应用内导入副本（book.contentPath），用户原始文件不由应用删除。
-            Text('同时删除应用内副本').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
-          }.width('100%').margin({ top: 12 })
-        }
-      }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
-      Row() {
-        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
-          .onClick(() => { this.showBatchDeleteSheet = false; this.batchDeleteSource = false; })
-        Blank()
-        Text('删除').fontSize(LABEL_LARGE).fontColor('#FF6B6B').padding(10)
-          .onClick(async () => { await this.executeBatchDelete(); })
-      }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
-    }.width('100%').alignItems(HorizontalAlign.Start)
+  private BatchDeleteDialog() {
+    AppAlertDialog({
+      title: '删除选中',
+      text: `已选${this.selectedBookKeys.size}本`,
+      confirmText: '删除',
+      dismissText: '取消',
+      onConfirm: () => { void this.executeBatchDelete(); },
+      onDismiss: () => { this.closeBatchDeleteDialog(); }
+    }) {
+      if (this.selectedBooks().some((book: Book) => book.isLocal)) {
+        DialogCheckRow({
+          label: '删除源文件',
+          initialChecked: this.batchDeleteSource,
+          onCheckedChange: (checked: boolean) => { this.batchDeleteSource = checked; }
+        })
+      }
+    }
   }
 
-  /**
-   * H-10：批量下载二次确认面板。
-   *
-   * 对齐上游 `BookshelfScreen.kt:1526-1538`：
-   * `AppAlertDialog(showBatchDownloadConfirmDialog, title = R.string.draw, text = R.string.sure_cache_book, ...)`。
-   */
+  private openBatchDeleteDialog(): void {
+    this.batchDeleteSource = false;
+    if (this.batchDeleteDialogId >= 0) { return; }
+    this.batchDeleteDialogBuilder = (): void => { this.BatchDeleteDialog(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.batchDeleteDialogBuilder,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => {
+        this.batchDeleteDialogId = -1;
+        this.batchDeleteSource = false;
+      }
+    }).then((id: number) => {
+      this.batchDeleteDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[Bookshelf] 打开删除确认对话框失败: ${error}`);
+    });
+  }
+
+  private closeBatchDeleteDialog(): void {
+    this.batchDeleteSource = false;
+    if (this.batchDeleteDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.batchDeleteDialogId);
+      this.batchDeleteDialogId = -1;
+    }
+  }
+
   /**
    * H-5：「选择分组」多选面板，对齐上游 GroupSelectSheet（BookInfoSheets.kt:108-190）。
    * 逐组一行：勾选框 + 组名 + 右侧编辑按钮；底部确认写入多分组掩码。
@@ -1387,48 +1412,87 @@ export struct BookshelfPage {
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
+  /**
+   * H-10：批量下载二次确认，对齐上游 `BookshelfScreen.kt:1526-1538`：
+   * `AppAlertDialog(title = R.string.draw「提醒」, text = R.string.sure_cache_book「是否确认开始缓存？」)`。
+   * 正文不带数量（本地原先自造了「共 N 本。」）。
+   */
   @Builder
-  private BatchDownloadConfirmSheet() {
-    Column() {
-      Text('提醒').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
-        .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-    }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
-    Column() {
-      Text(`是否确认开始缓存？共 ${this.selectedBookKeys.size} 本。`)
-        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
-    }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
-    Row() {
-      Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
-        .onClick(() => { this.showBatchDownloadConfirm = false; })
-      Blank()
-      Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
-        .onClick(() => {
-          this.showBatchDownloadConfirm = false;
-          this.onDownloadBooks(this.selectedBooks());
-        })
-    }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+  private BatchDownloadConfirmDialog() {
+    AppAlertDialog({
+      title: '提醒',
+      text: '是否确认开始缓存？',
+      confirmText: '确认',
+      dismissText: '取消',
+      onConfirm: () => {
+        const books = this.selectedBooks();
+        this.closeBatchDownloadDialog();
+        this.onDownloadBooks(books);
+      },
+      onDismiss: () => { this.closeBatchDownloadDialog(); }
+    })
+  }
+
+  private openBatchDownloadDialog(): void {
+    if (this.batchDownloadDialogId >= 0) { return; }
+    this.batchDownloadDialogBuilder = (): void => { this.BatchDownloadConfirmDialog(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.batchDownloadDialogBuilder,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => { this.batchDownloadDialogId = -1; }
+    }).then((id: number) => {
+      this.batchDownloadDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[Bookshelf] 打开下载确认对话框失败: ${error}`);
+    });
+  }
+
+  private closeBatchDownloadDialog(): void {
+    if (this.batchDownloadDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.batchDownloadDialogId);
+      this.batchDownloadDialogId = -1;
+    }
   }
 
   /** C-14 的「确认执行分组方案」对话框，对应上游 AppAlertDialog(ai_auto_group_confirm_*)。 */
   @Builder
-  private AiApplyConfirmSheet() {
-    Column() {
-      Text('确认执行分组方案').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
-        .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-    }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
-    Column() {
-      Text(this.aiIncrementalOnly
+  private AiApplyConfirmDialog() {
+    AppAlertDialog({
+      title: '确认执行分组方案',
+      text: this.aiIncrementalOnly
         ? `将创建 ${this.aiNewGroupCount()} 个分组，为 ${this.aiAssignedCount()} 本未分组书籍设置分组，跳过 ${this.aiIgnoredBooks.length} 本书。已分组书籍和私密分组保持不变。`
-        : `将创建 ${this.aiNewGroupCount()} 个分组，调整 ${this.aiAssignedCount()} 本书，跳过 ${this.aiIgnoredBooks.length} 本书。现有公开分组归属会被替换，私密分组保持不变。`)
-        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
-    }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
-    Row() {
-      Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
-        .onClick(() => { this.aiShowApplyConfirm = false; })
-      Blank()
-      Text('执行').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
-        .onClick(() => { void this.aiConfirmApply(); })
-    }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+        : `将创建 ${this.aiNewGroupCount()} 个分组，调整 ${this.aiAssignedCount()} 本书，跳过 ${this.aiIgnoredBooks.length} 本书。现有公开分组归属会被替换，私密分组保持不变。`,
+      confirmText: '执行',
+      dismissText: '取消',
+      onConfirm: () => {
+        this.closeAiApplyDialog();
+        void this.aiConfirmApply();
+      },
+      onDismiss: () => { this.closeAiApplyDialog(); }
+    })
+  }
+
+  private openAiApplyDialog(): void {
+    if (this.aiApplyDialogId >= 0) { return; }
+    this.aiApplyDialogBuilder = (): void => { this.AiApplyConfirmDialog(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.aiApplyDialogBuilder,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => { this.aiApplyDialogId = -1; }
+    }).then((id: number) => {
+      this.aiApplyDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[Bookshelf] 打开分组方案确认对话框失败: ${error}`);
+    });
+  }
+
+  private closeAiApplyDialog(): void {
+    if (this.aiApplyDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.aiApplyDialogId);
+      this.aiApplyDialogId = -1;
+    }
   }
 
   /** 当前所有私密分组的 id（:150 / :257）。分组上的 isPrivate 标记早就有，这里只是取出来用。 */  private privateGroupIds(): number[] {
@@ -1503,9 +1567,7 @@ export struct BookshelfPage {
     } else {
       PrivateAccessRepository.unlock();
     }
-    this.showPasswordPanel = false;
-    this.passwordInput = '';
-    this.passwordError = '';
+    this.closePasswordDialog();
     this.pendingUnlockGroupId = 0;
     this.pendingUnlockBookKey = '';
   }
@@ -1527,11 +1589,11 @@ export struct BookshelfPage {
     if (this.canUseBiometricShortcut()) {
       PrivateAccessRepository.authenticateBiometric(
         () => { this.completeUnlock(); },
-        (_message: string) => { this.showPasswordPanel = true; }
+        (_message: string) => { this.openPasswordDialog(); }
       );
       return;
     }
-    this.showPasswordPanel = true;
+    this.openPasswordDialog();
   }
 
   /** 校验密码；通过后按当前解锁有效期授权这一次并关面板（:151）。 */
@@ -1541,7 +1603,9 @@ export struct BookshelfPage {
     const ok = await PrivateAccessRepository.verifyPassword(context, this.passwordInput);
     if (!ok) {
       // 失败只报「密码错误」，不区分「没设过」与「不对」，避免泄露状态。
-      this.passwordError = '密码错误';
+      // 上游走 snackbar（BookshelfViewModel.kt:872-887），这里先关框再提示，避免被对话框遮住。
+      this.closePasswordDialog();
+      this.onUnavailableAction('密码错误');
       return;
     }
     this.completeUnlock();
@@ -1588,30 +1652,59 @@ export struct BookshelfPage {
     }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
   }
 
-  /** 密码输入面板（:151）。校验失败只提示「密码错误」。 */
+  /**
+   * 密码输入对话框，对齐上游 `BookshelfScreen.kt:1436-1458`：
+   * 标题 `private_unlock_password_title`（输入本地密码）、一个密码输入框、按钮「确认」/「取消」。
+   * 上游校验失败不写在框内，而是 `ShowSnackbar(private_unlock_password_error)` 并保留对话框
+   * （`BookshelfViewModel.kt:872-887`）；本地同样走 toast，但先关框再提示，避免 toast 被对话框遮挡。
+   */
   @Builder
-  private PasswordSheet() {
-    Column() {
-      Text('验证本地密码').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
-      TextInput({ text: this.passwordInput, placeholder: '本地密码' })
-        .type(InputType.Password).fontSize(TITLE_SMALL).height(44).margin({ left: 18, right: 18 })
-        .onChange((value: string) => { this.passwordInput = value; })
-      if (this.passwordError.length > 0) {
-        Text(this.passwordError).fontSize(BODY_SMALL).fontColor('#FF6B6B').padding({ left: 18, top: 8 })
+  private PasswordDialog() {
+    AppAlertDialog({
+      title: '输入本地密码',
+      confirmText: '确认',
+      dismissText: '取消',
+      onConfirm: () => { void this.submitPassword(); },
+      onDismiss: () => { this.closePasswordDialog(); }
+    }) {
+      DialogTextInput({
+        initialText: this.passwordInput,
+        placeholder: '输入本地密码',
+        maxLines: 1,
+        isPassword: true,
+        onValueChange: (value: string) => { this.passwordInput = value; }
+      })
+    }
+  }
+
+  private openPasswordDialog(): void {
+    this.passwordInput = '';
+    this.passwordError = '';
+    if (this.passwordDialogId >= 0) { return; }
+    this.passwordDialogBuilder = (): void => { this.PasswordDialog(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.passwordDialogBuilder,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => {
+        this.passwordDialogId = -1;
+        this.passwordInput = '';
+        this.passwordError = '';
       }
-      Row() {
-        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
-          .onClick(() => {
-            this.showPasswordPanel = false;
-            this.passwordInput = '';
-            this.passwordError = '';
-          })
-        Blank()
-        Text('解锁').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
-          .onClick(async () => { await this.submitPassword(); })
-      }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
-    }.width('100%').alignItems(HorizontalAlign.Start)
+    }).then((id: number) => {
+      this.passwordDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[Bookshelf] 打开密码对话框失败: ${error}`);
+    });
+  }
+
+  private closePasswordDialog(): void {
+    if (this.passwordDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.passwordDialogId);
+      this.passwordDialogId = -1;
+    }
+    this.passwordInput = '';
+    this.passwordError = '';
   }
 
   /** 只列自定义分组，按 order 升序，与上游 GroupManageSheet 一致。 */
@@ -1941,7 +2034,7 @@ export struct BookshelfPage {
     this.aiErrorText = '';
     this.aiRevisionInstruction = '';
     this.aiNewGroupName = '';
-    this.aiShowApplyConfirm = false;
+    this.closeAiApplyDialog();
     this.aiBatchText = '';
     this.showAiAutoGroup = true;
     setTimeout(() => {
@@ -2151,7 +2244,6 @@ export struct BookshelfPage {
 
   /** 确认执行：新建缺失的分组，再按组批量写书的 groupNames。 */
   private async aiConfirmApply(): Promise<void> {
-    this.aiShowApplyConfirm = false;
     this.aiPhase = 'Applying';
     try {
       const existingNames: string[] = this.getUserGroups().map((group: BookGroup) => group.groupName);
@@ -2335,7 +2427,7 @@ export struct BookshelfPage {
             .fontColor(this.aiAssignedCount() > 0 ? '#B9C8FF' : this.themeColorTextTertiary)
             .padding(8)
             .onClick(() => {
-              if (this.aiAssignedCount() > 0) { this.aiShowApplyConfirm = true; }
+              if (this.aiAssignedCount() > 0) { this.openAiApplyDialog(); }
             })
         } else if (this.aiPhase === 'Result') {
           Text('关闭').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
@@ -2500,7 +2592,7 @@ export struct BookshelfPage {
               .fontColor(this.aiAssignedCount() > 0 ? '#1A1B21' : this.themeColorTextTertiary)
               .padding({ left: 14, right: 14, top: 8, bottom: 8 }).borderRadius(12)
               .backgroundColor(this.aiAssignedCount() > 0 ? '#B9C8FF' : '#22232A')
-              .onClick(() => { if (this.aiAssignedCount() > 0) { this.aiShowApplyConfirm = true; } })
+              .onClick(() => { if (this.aiAssignedCount() > 0) { this.openAiApplyDialog(); } })
           }.width('100%')
         }.width('100%').padding(12).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
         .alignItems(HorizontalAlign.Start)
@@ -3840,18 +3932,8 @@ export struct BookshelfPage {
    */
   @Builder
   private ShelfSheetContent() {
-    if (this.aiShowApplyConfirm) {
-      this.AiApplyConfirmSheet()
-    } else if (this.showMoveGroupSheet) {
+    if (this.showMoveGroupSheet) {
       this.MoveGroupSheetContent()
-    } else if (this.showAddUrlDialog) {
-      this.AddUrlDialogSheet()
-    } else if (this.showBatchDownloadConfirm) {
-      this.BatchDownloadConfirmSheet()
-    } else if (this.showPasswordPanel) {
-      this.PasswordSheet()
-    } else if (this.showBatchDeleteSheet) {
-      this.BatchDeleteSheet()
     } else if (this.showTagColorPage) {
       this.TagColorSheet()
     } else if (this.showLayoutSheet) {
@@ -4164,8 +4246,7 @@ export struct BookshelfPage {
     }
     if (key === 'add_url') {
       // H-6：上游 BookshelfScreen.kt:1483-1491 走 SourceInputDialog，确认后 AddBookByUrl。
-      this.addUrlInput = '';
-      this.showAddUrlDialog = true;
+      this.openAddUrlDialog();
       return;
     }
     if (key === 'selection_mode') {
@@ -4218,8 +4299,7 @@ export struct BookshelfPage {
           // 上游 onManualInput 是 `onIntent(ShowOverlay(BookshelfOverlay.AddUrlDialog))`，
           // 复用的就是「添加网址」那个对话框（其确认动作固定是 AddBookByUrl）。
           this.showImportSheet = false;
-          this.addUrlInput = '';
-          this.showAddUrlDialog = true;
+          this.openAddUrlDialog();
         })
       }.width('100%').padding({ left: 18, right: 18 }).alignItems(VerticalAlign.Top)
       Column().height(24)
@@ -4266,30 +4346,55 @@ export struct BookshelfPage {
   }
 
   /**
-   * H-6：网址导入对话框，对齐上游 `SourceInputDialog`（ImportComponents.kt:57-105）：
-   * 标题「添加网址」、多行输入框、空输入不提交、确认后走 AddBookByUrlUseCase。
+   * H-6：网址导入对话框，对齐上游 `SourceInputDialog`（`ImportComponents.kt:56-105`）：
+   * 外层是 `AppAlertDialog`（标题 `add_book_url`「添加书籍网址」），正文一个 `maxLines = 5` 的输入框
+   * （`label = hint`「请输入 URL 或 JSON」），按钮「确认」/「取消」；
+   * 上游 `onConfirm` 里 `if (text.isNotBlank()) onConfirm(text)` —— 空输入不提交，但不禁用按钮。
+   * 书架页调用点（`BookshelfScreen.kt:1483-1491`）没传 historyValues，所以这里也没有历史 chip 行。
    */
   @Builder
-  private AddUrlDialogSheet() {
-    Column() {
-      Text('添加网址').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
-        .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-    }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
-    Column() {
-      TextArea({ placeholder: '请输入 URL 或 JSON', text: this.addUrlInput })
-        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
-        .placeholderColor(this.themeColorTextTertiary)
-        .backgroundColor(this.themeColorSurfaceElevated)
-        .borderRadius(8).width('100%').constraintSize({ minHeight: 96, maxHeight: 200 })
-        .onChange((value: string) => { this.addUrlInput = value; })
-    }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
-    Row() {
-      Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
-        .onClick(() => { this.showAddUrlDialog = false; })
-      Blank()
-      Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
-        .onClick(() => { void this.submitAddUrl(); })
-    }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+  private AddUrlDialog() {
+    AppAlertDialog({
+      title: '添加书籍网址',
+      confirmText: '确认',
+      dismissText: '取消',
+      onConfirm: () => { void this.submitAddUrl(); },
+      onDismiss: () => { this.closeAddUrlDialog(); }
+    }) {
+      DialogTextInput({
+        initialText: this.addUrlInput,
+        placeholder: '请输入 URL 或 JSON',
+        maxLines: 5,
+        onValueChange: (value: string) => { this.addUrlInput = value; }
+      })
+    }
+  }
+
+  private openAddUrlDialog(): void {
+    this.addUrlInput = '';
+    if (this.addUrlDialogId >= 0) { return; }
+    this.addUrlDialogBuilder = (): void => { this.AddUrlDialog(); };
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: this.addUrlDialogBuilder,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      onWillDismiss: () => {
+        this.addUrlDialogId = -1;
+        this.addUrlInput = '';
+      }
+    }).then((id: number) => {
+      this.addUrlDialogId = id;
+    }).catch((error: Error) => {
+      console.error(`[Bookshelf] 打开添加网址对话框失败: ${error}`);
+    });
+  }
+
+  private closeAddUrlDialog(): void {
+    if (this.addUrlDialogId >= 0) {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.addUrlDialogId);
+      this.addUrlDialogId = -1;
+    }
+    this.addUrlInput = '';
   }
 
   /**
@@ -4299,7 +4404,7 @@ export struct BookshelfPage {
   private async submitAddUrl(): Promise<void> {
     const raw = this.addUrlInput.trim();
     if (raw.length === 0) { return; }
-    this.showAddUrlDialog = false;
+    this.closeAddUrlDialog();
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
     this.busyText = '添加中…';
@@ -4345,7 +4450,7 @@ export struct BookshelfPage {
       TopBarButton({
         icon: 'download', showDivider: false, accessibilityLabel: '下载',
         disabled: this.selectedBookKeys.size === 0,
-        onSelect: () => { if (this.selectedBookKeys.size > 0) { this.showBatchDownloadConfirm = true; } }
+        onSelect: () => { if (this.selectedBookKeys.size > 0) { this.openBatchDownloadDialog(); } }
       })
       // :638-640 空选时点移组不弹面板。
       TopBarButton({
@@ -4367,7 +4472,7 @@ export struct BookshelfPage {
         icon: 'delete', showDivider: false, accessibilityLabel: '删除选中',
         disabled: this.selectedBookKeys.size === 0,
         onSelect: () => {
-          if (this.selectedBookKeys.size > 0) { this.batchDeleteSource = false; this.showBatchDeleteSheet = true; }
+          if (this.selectedBookKeys.size > 0) { this.openBatchDeleteDialog(); }
         }
       })
     } else {
@@ -4969,9 +5074,9 @@ export struct BookshelfPage {
         }.layoutWeight(1).width('100%').padding({ bottom: 120 }).justifyContent(FlexAlign.Center)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet || this.showPasswordPanel || this.showBatchDownloadConfirm || this.showMoveGroupSheet || this.showAddUrlDialog || this.showTagRuleEdit || this.showAiAutoGroup || this.showImportSheet || this.showExportSheet, this.ShelfSheetContent(), {
+      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showMoveGroupSheet || this.showTagRuleEdit || this.showAiAutoGroup || this.showImportSheet || this.showExportSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
-        onDisappear: () => { this.showMoveGroupSheet = false; this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; this.showPasswordPanel = false; this.showBatchDownloadConfirm = false; this.showAddUrlDialog = false; this.showTagRuleEdit = false; this.tagRuleMenuVisible = false; this.showRulePasteAuthorization = false; this.showAiAutoGroup = false; this.aiShowApplyConfirm = false; this.aiMoveMenuKey = ''; this.showDisablePrivateConfirm = false; this.showImportSheet = false; this.showExportSheet = false; }
+        onDisappear: () => { this.showMoveGroupSheet = false; this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showTagRuleEdit = false; this.tagRuleMenuVisible = false; this.showRulePasteAuthorization = false; this.showAiAutoGroup = false; this.aiMoveMenuKey = ''; this.showDisablePrivateConfirm = false; this.showImportSheet = false; this.showExportSheet = false; }
       })
 
       // 全屏加载态（:156）。上游 BookshelfScreen.kt:1575-1602 是一层不可取消的 Dialog，
