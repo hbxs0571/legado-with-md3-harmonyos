@@ -132,6 +132,15 @@ export struct BookCover {
    * 标识），不会互相抢锚点。
    */
   @Prop sharedKey: string = '';
+  /**
+   * 调用方指定的封面地址，非空时优先于书籍自身的显示封面。
+   *
+   * 第九表 B-4：上游编辑页画的是 `CoilBookCover(path = uiState.coverUrl, ...)`，
+   * 即**编辑中的草稿值**而不是书籍当前落库值——换封面面板选完、或手工改「封面链接」后，
+   * 预览要立刻跟着变。本地 `BookCover` 只读 `book`，草稿值进不去，故加这一层覆盖。
+   * 空串表示不覆盖，仍按 `customCoverUri → coverUri` 的显示封面口径取。
+   */
+  @Prop @Watch('onCoverSourceChanged') overrideCoverUri: string = '';
   @State imageFailed: boolean = false;
   /** 封面原图宽高比（width / height）；异步读图后回填，0 表示读不到或不需要。 */
   @State coverAspectRatio: number = 0;
@@ -193,9 +202,20 @@ export struct BookCover {
    * 相册没有可用图时返回空串、走「书本图标 + 书名」占位；关闭时用书籍自带图。
    */
   private effectiveCoverUri(): string {
+    // 第九表 I-4 / J-6：先取「显示封面」，对齐上游 `Book.kt:183`
+    // `getDisplayCover() = if (customCoverUrl.isNullOrEmpty()) coverUrl else customCoverUrl`。
+    // 本地 `customCoverUri` 是用户自选的封面（编辑页改封面写这里），`coverUri` 是书源自带的原值；
+    // 用户没改过时 customCoverUri 为空，自然回落到 coverUri。
+    const customCover = this.book.customCoverUri;
+    const displayUri: string | undefined = customCover !== undefined && customCover.length > 0
+      ? customCover : this.book.coverUri;
+    // 第九表 B-4：调用方给了草稿地址就用草稿（上游 `CoilBookCover(path = uiState.coverUrl)`），
+    // 换封面面板选完立刻能在预览里看到，不必先保存。
+    const draftUri: string = this.overrideCoverUri;
+    const resolvedUri: string | undefined = draftUri.length > 0 ? draftUri : displayUri;
     // H2-1：`coverUri` 存的是上游的 `use_default_cover` 哨兵时（换封面面板选「默认封面」），
     // 与「设置里勾了使用默认封面」同口径，直接走内置封面图，不去加载这个假地址。
-    if (this.book.coverUri === BUILTIN_DEFAULT_COVER) {
+    if (resolvedUri === BUILTIN_DEFAULT_COVER) {
       const seed = this.book.title.length > 0
         ? this.book.title
         : this.book.author.length > 0 ? this.book.author : this.book.contentPath ?? '';
@@ -205,10 +225,10 @@ export struct BookCover {
       // seed 口径照上游：书名优先，其次作者，最后封面路径（三者都空时是空串）。
       const seed = this.book.title.length > 0
         ? this.book.title
-        : this.book.author.length > 0 ? this.book.author : (this.book.coverUri ?? '');
+        : this.book.author.length > 0 ? this.book.author : (resolvedUri ?? '');
       return CoverAlbumRepository.defaultCoverPath(this.isNight, seed);
     }
-    const uri = this.book.coverUri;
+    const uri = resolvedUri;
     if (uri === undefined) { return ''; }
     // 批3（r359）：「仅 WiFi 加载封面」（上游 CoverFetcher.kt:136
     // `if (loadOnlyWifi && !appCtx.isWifiConnect) throw IOException(...)` 同款判定）。

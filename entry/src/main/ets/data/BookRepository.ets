@@ -34,7 +34,10 @@ const BOOK_COLUMNS: string =
   '`durChapterTitle`, `totalChapterNum`, `tocUrl`, `originName`, `intro`, `remark`, `customTag`, ' +
   '`charset`, `coverUrl`, `customCoverUrl`, `type`, `readConfig`, `latestChapterTime`, ' +
   '`durChapterTime`, `order`, `disableReadRecord`, `format`, `latestChapterTitle`, `lastCheckCount`, ' +
-  '`wordCount`, `isPrivate`, `variable`, `origin`, `lastCheckTime`, `canUpdate`, `syncTime`';
+  '`wordCount`, `isPrivate`, `variable`, `origin`, `lastCheckTime`, `canUpdate`, `syncTime`, ' +
+  // customIntro 追加在末尾（索引 33）：前 30 列顺序固定，新列只能往后加。
+  // 上游 Book.customIntro 是用户改写后的简介，与书源给的 intro 分列存放（Book.kt:70-72）。
+  '`customIntro`';
 
 /** books.readConfig 里本地用得上的几项，其余上游字段不解析。 */
 interface StoredReadConfig {
@@ -705,6 +708,7 @@ export class BookRepository {
       reSegment: book.reSegment,
       charset: book.charset,
       description: book.description,
+      customIntro: book.customIntro,
       remark: book.remark,
       customTag: book.customTag,
       androidOriginalPath: book.androidOriginalPath,
@@ -1341,6 +1345,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       canUpdate: RdbCodec.boolean(resultSet, 31, true),
       // syncTime 追加在 SELECT 末尾（索引 32），对齐上游 Book.syncTime 列。
       syncTime: RdbCodec.optionalInteger(resultSet, 32),
+      // customIntro 追加在 SELECT 末尾（索引 33），对齐上游 Book.customIntro（Book.kt:72）。
+      // 展示走 Book.getDisplayIntro() 的本地等价：customIntro 非空优先，否则回落 description。
+      customIntro: RdbCodec.optionalText(resultSet, 33),
       // 上游 Book.upError 存在 type 位掩码的 16 位上（BookType.upError），
       // 自动刷新失败时置位，书架/详情页据此显示「更新出错」。
       upError: (bookTypeValue & 16) !== 0,
@@ -2092,7 +2099,10 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
       book.coverUri === undefined ? null : book.coverUri,
       book.customCoverUri === undefined ? null : book.customCoverUri,
       book.description === undefined ? null : book.description,
-      null,
+      // customIntro 列（第 12 个绑定值）：对齐上游 Book.customIntro（Book.kt:72）。
+      // 上游编辑页保存时若简介与书源简介相同写 null、不同才写自定义值（ViewModel.kt:148）；
+      // 本仓的判定放在 Index.saveBookMetadata，这里只负责原样落列。
+      book.customIntro === undefined ? null : book.customIntro,
       book.remark === undefined ? null : book.remark,
       book.charset === undefined ? null : book.charset,
       BookRepository.bookTypeMask(book),

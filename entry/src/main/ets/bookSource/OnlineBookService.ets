@@ -41,9 +41,14 @@ export class OnlineBookService implements OnlineBookProvider {
     }
   }
 
+  /** 缓存目录名：书名前 9 字（去非法字符）+ bookUrl md5，对齐上游 getFolderNameNoCache。 */
+  private static folderNameOf(book: Book): string {
+    return book.title.replace(/[\\/:*?"<>|\s]/g, '').slice(0, 9) + OnlineBookService.md5(book.contentPath ?? '');
+  }
+
   /** 缓存文件目录：book_cache/<书名9字+bookUrl md5>/，对齐上游 getFolderNameNoCache。 */
   private bookDir(book: Book): string {
-    const folder = book.title.replace(/[\\/:*?"<>|\s]/g, '').slice(0, 9) + OnlineBookService.md5(book.contentPath ?? '');
+    const folder = OnlineBookService.folderNameOf(book);
     const dir = `${this.context.filesDir}/${CACHE_DIR}/${folder}`;
     try {
       if (!fileIo.accessSync(dir)) {
@@ -52,6 +57,46 @@ export class OnlineBookService implements OnlineBookProvider {
     } catch (_) {
     }
     return dir;
+  }
+
+  /**
+   * 第九表 J-10：书籍改名后把章节缓存目录搬到新名字下。
+   *
+   * 对齐上游 `help/book/BookHelp.kt:135-157 updateCacheFolder(oldBook, newBook)`：
+   * 目录名由书名派生，改名后旧目录会变成孤儿；这里在改名那一刻把旧目录整体 rename 到新目录。
+   * 上游用 `if (oldFolderName == newFolderName) return` 短路，本地同样先比目录名。
+   * 目标目录已存在时合并：逐个搬文件，同名文件以新目录已有的为准（与上游 move 失败留待清理同口径）。
+   */
+  static moveCacheFolder(context: Context, oldBook: Book, newBook: Book): void {
+    const oldName = OnlineBookService.folderNameOf(oldBook);
+    const newName = OnlineBookService.folderNameOf(newBook);
+    if (oldName === newName) {
+      return;
+    }
+    const root = `${context.filesDir}/${CACHE_DIR}`;
+    const oldDir = `${root}/${oldName}`;
+    const newDir = `${root}/${newName}`;
+    try {
+      if (!fileIo.accessSync(oldDir)) {
+        return;
+      }
+      if (!fileIo.accessSync(newDir)) {
+        fileIo.renameSync(oldDir, newDir);
+        return;
+      }
+      // 新目录已存在：逐文件合并，搬完清空旧目录。
+      const names: string[] = fileIo.listFileSync(oldDir);
+      for (const name of names) {
+        const source = `${oldDir}/${name}`;
+        const target = `${newDir}/${name}`;
+        if (!fileIo.accessSync(target)) {
+          fileIo.renameSync(source, target);
+        }
+      }
+      fileIo.rmdirSync(oldDir);
+    } catch (_) {
+      // 搬目录失败不影响保存本身：缓存丢了只是下次重新抓取，不能因此让书籍信息保存失败。
+    }
   }
 
   /** 章节缓存文件：%05d-标题md5.nb，对齐上游 BookChapter.getFileName。 */

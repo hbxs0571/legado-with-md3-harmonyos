@@ -65,6 +65,14 @@ export interface Book {
   /** 本地 TXT 当前使用的字符集；为空时按文件 BOM/内容自动识别。 */
   charset?: string;
   description?: string;
+  /**
+   * 用户自定义简介，对齐上游 `data/entities/Book.kt:72` 的 `customIntro`。
+   *
+   * 上游展示层走 `getDisplayIntro()`（`:185`）：customIntro 非空就显示它，否则回退 intro。
+   * 本地原来没有这个字段，编辑页保存时直接覆盖 description（即 intro），
+   * 书源更新简介会把用户的改写冲掉；补上之后写入独立列、展示走 `displayIntroOf()`。
+   */
+  customIntro?: string;
   /** 用户为书目添加的备注。 */
   remark?: string;
   /** 用户自定义标签，沿用 Android 逗号分隔存储。 */
@@ -159,6 +167,19 @@ export interface Book {
    * 已知字段（delTag / originFileName / sourceSize）后再落库，避免丢未知键。
    */
   variable?: string;
+}
+
+/**
+ * 展示用简介，对齐上游 `data/entities/Book.kt:185` 的 `Book.getDisplayIntro()`：
+ * `if (customIntro.isNullOrEmpty()) intro else customIntro`。
+ *
+ * 本地 `description` 对应上游 `intro`（书源给的简介），`customIntro` 是用户改写后的值。
+ * 编辑页保存时若用户没改动简介，`customIntro` 保持 undefined，展示自然回落到 `description`。
+ */
+export function displayIntroOf(book: Book): string {
+  const custom = book.customIntro;
+  if (custom !== undefined && custom.length > 0) { return custom; }
+  return book.description ?? '';
 }
 
 /**

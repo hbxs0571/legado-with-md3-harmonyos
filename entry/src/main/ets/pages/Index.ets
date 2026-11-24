@@ -97,6 +97,8 @@ import { HighlightTagRuleRepository } from '../data/HighlightTagRuleRepository';
 import { HighlightTagRule } from '../model/HighlightTagRule';
 import { TagGroupRule } from '../model/TagGroupRule';
 import { TagGroupRuleSync } from '../data/TagGroupRuleSync';
+// 第九表 J-10：保存书籍信息后要搬在线书章节缓存目录（对齐上游 BookHelp.updateCacheFolder）。
+import { OnlineBookService } from '../bookSource/OnlineBookService';
 import { CoverSettings, DEFAULT_COVER_SETTINGS, copyCoverSettings, CoverSettingsRepository } from '../data/CoverSettingsRepository';
 import { CoverRuleRepository } from '../data/CoverRuleRepository';
 import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
@@ -10347,31 +10349,84 @@ private canWriteInto(dir: string): boolean {
     updatedBook.title = title;
     updatedBook.author = author;
     updatedBook.category = category;
-    // 封面链接（上游 `cover_url`）：本地就是 `coverUri`，留空表示不改。
-    if (coverUrl.length > 0) {
-      updatedBook.coverUri = coverUrl;
+    // 第九表 J-6：对齐上游 `BookInfoEditViewModel.kt:150`
+    // `book.customCoverUrl = if (currentState.coverUrl == book.coverUrl) null else currentState.coverUrl`。
+    // 界面值与书源自带的原值相同就清掉自定义封面（回落到 coverUri），
+    // 不同才写 customCoverUri —— 这样「还原封面」永远有原值可回退。
+    const originalCover: string = currentBook.coverUri ?? '';
+    if (coverUrl !== originalCover) {
+      updatedBook.customCoverUri = coverUrl.length > 0 ? coverUrl : undefined;
+    } else {
+      updatedBook.customCoverUri = undefined;
     }
     updatedBook.groupName = groupNames.length > 0 ? groupNames.join('、') : '本地未分组';
     updatedBook.groupNames = groupNames;
     updatedBook.bookType = bookType;
     updatedBook.fixedType = fixedType;
-    updatedBook.description = description;
+    // 第九表 J-7：对齐上游 `:151`
+    // `book.customIntro = if (currentState.intro == book.intro) null else currentState.intro`。
+    // 简介不再直接覆盖 `description`（那是书源给的 intro），改动写进 customIntro，
+    // 展示走 `displayIntroOf()`；书源更新时用户的改写不会被冲掉。
+    const originalIntro: string = currentBook.description ?? '';
+    if (description !== originalIntro) {
+      updatedBook.customIntro = description.length > 0 ? description : undefined;
+    } else {
+      updatedBook.customIntro = undefined;
+    }
     updatedBook.remark = remark;
-    updatedBook.customTag = customTag;
-    const updatedBooks = this.books.map((book: Book) => book.id === updatedBook.id ? updatedBook : book);
+    // 第九表 J-8：对齐上游 `:153` `book.customTag = currentState.kindList.joinToString(",").ifBlank { null }`，
+    // 空标签存 null 而不是空串。
+    updatedBook.customTag = customTag.length > 0 ? customTag : undefined;
+    // 第九表 J-9：对齐上游 `:154` `applyTagGroupRulesForBook(book)` —— 保存后按标签规则补分组。
+    // 本地规则同步只加不减，找不到分组的规则整条跳过（见 TagGroupRuleSync 注释）。
+    let finalBook: Book = updatedBook;
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       this.showUnavailableAction('无法访问本地书架，书籍信息未保存');
       return false;
     }
     try {
+      const rules = await TagGroupRuleRepository.load(context);
+      if (rules.length > 0) {
+        const changed = await TagGroupRuleSync.apply([updatedBook], rules);
+        if (changed.length > 0) {
+          finalBook = changed[0];
+        }
+      }
+    } catch (_) {
+      // 规则同步失败不影响保存本身：分组没补上可以下次同步再补。
+    }
+    // 第九表 J-12：对齐上游 `:157-163` —— 上游靠 `books` 表 (name, author) 唯一约束抛
+    // `SQLiteConstraintException`，再单独提示「书籍信息保存失败，存在相同书名作者书籍」。
+    // 本地 `books` 表对 (name, author) 只有普通索引（`RdbSchema.ets:323`，非 unique），
+    // 写库不会抛约束错误，所以必须在保存前主动查一次同名同作者的另一本，
+    // 否则这条提示永远不会出现。
+    const duplicated = this.books.find((book: Book) =>
+      book.id !== currentBook.id && book.title === finalBook.title && book.author === finalBook.author);
+    if (duplicated !== undefined) {
+      this.showUnavailableAction('书籍信息保存失败，存在相同书名作者书籍');
+      return false;
+    }
+    // 第九表 J-10：对齐上游 `BookHelp.kt:135-157 updateCacheFolder(oldBook, newBook)` ——
+    // 书名变了，在线书的章节缓存目录名也跟着变，把旧目录搬到新名字下。
+    OnlineBookService.moveCacheFolder(context, currentBook, finalBook);
+    const updatedBooks = this.books.map((book: Book) => book.id === finalBook.id ? finalBook : book);
+    try {
       await BookRepository.saveImportedBooks(context,
         updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));
       this.books = updatedBooks;
-      this.selectedBook = updatedBook;
+      this.selectedBook = finalBook;
       return true;
-    } catch (_) {
-      this.showUnavailableAction('书籍信息保存失败，未更改原有信息');
+    } catch (error) {
+      // 第九表 J-12：对齐上游 `:161-163` 对 `SQLiteConstraintException` 单独给出
+      // 「书籍信息保存失败，存在相同书名作者书籍」。本地 books 表对 (name, author) 只有普通索引，
+      // 正常情况下不会抛约束错误，但仍按错误原文区分，保留上游这条分支的语义。
+      const message = error instanceof Error ? error.message : '';
+      if (/UNIQUE|constraint/i.test(message)) {
+        this.showUnavailableAction('书籍信息保存失败，存在相同书名作者书籍');
+      } else {
+        this.showUnavailableAction('书籍信息保存失败，未更改原有信息');
+      }
       return false;
     }
   }
