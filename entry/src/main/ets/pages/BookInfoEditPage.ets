@@ -733,6 +733,7 @@ export struct BookInfoEditPage {
       bookName: this.title,
       author: this.author,
       isNight: false,
+      coverSettings: this.coverSettings,
       onSelect: (coverUrl: string) => {
         this.coverUrl = coverUrl;
         this.changeCoverVisible = false;

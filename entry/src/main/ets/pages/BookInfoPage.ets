@@ -2864,6 +2864,7 @@ export struct BookInfoPage {
         bookName: this.book.title,
         author: this.book.author,
         isNight: this.isNight,
+        coverSettings: this.coverSettings,
         onSelect: (coverUrl: string) => this.chooseCoverCandidate(coverUrl),
         onMessage: (message: string) => this.onUnavailableAction(message)
       })

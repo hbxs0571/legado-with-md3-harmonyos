@@ -15,6 +15,7 @@ import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookCover } from '../components/BookCover';
 import { bookCoverSharedElementKey, bookshelfSharedCoverSourceId } from '../data/BookCoverSharedElement';
 import { BookGroupCard } from '../components/BookGroupCard';
+import { GroupEditorSheet } from '../components/booksource/GroupEditorSheet';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
@@ -287,16 +288,16 @@ export struct BookshelfPage {
   @State layoutDraft: BookshelfLayoutSettings = copyBookshelfLayout(DEFAULT_BOOKSHELF_LAYOUT);
   @State @Watch('onBookshelfDataDirty') selectedFilter: string = '全部';
   @State showGroupManager: boolean = false;
+  /**
+   * 分组编辑面板的编辑目标；`undefined` 表示新建，`undefined` + showGroupEditor 为假表示不在编辑态。
+   *
+   * 第十表 H-4：编辑表单已抽成 `components/booksource/GroupEditorSheet.ets`，
+   * 与书架管理页共用同一实现（上游 `BookInfoSheets.kt:108-190` 的 `GroupSelectSheet`
+   * 里「新建分组」与每行「编辑」都指向同一个 `GroupEditSheet`）。
+   * 草稿态（名称/排序/刷新/隐私/封面/标签规则）全部搬进组件，本页只留「编辑哪个组」。
+   */
   @State showGroupEditor: boolean = false;
-  @State editingGroupId: number = -1;
-  @State draftName: string = '';
-  @State draftSort: number = -1;
-  @State draftRefresh: boolean = true;
-  @State draftPrivate: boolean = false;
-  /** 关闭已有隐私分组时的二次确认（上游 GroupEditSheet.kt:109/210-215 的 showDisablePrivateDialog）。 */
-  @State showDisablePrivateConfirm: boolean = false;
-  @State draftCover: string = '';
-  @State pendingDeleteGroupId: number = -1;
+  @State editingGroup: BookGroup | undefined = undefined;
   @State showSearch: boolean = false;
   @State @Watch('onBookshelfDataDirty') searchQuery: string = '';
   @State collapsedHeader: boolean = false;
@@ -345,9 +346,6 @@ export struct BookshelfPage {
   @State tagColorEditIndex: number = -1;
   /** 取色器输入的文字色 hex。 */
   @State tagColorPickerHex: string = '';
-  /** 分组编辑面板内的标签匹配规则开关与表达式（:249 / :250）。 */
-  @State draftRuleEnabled: boolean = false;
-  @State draftRulePattern: string = '';
   /** 「粘贴」需先弹 PasteButton 授权层，不能直接读剪贴板（ProfileSubPages.ets:1394）。 */
   @State showRulePasteAuthorization: boolean = false;
   /** 独立标签规则面板是否打开（C-15：上游 TagGroupRuleEditSheet）。 */
@@ -1777,160 +1775,32 @@ export struct BookshelfPage {
     return `${group.groupId}_${group.groupName}_${group.show ? 1 : 0}_${group.order}_${group.bookSort}_${group.isPrivate ? 1 : 0}_${group.cover ?? ''}`;
   }
 
-  /** 切换隐私分组开关：原本是隐私的分组被关闭时，先弹确认（上游 showDisablePrivateDialog）。 */
-  private toggleDraftPrivate(enabled: boolean): void {
-    if (!enabled) {
-      const editing = this.groups.find((group: BookGroup) => group.groupId === this.editingGroupId);
-      if (editing !== undefined && editing.isPrivate === true) {
-        this.showDisablePrivateConfirm = true;
-        return;
-      }
-    }
-    this.draftPrivate = enabled;
-  }
-
-  /** 打开分组编辑面板，把当前属性与标签匹配规则一并灌进草稿。 */
-  private async openGroupEditor(group: BookGroup | undefined): Promise<void> {
-    this.draftRuleEnabled = false;
-    this.draftRulePattern = '';
-    this.showRulePasteAuthorization = false;
-    if (group === undefined) {
-      this.editingGroupId = -1;
-      this.draftName = '';
-      this.draftSort = -1;
-      this.draftRefresh = true;
-      this.draftPrivate = false;
-      this.draftCover = '';
-    } else {
-      this.editingGroupId = group.groupId;
-      this.draftName = group.groupName;
-      this.draftSort = group.bookSort;
-      this.draftRefresh = group.enableRefresh;
-      this.draftPrivate = group.isPrivate;
-      this.draftCover = group.cover ?? '';
-      // 规则按分组名关联。规则表启动时不 load（全仓只有备份链路 load），这里显式
-      // load 一次拿权威数组，避免 getAll() 读到空缓存导致已有规则显示不出来。
-      const context = this.getUIContext().getHostContext();
-      if (context !== undefined) {
-        const rules = await TagGroupRuleRepository.load(context);
-        const matched = rules.find((rule: TagGroupRule) => rule.groupName === group.groupName);
-        if (matched !== undefined) {
-          this.draftRuleEnabled = true;
-          this.draftRulePattern = matched.pattern;
-        }
-      }
-    }
+  /** 打开分组编辑面板；表单本身由 GroupEditorSheet 自管草稿态。 */
+  private openGroupEditor(group: BookGroup | undefined): void {
+    this.editingGroup = group;
     // 长按文件夹视图的分组卡也会走到这里，此时分组管理面板还没打开；
     // bindSheet 的开关条件是 showGroupManager，所以要一并置真，否则面板不弹出。
     this.showGroupManager = true;
     this.showGroupEditor = true;
   }
 
-  /** 提交分组编辑面板；名称冲突等错误由调用方回传提示。规则一并写回并触发全量同步。 */
-  private async submitGroupDraft(): Promise<void> {
-    const name = this.draftName.trim();
-    if (name.length === 0) { this.onUnavailableAction('分组名称不能为空'); return; }
-    const pattern = this.draftRulePattern.trim();
-    // 保存前校验正则，非法整笔不写：上游 BookGroupMutationRepository.saveGroup
-    // 首行就是 Regex(ruleToSave.pattern)（不合法直接抛、事务不提交），本地同款前置拦截。
-    if (this.draftRuleEnabled && pattern.length > 0) {
-      try { new RegExp(pattern); } catch (error) {
-        this.onUnavailableAction('正则表达式不合法');
-        return;
-      }
-    }
-    const draft: BookGroupDraft = {
-      groupName: name,
-      enableRefresh: this.draftRefresh,
-      bookSort: this.draftSort,
-      isPrivate: this.draftPrivate,
-      cover: this.draftCover.length > 0 ? this.draftCover : undefined
-    };
-    if (this.editingGroupId > 0) {
-      await this.onUpdateGroup(this.editingGroupId, draft);
-      if (this.selectedFilter !== name) {
-        const previous = this.groups.find((group: BookGroup) => group.groupId === this.editingGroupId);
-        if (previous !== undefined && this.selectedFilter === previous.groupName) { this.selectedFilter = name; }
+  /**
+   * 分组保存：`groupId > 0` 走更新，`-1` 走新建。
+   *
+   * 第十表 H-4：表单与规则落库搬进 GroupEditorSheet 后，本页只保留落库分派，
+   * 以及「当前筛选正好是这个组」时跟着改名，避免筛选器指向已不存在的组名。
+   */
+  private async saveGroupDraft(groupId: number, draft: BookGroupDraft): Promise<void> {
+    if (groupId > 0) {
+      const previous = this.groups.find((group: BookGroup) => group.groupId === groupId);
+      await this.onUpdateGroup(groupId, draft);
+      if (previous !== undefined && this.selectedFilter === previous.groupName
+        && this.selectedFilter !== draft.groupName) {
+        this.selectedFilter = draft.groupName;
       }
     } else {
       await this.onAddGroupDraft(draft);
     }
-    await this.saveDraftRule(name, pattern);
-    this.showGroupEditor = false;
-    // 规则写完后立刻全量同步一次（规则个位数、书几百本，几十毫秒级，不用做增量）。
-    await this.onApplyTagGroupRules();
-  }
-
-  /** 把面板里的规则草稿写回规则表。规则按保存后的分组名关联：编辑改名时
-   *  Index.updateBookshelfGroup 已先把旧名规则同步成新名，这里只按 name 找。 */
-  private async saveDraftRule(name: string, pattern: string): Promise<void> {
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) { return; }
-    const rules = await TagGroupRuleRepository.load(context);
-    const index = rules.findIndex((rule: TagGroupRule) => rule.groupName === name);
-    if (this.draftRuleEnabled && pattern.length > 0) {
-      if (index >= 0) {
-        const existing = rules[index];
-        rules[index] = { id: existing.id, pattern: pattern, groupName: name, order: existing.order };
-      } else {
-        rules.push({ id: Date.now(), pattern: pattern, groupName: name, order: rules.length });
-      }
-    } else if (index >= 0) {
-      rules.splice(index, 1);
-    } else {
-      return;
-    }
-    await TagGroupRuleRepository.save(context, rules);
-  }
-
-  /** 复制规则，形状与上游 GSON.toJson(rule) 一致：{id,pattern,groupName,order}。 */
-  private async copyGroupRule(): Promise<void> {
-    const rule: TagGroupRule = {
-      id: 0, pattern: this.draftRulePattern,
-      groupName: this.draftName.trim(), order: 0
-    };
-    try {
-      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, JSON.stringify(rule));
-      await pasteboard.getSystemPasteboard().setData(data);
-      this.onUnavailableAction('规则已复制');
-    } catch (error) {
-      this.onUnavailableAction('规则复制失败');
-    }
-  }
-
-  /** 粘贴规则：由 PasteButton 授权后读剪贴板，只回填表达式。 */
-  private async pasteGroupRule(result: PasteButtonOnClickResult): Promise<void> {
-    if (result !== PasteButtonOnClickResult.SUCCESS) {
-      this.onUnavailableAction('未获得剪贴板授权');
-      return;
-    }
-    try {
-      const data = await pasteboard.getSystemPasteboard().getData();
-      if (data.getRecordCount() === 0) { this.onUnavailableAction('剪贴板为空'); return; }
-      const parsed = JSON.parse(data.getRecord(0).toPlainText()) as TagGroupRule;
-      if (typeof parsed.pattern === 'string') { this.draftRulePattern = parsed.pattern; }
-    } catch (error) {
-      this.onUnavailableAction('粘贴的规则格式不正确');
-    }
-  }
-
-  /** 分组排序方式菜单，选项来自 BOOK_SORT_OPTIONS。 */
-  @Builder
-  private SortMenu() {
-    UiMenuPanel({
-      items: this.sortMenuItems(),
-      panelWidth: SHELF_MENU_WIDTH,
-      onSelect: (key: string) => {
-        this.sortMenuVisible = false;
-        this.draftSort = Number(key);
-      }
-    })
-  }
-
-  private sortMenuItems(): UiMenuItem[] {
-    return BOOK_SORT_OPTIONS.map((option: BookSortOption): UiMenuItem => {
-      return { key: `${option.value}`, title: option.label, selected: option.value === this.draftSort };
-    });
   }
 
   @Builder
@@ -2952,219 +2822,6 @@ export struct BookshelfPage {
     }.width('100%').height('100%').backgroundColor('#17181E')
   }
 
-  /** 分组编辑面板内容，对应上游 GroupEditSheet。 */
-  /** 关闭隐私分组确认（上游 GroupEditSheet.kt:301-311 AppAlertDialog）。 */
-  @Builder
-  private DisablePrivateConfirm() {
-    Column() {
-      Text('关闭隐私分组').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
-      Text('关闭后，本组书籍可能在公开书架中显示，是否确认关闭？')
-        .fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
-        .alignSelf(ItemAlign.Start).padding({ left: 18, right: 18 })
-      Row() {
-        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
-          .onClick(() => { this.showDisablePrivateConfirm = false; })
-        Blank()
-        Text('确认关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
-          .onClick(() => {
-            this.draftPrivate = false;
-            this.showDisablePrivateConfirm = false;
-          })
-      }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
-    }.width('100%').alignItems(HorizontalAlign.Start)
-    .constraintSize({ maxWidth: 320 })
-    .backgroundColor(this.themeColorSurfaceElevated)
-    .borderRadius(12)
-  }
-
-  @Builder
-  private GroupEditorContent() {
-    Column() {
-      Row() {
-        Text(this.editingGroupId > 0 ? '编辑分组' : '新建分组')
-          .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        // 上游编辑态的 endAction 是 GroupResetCoverAction（GroupManageSheet.kt:190-199），
-        // 选了封面才出现，点一下清空封面。
-        if (this.draftCover.length > 0) {
-          Text('清除封面').fontSize(LABEL_LARGE).fontColor('#D99AA5').padding(8)
-            .onClick(async () => {
-              if (this.editingGroupId > 0) { await this.onClearGroupCover(this.editingGroupId); }
-              this.draftCover = '';
-            })
-        }
-        Text('保存').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
-          .onClick(async () => { await this.submitGroupDraft(); })
-        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(8)
-          .onClick(() => this.showGroupEditor = false)
-      }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
-      Scroll() {
-        Column() {
-          // C-2：上游 GroupEditSheet.kt:154-176 是
-          // Row(fillMaxWidth(), Alignment.Top, spacedBy(16.dp)){ CoilBookCover(width=96.dp)
-          //   .clickable{ selectImage.launch() }; Column(weight(1f), spacedBy(8.dp)){ 分组名称输入; 排序下拉 } }。
-          // 即封面 96dp 宽、与右侧表单并排，不是上下堆叠。
-          Row() {
-            Stack({ alignContent: Alignment.Center }) {
-              if (this.draftCover.length > 0) {
-                Image(this.draftCover).width('100%').height('100%').borderRadius(4).objectFit(ImageFit.Cover)
-              } else {
-                AppGlyph({ name: 'add', glyphSize: 24, tint: this.themeColorTextTertiary })
-              }
-            }
-            .width(96).aspectRatio(5 / 7).backgroundColor('#22232A').borderRadius(4)
-            .onClick(async () => {
-              // E-4：上游的 coverPath 是草稿态，新建分组也能先选封面，保存时一起落库。
-              // 已保存的分组走落库接口，未保存的走只复制不写表的草稿接口。
-              if (this.editingGroupId > 0) {
-                const cover = await this.onChooseGroupCover(this.editingGroupId);
-                if (cover.length > 0) { this.draftCover = cover; }
-              } else {
-                const draft = await this.onChooseGroupCoverDraft();
-                if (draft.length > 0) { this.draftCover = draft; }
-              }
-            })
-
-            Column() {
-              TextInput({ text: this.draftName, placeholder: '分组名称' }).width('100%').height(40)
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-                .backgroundColor('#22232A').borderRadius(9)
-                .onChange((value: string) => this.draftName = value)
-
-              Row() {
-                Text('排序').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-                Text(bookSortLabel(this.draftSort)).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
-                  .onClick(() => { this.sortMenuVisible = !this.sortMenuVisible; })
-                  .bindPopup(this.sortMenuVisible, {
-                    builder: this.SortMenu,
-                    placement: Placement.Bottom,
-                    popupColor: '#00000000',
-                    enableArrow: false,
-                    autoCancel: true,
-                    width: SHELF_MENU_WIDTH,
-                    onStateChange: (event: PopupStateChangeParam) => { this.sortMenuVisible = event.isVisible; }
-                  })
-              }.width('100%').height(40).padding({ left: 12, right: 12 })
-                .backgroundColor('#22232A').borderRadius(9).margin({ top: 8 })
-            }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 16 })
-          }.width('100%').alignItems(VerticalAlign.Top).padding({ left: 16, right: 16, top: 12, bottom: 12 })
-
-          Row() {
-            Column() {
-              Text('下拉刷新').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-              Text('关闭后该分组的下拉刷新不触发；仅对本地 TXT 生效').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            UiSwitchControl({
-              checked: this.draftRefresh,
-              interactive: false,
-              onChange: (enabled: boolean) => this.draftRefresh = enabled
-            })
-          }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
-          .onClick(() => this.draftRefresh = !this.draftRefresh)
-
-          // 隐私分组（GroupEditSheet.kt:202-217）：标题与副标题照上游 private_group /
-          // private_group_desc；关闭一个「原本就是隐私」的分组要先二次确认，
-          // 因为关闭后本组书籍会重新出现在公开书架。
-          Row() {
-            Column() {
-              Text('设为隐私分组').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-              Text('开启后，本分组内的书籍不会出现在公开书架，进入该分组需要验证。单本标记为私密的书不同：它仍留在书架上，封面与文字会被遮挡，验证后才显示。')
-                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            UiSwitchControl({
-              checked: this.draftPrivate,
-              interactive: false,
-              onChange: (enabled: boolean) => this.toggleDraftPrivate(enabled)
-            })
-          }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
-          .onClick(() => this.toggleDraftPrivate(!this.draftPrivate))
-
-          // 标签匹配规则（:249 / :250）：本地不另建独立规则面板，开关与多行输入框
-          // 直接放在分组编辑面板里，对应上游 GroupEditSheet.kt:221-238。
-          Row() {
-            Column() {
-              Text('标签匹配规则').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-              Text(this.draftRuleEnabled ? '启用后分组将根据书籍标签自动匹配' : '关闭后分组为手动管理')
-                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            UiSwitchControl({
-              checked: this.draftRuleEnabled,
-              interactive: false,
-              onChange: (enabled: boolean) => this.draftRuleEnabled = enabled
-            })
-          }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
-          .onClick(() => this.draftRuleEnabled = !this.draftRuleEnabled)
-
-          if (this.draftRuleEnabled) {
-            Column() {
-              TextArea({ placeholder: '匹配标签的正则表达式', text: this.draftRulePattern })
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
-                .placeholderColor(this.themeColorTextTertiary)
-                .height(96).backgroundColor('#22232A').borderRadius(9).padding(10)
-                .width('100%')
-                .onChange((value: string) => this.draftRulePattern = value)
-              Row() {
-                Text('复制').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding({ right: 16 })
-                  .onClick(() => { this.copyGroupRule(); })
-                Text('粘贴').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
-                  .onClick(() => this.showRulePasteAuthorization = true)
-                Blank()
-              }.width('100%').padding({ top: 8 })
-              // 读剪贴板需要 PasteButton 授权，不能裸调 getData()（ProfileSubPages.ets:1394）。
-              if (this.showRulePasteAuthorization) {
-                PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
-                  .onClick(async (_event: ClickEvent, result: PasteButtonOnClickResult) => {
-                    await this.pasteGroupRule(result);
-                    this.showRulePasteAuthorization = false;
-                  })
-              }
-            }.width('100%').padding({ left: 16, right: 16, top: 4, bottom: 10 })
-              .alignItems(HorizontalAlign.Start)
-          }
-
-          if (this.editingGroupId > 0) {
-            Row() {
-              Text(this.pendingDeleteGroupId === this.editingGroupId ? '确认删除' : '删除分组')
-                .fontSize(LABEL_LARGE).fontColor('#D99AA5').layoutWeight(1)
-                .onClick(() => {
-                  if (this.pendingDeleteGroupId === this.editingGroupId) {
-                    const removed = this.groups.find((group: BookGroup) => group.groupId === this.editingGroupId);
-                    // 删除前真算该分组的书数，提示用户这些书会移出到未分组。
-                    const count = removed !== undefined
-                      ? this.books.filter((book: Book) => (book.groupNames ?? []).includes(removed.groupName)).length
-                      : 0;
-                    this.getUIContext().showAlertDialog({
-                      title: '删除分组',
-                      message: `该分组下的 ${count} 本书会移出到未分组`,
-                      autoCancel: true,
-                      primaryButton: { value: '取消', action: () => {} },
-                      secondaryButton: {
-                        value: '删除',
-                        action: () => {
-                          this.onRemoveGroup(this.editingGroupId);
-                          if (removed !== undefined && this.selectedFilter === removed.groupName) {
-                            this.selectedFilter = '全部';
-                          }
-                          this.pendingDeleteGroupId = -1;
-                          this.showGroupEditor = false;
-                        }
-                      }
-                    });
-                  } else {
-                    this.pendingDeleteGroupId = this.editingGroupId;
-                  }
-                })
-              if (this.pendingDeleteGroupId === this.editingGroupId) {
-                Text('取消').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).padding({ left: 12 })
-                  .onClick(() => this.pendingDeleteGroupId = -1)
-              }
-            }.width('100%').padding({ left: 16, right: 16, top: 16, bottom: 16 })
-          }
-        }.width('100%')
-      }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
-    }.width('100%').height('100%').backgroundColor('#17181E')
-  }
-
   /** 分组面板：管理网格与编辑表单共用一个 sheet，避免同一组件挂两个 bindSheet 只有后者生效。 */
   @Builder
   private GroupManagerSheet() {
@@ -3173,19 +2830,25 @@ export struct BookshelfPage {
     } else if (this.showTagRuleEdit) {
       this.TagRuleEditContent()
     } else if (this.showGroupEditor) {
-      Stack() {
-        this.GroupEditorContent()
-        // 关闭隐私分组确认：浮在编辑面板之上（上游 GroupEditSheet.kt:301-311 是 AlertDialog）。
-        if (this.showDisablePrivateConfirm) {
-          Column() {
-            this.DisablePrivateConfirm()
+      // 编辑表单是公共组件，书架管理页用同一份实现（上游 BookInfoSheets.kt:108-190）。
+      GroupEditorSheet({
+        editingGroup: this.editingGroup,
+        books: this.books,
+        onSave: (groupId: number, draft: BookGroupDraft) => this.saveGroupDraft(groupId, draft),
+        onChooseCover: (groupId: number) => this.onChooseGroupCover(groupId),
+        onChooseCoverDraft: () => this.onChooseGroupCoverDraft(),
+        onClearCover: (groupId: number) => this.onClearGroupCover(groupId),
+        onRemove: (groupId: number) => {
+          this.onRemoveGroup(groupId);
+          if (this.editingGroup !== undefined && this.selectedFilter === this.editingGroup.groupName) {
+            this.selectedFilter = '全部';
           }
-          .width('100%').height('100%')
-          .backgroundColor('#66000000')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-        }
-      }.width('100%').height('100%')
+          this.showGroupEditor = false;
+        },
+        onCancel: () => this.showGroupEditor = false,
+        onMessage: (message: string) => this.onUnavailableAction(message),
+        onApplyTagGroupRules: () => this.onApplyTagGroupRules()
+      }).width('100%').height('100%')
     } else {
       this.GroupManagerGrid()
     }
@@ -5076,7 +4739,7 @@ export struct BookshelfPage {
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showMoveGroupSheet || this.showTagRuleEdit || this.showAiAutoGroup || this.showImportSheet || this.showExportSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
-        onDisappear: () => { this.showMoveGroupSheet = false; this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showTagRuleEdit = false; this.tagRuleMenuVisible = false; this.showRulePasteAuthorization = false; this.showAiAutoGroup = false; this.aiMoveMenuKey = ''; this.showDisablePrivateConfirm = false; this.showImportSheet = false; this.showExportSheet = false; }
+        onDisappear: () => { this.showMoveGroupSheet = false; this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showTagRuleEdit = false; this.tagRuleMenuVisible = false; this.showRulePasteAuthorization = false; this.showAiAutoGroup = false; this.aiMoveMenuKey = ''; this.showGroupEditor = false; this.showImportSheet = false; this.showExportSheet = false; }
       })
 
       // 全屏加载态（:156）。上游 BookshelfScreen.kt:1575-1602 是一层不可取消的 Dialog，

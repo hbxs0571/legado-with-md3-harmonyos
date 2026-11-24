@@ -1,8 +1,9 @@
 import { UiSwitchControl } from '../components/UiSwitchControl';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiDropdown } from '../components/settings/UiDropdown';
+import { GroupEditorSheet } from '../components/booksource/GroupEditorSheet';
 import { Book } from '../model/Book';
-import { BookGroup } from '../model/BookGroup';
+import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
 import { BookExporter, ExportTarget } from '../data/BookExporter';
@@ -98,6 +99,19 @@ export struct BookshelfManagePage {
    */
   onOpenChangeSource: (book: Book) => void = (_book: Book) => {};
 
+  /**
+   * 第十表 H-4：选组面板里的「新建分组 / 编辑」走 `GroupEditorSheet`，
+   * 与书架页共用同一份表单；落库与选封面由 Index 统一提供。
+   */
+  onAddGroupDraft: (draft: BookGroupDraft) => Promise<void> = async (_draft: BookGroupDraft) => {};
+  onUpdateGroup: (groupId: number, draft: BookGroupDraft) => Promise<void> =
+    async (_groupId: number, _draft: BookGroupDraft) => {};
+  onChooseGroupCover: (groupId: number) => Promise<string> = async (_groupId: number) => '';
+  onChooseGroupCoverDraft: () => Promise<string> = async () => '';
+  onClearGroupCover: (groupId: number) => Promise<void> = async (_groupId: number) => {};
+  onRemoveGroup: (groupId: number) => void = (_groupId: number) => {};
+  onApplyTagGroupRules: () => Promise<void> = async () => {};
+
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#F1F2F6';
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#AEB0BA';
@@ -189,7 +203,11 @@ export struct BookshelfManagePage {
   @State moreMenuVisible: boolean = false;
   @State selectionMenuVisible: boolean = false;
   @State groupSelectBookKeys: string[] = [];
-  @State preselectedGroupName: string = '';
+  /** 第十表 H-4：选组面板是多选，这里是当前选中的组名集合（上游是 group 位掩码）。 */
+  @State selectedGroupNames: string[] = [];
+  /** 打开选组面板时要编辑的分组（「新建分组 / 每行编辑」共用同一个编辑面板）。 */
+  @State groupEditing: BookGroup | undefined = undefined;
+  @State showGroupEditor: boolean = false;
   @State rowMenuKey: string = '';
   /** 批2（:457）：日志面板显隐；内容取 AppLog 内存缓冲快照。 */
   @State showLogSheet: boolean = false;
@@ -806,6 +824,23 @@ export struct BookshelfManagePage {
     return names;
   }
 
+  /**
+   * 多选面板的候选项：只列真实分组。
+   *
+   * 上游 `GroupSelectSheet(groups = userGroups)` 的列表里没有「未分组」这一项，
+   * 清空分组就是全不选再确认（掩码 0L）。本地沿用同一口径，
+   * `moveGroupOptions()` 里那个「无分组」哨兵只留给别处用。
+   */
+  private groupNamesForSelection(): string[] {
+    const names: string[] = [];
+    this.groups.forEach((group: BookGroup) => {
+      if (group.groupId > 0 && group.groupName.length > 0 && !names.includes(group.groupName)) {
+        names.push(group.groupName);
+      }
+    });
+    return names;
+  }
+
   private effectiveGroup(): string {
     return this.currentGroupName.length > 0 ? this.currentGroupName : '全部';
   }
@@ -1349,35 +1384,98 @@ export struct BookshelfManagePage {
     this.pendingDeleteKeys = [];
   }
 
+  /**
+   * 打开选组面板并算预选。
+   *
+   * 第十表 H-4：上游 `BookshelfManageScreen.kt:365-370 resolveSelectionGroupMask()` 是
+   * 「所有选中书的 group 掩码全同 → 预选该掩码，否则 0L（不预选）」；面板本身
+   * `BookInfoSheets.kt:108-190 GroupSelectSheet` 用位掩码做**多选**，每点一行
+   * `selectedGroupId ± group.groupId`。本地没有掩码列，等价物是 groupNames 数组：
+   * 全同则整份预选，不同则空。
+   */
   private openGroupSelect(keys: string[]): void {
     if (keys.length === 0) { return; }
     this.groupSelectBookKeys = keys;
-    // 所有选中书的 groupNames 排序后 join 完全一致才预选那个分组名，否则不预选。
     const selected = this.books.filter((book: Book) => keys.includes(this.rowKey(book)));
-    let common = '';
+    let preset: string[] = [];
     if (selected.length > 0) {
-      const first = [...(selected[0].groupNames ?? [])].sort().join('、');
-      const same = selected.every((book: Book) =>
-        [...(book.groupNames ?? [])].sort().join('、') === first);
-      common = same ? first : '';
+      const first = [...(selected[0].groupNames ?? [])].sort();
+      const same = selected.every((book: Book) => {
+        const names = [...(book.groupNames ?? [])].sort();
+        return names.length === first.length && names.every((name: string, index: number) => name === first[index]);
+      });
+      preset = same ? first : [];
     }
-    this.preselectedGroupName = common;
+    this.selectedGroupNames = preset;
     this.showGroupSelect = true;
   }
 
-  private async applyGroup(groupName: string): Promise<void> {
+  /** 多选：点一行即在该组名上取反（上游 `selectedGroupId ± group.groupId`）。 */
+  private toggleGroupName(groupName: string): void {
+    const current = this.selectedGroupNames.slice(0);
+    const index = current.indexOf(groupName);
+    if (index >= 0) {
+      current.splice(index, 1);
+    } else {
+      current.push(groupName);
+    }
+    this.selectedGroupNames = current;
+  }
+
+  private isGroupNameSelected(groupName: string): boolean {
+    return this.selectedGroupNames.includes(groupName);
+  }
+
+  /**
+   * 落库：整份替换为选中的组名集合。
+   *
+   * 上游 `BookshelfManageScreenViewModel.kt:716-724 moveBooksToGroup` 直接把掩码
+   * `replaceGroup(bookUrls, safeGroupId)` 写进去，多选组合的掩码是合法输入；
+   * 本地 `BookRepository.setBooksGroups` 同款整份替换（内部 maskFromNames）。
+   */
+  /** 打开分组编辑面板；`undefined` 表示新建（上游 GroupSelectSheet 的 startAction）。 */
+  private openGroupEditor(group: BookGroup | undefined): void {
+    this.groupEditing = group;
+    this.showGroupEditor = true;
+  }
+
+  /**
+   * 分组保存：`groupId > 0` 更新、`-1` 新建。
+   * 改名时同步「当前分组筛选」与「选组面板里已选中的名字」，否则它们会指向旧名。
+   */
+  private async saveGroupDraft(groupId: number, draft: BookGroupDraft): Promise<void> {
+    if (groupId > 0) {
+      const previous = this.groups.find((group: BookGroup) => group.groupId === groupId);
+      await this.onUpdateGroup(groupId, draft);
+      if (previous !== undefined) {
+        if (this.currentGroupName === previous.groupName) { this.currentGroupName = draft.groupName; }
+        const index = this.selectedGroupNames.indexOf(previous.groupName);
+        if (index >= 0) {
+          const next = this.selectedGroupNames.slice(0);
+          next[index] = draft.groupName;
+          this.selectedGroupNames = next;
+        }
+      }
+    } else {
+      await this.onAddGroupDraft(draft);
+    }
+  }
+
+  private async applyGroupSelection(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { this.onUnavailableAction('无法访问本地书架'); return; }
     this.showGroupSelect = false;
     const keys = this.groupSelectBookKeys;
+    const names = this.selectedGroupNames.slice(0);
     const targets = this.books.filter((book: Book) => keys.includes(this.rowKey(book)));
     if (targets.length === 0) { return; }
     try {
-      // group 列是位掩码；setBooksGroup 内部用 maskFromNames（加法，不用 32 位会被截断的位或）。
-      await BookRepository.setBooksGroup(context, targets.map((book: Book) => this.bookKey(book)), groupName);
+      await BookRepository.setBooksGroups(context, targets.map((book: Book) => this.bookKey(book)), names);
       await this.onLibraryChanged();
       this.clearSelection();
-      this.onUnavailableAction(groupName.length > 0 ? `已移入「${groupName}」` : '已移出分组');
+      this.onUnavailableAction(names.length === 0
+        ? `已移动 ${targets.length} 本到未分组`
+        : `已移动 ${targets.length} 本到${names.join('、')}`);
     } catch (error) {
       this.onUnavailableAction('修改分组失败');
     }
@@ -1569,11 +1667,7 @@ export struct BookshelfManagePage {
         }
         this.RowActionButton('导出', () => this.openExportSheet([book]))
         Divider().vertical(true).height(16).color('#3A3D48').margin({ left: 4, right: 4 })
-        this.RowActionButton('分组', () => {
-          this.groupSelectBookKeys = [this.rowKey(book)];
-          this.preselectedGroupName = book.groupNames !== undefined && book.groupNames.length > 0 ? book.groupNames[0] : '';
-          this.showGroupSelect = true;
-        })
+        this.RowActionButton('分组', () => this.openGroupSelect([this.rowKey(book)]))
         Divider().vertical(true).height(16).color('#3A3D48').margin({ left: 4, right: 4 })
         this.RowActionButton('更多',
           () => this.rowMenuKey = this.rowMenuKey === this.rowKey(book) ? '' : this.rowKey(book))
@@ -1982,27 +2076,71 @@ export struct BookshelfManagePage {
     }.width('100%')
   }
 
+  /**
+   * 选组面板：多选 + 新建分组 + 每行编辑。
+   *
+   * 对齐上游 `BookInfoSheets.kt:108-190 GroupSelectSheet`：标题 `group_select`，
+   * 右上「新建」（`group_add`）与每行「编辑」（`edit`）都打开同一个 `GroupEditSheet`，
+   * 底部「确认」（`confirm`）。上游用位掩码 `selectedGroupId and group.groupId != 0L`
+   * 判选中、`± group.groupId` 切换；本地等价物是 `selectedGroupNames` 数组。
+   */
   @Builder
   private GroupSelectContent() {
     Column() {
-      Text('移入分组').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
-        .width('100%').margin({ bottom: 8 })
-      if (this.preselectedGroupName.length > 0) {
-        Text(`当前预选：${this.preselectedGroupName}`).fontSize(BODY_SMALL)
-          .fontColor(this.themeColorTextTertiary).width('100%')
-      }
-      ForEach(this.moveGroupOptions(), (name: string) => {
+      Row() {
+        Text('分组选择').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
+        // 上游 startAction = MediumTonalButton(Icons.Default.Add, group_add)。
         Row() {
-          Text(name).fontSize(TITLE_SMALL).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          if (name === (this.preselectedGroupName.length > 0 ? this.preselectedGroupName : '无分组')) {
-            AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: this.themeColorAccent })
+          AppGlyph({ name: 'add', glyphSize: 20, tint: this.themeColorAccent })
+          Text('新建分组').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).margin({ left: 6 })
+        }
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .borderRadius(20)
+        .onClick(() => this.openGroupEditor(undefined))
+        .accessibilityText('新建分组')
+      }.width('100%').margin({ bottom: 8 })
+
+      List({ space: 8 }) {
+        ForEach(this.groupNamesForSelection(), (name: string) => {
+          ListItem() {
+            Row() {
+              // 18×18 自绘勾选框：选中填强调色 + 勾，未选只留描边。
+              Stack({ alignContent: Alignment.Center }) {
+                if (this.isGroupNameSelected(name)) {
+                  AppGlyph({ name: 'profileCheck', glyphSize: 14, tint: '#101116' })
+                }
+              }
+              .width(18).height(18).borderRadius(4)
+              .backgroundColor(this.isGroupNameSelected(name) ? this.themeColorAccent : '#00000000')
+              .border({
+                width: this.isGroupNameSelected(name) ? 0 : 1.5,
+                color: this.themeColorTextTertiary
+              })
+              Text(name).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+                .layoutWeight(1).margin({ left: 10 })
+              // 每行「编辑」：上游 trailingAction = SmallPlainButton(Icons.Default.Edit, edit)。
+              Text('编辑').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).padding(6)
+                .onClick(() => {
+                  const target = this.groups.find((group: BookGroup) => group.groupName === name);
+                  if (target !== undefined) { this.openGroupEditor(target); }
+                })
+            }
+            .width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
+            .borderRadius(12).backgroundColor(this.themeColorSurfaceSecondary)
+            .onClick(() => this.toggleGroupName(name))
           }
-        }.width('100%').padding({ top: 10, bottom: 10 })
-          .onClick(() => this.applyGroup(name === '无分组' ? '' : name))
-      }, (name: string) => name)
-      Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
-        .width('100%').padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
-        .margin({ top: 12 }).onClick(() => this.showGroupSelect = false)
+        }, (name: string) => name)
+      }.width('100%').constraintSize({ maxHeight: 420 }).scrollBar(BarState.Off)
+
+      Row({ space: 12 }) {
+        Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center).layoutWeight(1)
+          .padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+          .onClick(() => this.showGroupSelect = false)
+        // 上游 endAction = MediumTonalButton(Icons.Default.Check, confirm)。
+        Text('确认').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center).layoutWeight(1)
+          .padding({ top: 12, bottom: 12 }).backgroundColor(this.themeColorAccent).borderRadius(14)
+          .onClick(() => { void this.applyGroupSelection(); })
+      }.width('100%').margin({ top: 12 })
     }.width('100%')
   }
 
@@ -2058,6 +2196,33 @@ export struct BookshelfManagePage {
         this.ExportSheetContent()
       } else if (this.showSegmentedExport) {
         this.SegmentedExportSheetContent()
+      } else if (this.showGroupEditor) {
+        // 第十表 H-4：分组编辑表单与书架页共用同一个组件（上游 GroupSelectSheet → GroupEditSheet）。
+        GroupEditorSheet({
+          editingGroup: this.groupEditing,
+          books: this.books,
+          onSave: (groupId: number, draft: BookGroupDraft) => this.saveGroupDraft(groupId, draft),
+          onChooseCover: (groupId: number) => this.onChooseGroupCover(groupId),
+          onChooseCoverDraft: () => this.onChooseGroupCoverDraft(),
+          onClearCover: (groupId: number) => this.onClearGroupCover(groupId),
+          onRemove: (groupId: number) => {
+            this.onRemoveGroup(groupId);
+            const removed = this.groupEditing;
+            if (removed !== undefined) {
+              if (this.currentGroupName === removed.groupName) { this.currentGroupName = ''; }
+              const index = this.selectedGroupNames.indexOf(removed.groupName);
+              if (index >= 0) {
+                const next = this.selectedGroupNames.slice(0);
+                next.splice(index, 1);
+                this.selectedGroupNames = next;
+              }
+            }
+            this.showGroupEditor = false;
+          },
+          onCancel: () => this.showGroupEditor = false,
+          onMessage: (message: string) => this.onUnavailableAction(message),
+          onApplyTagGroupRules: () => this.onApplyTagGroupRules()
+        }).width('100%').height('100%')
       } else if (this.showGroupSelect) {
         this.GroupSelectContent()
       } else if (this.showLogSheet) {
@@ -2327,7 +2492,7 @@ export struct BookshelfManagePage {
     }.width('100%').height('100%').backgroundColor(this.themeColorSurfacePrimary)
       .bindSheet(this.showDeleteConfirm || this.showExportSheet || this.showGroupSelect || this.showLogSheet ||
         this.showSegmentedExport || this.showBatchDownloadConfirm || this.showDownloadAllConfirm ||
-        this.showChangeSourceStatus || this.showExportFolderPicker,
+        this.showChangeSourceStatus || this.showExportFolderPicker || this.showGroupEditor,
         this.ManageSheet(), {
           height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
           onDisappear: () => {
@@ -2340,6 +2505,7 @@ export struct BookshelfManagePage {
             this.showDownloadAllConfirm = false;
             this.showChangeSourceStatus = false;
             this.showExportFolderPicker = false;
+            this.showGroupEditor = false;
           }
         })
   }

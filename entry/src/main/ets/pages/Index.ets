@@ -13278,7 +13278,15 @@ private canWriteInto(dir: string): boolean {
             onBatchChangeSource: (books: Book[]) => { this.batchChangeSourceBooks = books; },
             // G-1：行内「更多 → 换源」走单本 ChangeSourceSheet（自动搜候选），
             // 与批量向导是两条链（上游 BookshelfManageScreen.kt:770-788 / :790-817）。
-            onOpenChangeSource: (book: Book) => { this.changeSourceBook = book; }
+            onOpenChangeSource: (book: Book) => { this.changeSourceBook = book; },
+            // 第十表 H-4：管理页选组面板的「新建分组 / 编辑」复用书架页的分组落库链路。
+            onAddGroupDraft: (draft: BookGroupDraft) => this.addBookshelfGroupDraft(draft),
+            onUpdateGroup: (groupId: number, draft: BookGroupDraft) => this.updateBookshelfGroup(groupId, draft),
+            onChooseGroupCover: (groupId: number) => this.chooseBookshelfGroupCover(groupId),
+            onChooseGroupCoverDraft: () => this.chooseBookshelfGroupCoverDraft(),
+            onClearGroupCover: (groupId: number) => this.clearBookshelfGroupCover(groupId),
+            onRemoveGroup: (groupId: number) => this.removeBookshelfGroup(groupId),
+            onApplyTagGroupRules: () => this.applyTagGroupRules()
           })
         .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.FILE_MANAGER) {
