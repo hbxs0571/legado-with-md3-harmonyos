@@ -1223,6 +1223,7 @@ export struct SearchPage {
 
   /** 上游 `ExpandSource(origin, sourceName)`：打开面板并取第 1 页。 */
   private async expandSource(origin: string): Promise<void> {
+    console.error(`[T8DBG] expandSource origin=${origin}`);
     let sourceName = origin;
     for (const item of this.state.results) {
       if (item.book.origin === origin && item.book.originName.length > 0) {
@@ -2008,7 +2009,13 @@ export struct SearchPage {
       ? Color.Transparent
       : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
     .bindSheet(this.sheetVisible(), this.sheetContent(), {
-      height: this.state.showScopeSheet ? SheetSize.MEDIUM : SheetSize.FIT_CONTENT,
+      // 展开源面板的内容是 `layoutWeight(1)` 的列表，高度必须由 Sheet 给定；
+      // 若用 `FIT_CONTENT` 会形成「内容要高度、高度看内容」的循环，面板高度塌成 0
+      // 而表现为「点了没反应」。上游 `ExpandedSourceSheet` 是整屏高的底部面板，
+      // 这里对应 `LARGE`。范围选择面板固定 `MEDIUM`，其余内容自适应。
+      height: this.state.showExpandedSource
+        ? SheetSize.LARGE
+        : (this.state.showScopeSheet ? SheetSize.MEDIUM : SheetSize.FIT_CONTENT),
       dragBar: true,
       showClose: false,
       backgroundColor: this.themeColorSurfaceTertiary,
