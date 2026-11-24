@@ -199,7 +199,12 @@ export struct BookInfoEditPage {
 
   /** A-9：上游 `uiState.book?.let { ... }`，book 为 null 时整页内容不渲染。 */
   private hasBook(): boolean {
-    return this.book.id.length > 0;
+    // 本地没有异步载入过程：`Index.openBookInfo` 进详情页前必定已设 `selectedBook`，
+    // 编辑页再由详情页进入，书一定在手。判据不能只看 `id`——在线书的 `id` 由
+    // `BookRepository.bookIdFromUrl` 从 URL 末段派生，末段为空的 URL 会得到空串，
+    // 只看 id 会把「有书」误判成「没书」，整页内容区空白。
+    return this.book.id.length > 0 || this.book.title.length > 0
+      || (this.book.contentPath ?? '').length > 0;
   }
 
   /** 每次进入都从当前书籍取一遍，避免上一本书的编辑残留带过来。 */

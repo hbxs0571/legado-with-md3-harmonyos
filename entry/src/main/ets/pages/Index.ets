@@ -10340,8 +10340,17 @@ private canWriteInto(dir: string): boolean {
   private async saveBookMetadata(title: string, author: string, category: string,
     description: string, remark: string, customTag: string, groupNames: string[],
     bookType: BookMediaType, fixedType: boolean, coverUrl: string = ''): Promise<boolean> {
-    const currentBook = this.books.find((book: Book) => book.id === this.selectedBook.id);
-    if (currentBook === undefined || !currentBook.isLocal) {
+    // 第九表 J-4：对齐上游 `BookInfoEditViewModel.kt:127-164 save()` —— 上游对在线书同样保存，
+    // 里面 `val local = if (book.isLocal) BookType.local else 0` 就是专门为在线书留的分支。
+    // 本地原先用 `!currentBook.isLocal` 把在线书挡在门外，导致编辑页对在线书完全无效
+    // （上机实测：点保存后原地不动、无任何提示）。
+    // 匹配键也不能用 `id`：在线书的 `id` 由 `BookRepository.bookIdFromUrl` 从 URL 末段派生，
+    // 末段为空的 URL（例如 `http://www.yetianlian.info/yt98739/`）会得到空串，
+    // 空串相等会把别的在线书误认成目标书。改用 `bookUrlOf`，与删书、排序、接回同口径。
+    const currentBookUrl: string = BookRepository.bookUrlOf(this.selectedBook);
+    const currentBook = this.books.find((book: Book) =>
+      BookRepository.bookUrlOf(book) === currentBookUrl);
+    if (currentBook === undefined) {
       this.showUnavailableAction('当前书籍不在本地书架，未保存书籍信息');
       return false;
     }
@@ -10401,8 +10410,10 @@ private canWriteInto(dir: string): boolean {
     // 本地 `books` 表对 (name, author) 只有普通索引（`RdbSchema.ets:323`，非 unique），
     // 写库不会抛约束错误，所以必须在保存前主动查一次同名同作者的另一本，
     // 否则这条提示永远不会出现。
+    const finalBookUrl: string = BookRepository.bookUrlOf(finalBook);
     const duplicated = this.books.find((book: Book) =>
-      book.id !== currentBook.id && book.title === finalBook.title && book.author === finalBook.author);
+      BookRepository.bookUrlOf(book) !== finalBookUrl
+        && book.title === finalBook.title && book.author === finalBook.author);
     if (duplicated !== undefined) {
       this.showUnavailableAction('书籍信息保存失败，存在相同书名作者书籍');
       return false;
@@ -10410,7 +10421,8 @@ private canWriteInto(dir: string): boolean {
     // 第九表 J-10：对齐上游 `BookHelp.kt:135-157 updateCacheFolder(oldBook, newBook)` ——
     // 书名变了，在线书的章节缓存目录名也跟着变，把旧目录搬到新名字下。
     OnlineBookService.moveCacheFolder(context, currentBook, finalBook);
-    const updatedBooks = this.books.map((book: Book) => book.id === finalBook.id ? finalBook : book);
+    const updatedBooks = this.books.map((book: Book) =>
+      BookRepository.bookUrlOf(book) === finalBookUrl ? finalBook : book);
     try {
       await BookRepository.saveImportedBooks(context,
         updatedBooks.filter((book: Book) => BookRepository.isPersistableBook(book)));

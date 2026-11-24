@@ -1,5 +1,5 @@
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
-import { Book, BookChapter } from '../model/Book';
+import { Book, BookChapter, displayIntroOf } from '../model/Book';
 import { ReaderBookmark } from '../model/ReaderBookmark';
 import { ReaderMarking } from '../model/ReaderMarking';
 import { BookCover } from '../components/BookCover';
@@ -519,7 +519,10 @@ export struct CatalogPage {
    * 与上游不等价，但比直接渲染带标签的原文好。
    */
   private displayIntro(): string {
-    let text = (this.book.description ?? '').trim();
+    // 第九表 I-5：上游 `ReaderBookSheet.kt:515 val rawIntro = book?.getDisplayIntro()`，
+    // 取的是「显示简介」（自定义简介优先）。本地原读 `description`（书源原值），
+    // 用户在编辑页改写的简介在这里看不到。
+    let text = displayIntroOf(this.book).trim();
     if (text.length === 0) { return ''; }
     text = text.replace(/^<(useweb|usehtml|md)>/i, '');
     text = text.replace(/@onclick:[^\s<>]*/gi, '');

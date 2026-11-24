@@ -1,6 +1,6 @@
 import { DURATION_FADE } from '../components/UiTokens';
 import { fileIo, fileUri } from '@kit.CoreFileKit';
-import { Book, BookMediaType, bookCoverColor } from '../model/Book';
+import { Book, BookMediaType, bookCoverColor, displayIntroOf } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
 import { BookSourceRepository } from '../data/BookSourceRepository';
@@ -1474,9 +1474,13 @@ export struct BookInfoPage {
   /** H3-1：提交备注，其余元数据原样回传（上游只改 remark）。 */
   private async submitRemark(): Promise<void> {
     this.isBusy = true;
+    // 第九表 J-7：简介这里必须回传「显示简介」（`customIntro` 优先）。
+    // `saveBookMetadata` 拿它和 `description` 原值比：相等就清掉 `customIntro`。
+    // 若这里传 `description` 原值，而用户之前改写过简介，比较会判成「没改」，
+    // 把用户的自定义简介顺手清空——只改备注却丢了简介。
     const ok = await this.onSaveMetadata(
       this.book.title, this.book.author, this.book.category,
-      this.book.description ?? '', this.remarkDraft,
+      displayIntroOf(this.book), this.remarkDraft,
       this.book.customTag ?? '', this.book.groupNames ?? [],
       this.book.bookType ?? 'text', this.book.fixedType === true);
     this.isBusy = false;
@@ -2390,9 +2394,12 @@ export struct BookInfoPage {
             // 批7（:1156/:1157/:1158/:1164/:1165）：三个富文本前缀由 RichIntro 分派 ——
             // `<usehtml>` 与 `<useweb>` 走 Web（后者带同源拦截），`<md>` 走 MarkdownIntro，
             // 无前缀仍是这一处原来的 Text，字号行高颜色一个字没改。
-            if (this.book.description !== undefined && this.book.description.trim().length > 0) {
+            // 第九表 I-5：对齐上游 `BookInfoViewModel.kt:2113 intro = getDisplayIntro()` ——
+            // 详情页展示的是「显示简介」（自定义简介优先），不是书源给的 intro 原值。
+            // 编辑页把用户改写存进 `customIntro`（J-7），这里必须走同一个 getter 才看得到。
+            if (displayIntroOf(this.book).trim().length > 0) {
               RichIntro({
-                intro: this.book.description,
+                intro: displayIntroOf(this.book),
                 baseUrl: this.bookBaseUrl,
                 textColor: '#D0D2DB',
                 webNotice: '简介页面含外部跳转，已拦截',
