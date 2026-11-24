@@ -19,7 +19,9 @@ import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '.
 import { RelatedBooksBanner } from '../components/RelatedBooksBanner';
 import { RelatedBooksModule, RelatedBooksService } from '../bookSource/RelatedBooksService';
 import { SearchBookItem } from '../bookSource/SourceModels';
-import { ChangeCoverCandidate, ChangeCoverCoordinator, CHANGE_COVER_DEFAULT_URL } from '../bookSource/ChangeCoverCoordinator';
+// H2-1：换封面面板走公共组件，与编辑页共用同一份实现
+// （上游 `BookInfoScreen.kt:524` 与 `BookInfoEditScreen.kt:150` 调的是同一个 `ChangeCoverSheet`）。
+import { ChangeCoverSheet } from '../components/booksource/ChangeCoverSheet';
 // H2-6/H2-7/H2-8：网页书的下载文件清单与后缀三判据（对齐上游 `BookInfoWebFile`）。
 import { BookInfoWebFile, WebFileCoordinator } from '../bookSource/WebFileCoordinator';
 // H2-8：压缩包条目列举与按条目导入。
@@ -268,18 +270,12 @@ export struct BookInfoPage {
   @State photoPreviewVisible: boolean = false;
   /** H2-1：换封面面板是否打开（上游 `BookInfoSheet.CoverPicker`）。 */
   @State coverSheetVisible: boolean = false;
-  /** H2-1：换封面候选列表，首项恒为「默认封面」。 */
-  @State coverCandidates: ChangeCoverCandidate[] = [];
-  /** H2-2：搜索中显示顶部进度条，并让右上按钮切成「停止」（上游 `isSearching`）。 */
-  @State coverSearching: boolean = false;
   /** H3-5：全屏忙碌指示器（上游 `state.isBusy`）。 */
   @State isBusy: boolean = false;
   /** H3-1：编辑备注对话框是否打开。 */
   @State remarkDialogVisible: boolean = false;
   /** H3-1：编辑备注对话框里的草稿文本。 */
   @State remarkDraft: string = '';
-  /** 换封面搜索的代次号：面板关闭或再次点搜索时自增，旧请求回来直接丢弃。 */
-  private coverSearchToken: number = 0;
   /** 大图加载失败过，改用打包内置默认封面兜底（上游 `PhotoDialog.kt:71` 的 `.error(...)`）。 */
   @State photoPreviewFailed: boolean = false;
   /** 溢出菜单「日志」打开的日志面板（上游 `BookInfoMenuAction.ShowLog` → `AppLogSheet`）。 */
@@ -890,57 +886,20 @@ export struct BookInfoPage {
 
   /**
    * H2-1：打开换封面面板（上游 `BookInfoIntent.CoverClick -> setSheet(BookInfoSheet.CoverPicker)`）。
-   * 面板一打开先只放「默认封面」这一项，然后自动跑一次搜索。
+   *
+   * 面板本体走公共组件 `ChangeCoverSheet`（与编辑页共用同一份实现）——上游
+   * `BookInfoScreen.kt:524` 与 `BookInfoEditScreen.kt:150` 调的是同一个 `ChangeCoverSheet` composable，
+   * 本地原先在详情页另写了一份 `CoverSheet()`，两份实现并存。搜索、进度条、网格、停搜逻辑
+   * 全在组件内部，这里只负责「打开」与「选中后回写」。
    */
   private openCoverSheet(): void {
-    this.coverCandidates = [];
-    this.coverSearching = false;
     this.coverSheetVisible = true;
-    this.runCoverSearch();
-  }
-
-  /**
-   * H2-1：跑一次换封面搜索。上游 `startOrStopSearch()` 在空闲时启动、搜索中则停止，
-   * 这里用代次号 `coverSearchToken` 实现「停止」——旧请求回来时代次号已变，结果直接丢弃。
-   */
-  private runCoverSearch(): void {
-    if (this.coverSearching) {
-      this.coverSearchToken = this.coverSearchToken + 1;
-      this.coverSearching = false;
-      return;
-    }
-    this.coverSearchToken = this.coverSearchToken + 1;
-    const token = this.coverSearchToken;
-    this.coverSearching = true;
-    const name = this.book.title;
-    // 上游 `ChangeCoverViewModel.initData` 先去掉作者前缀再拿去搜。
-    const author = realAuthorOf(this.book.author);
-    ChangeCoverCoordinator.searchCovers(name, author).then((candidates: ChangeCoverCandidate[]) => {
-      if (token !== this.coverSearchToken) { return; }
-      this.coverCandidates = candidates;
-      this.coverSearching = false;
-    }).catch((error: Error) => {
-      if (token !== this.coverSearchToken) { return; }
-      this.coverSearching = false;
-      this.onUnavailableAction(error.message.length > 0 ? error.message : '换封面搜索失败');
-    });
   }
 
   /** H2-1：选中某个候选，回写封面并关面板（上游 `SelectCover -> updateCover`）。 */
   private chooseCoverCandidate(coverUrl: string): void {
-    this.coverSearchToken = this.coverSearchToken + 1;
-    this.coverSearching = false;
     this.coverSheetVisible = false;
     this.onSelectCoverUrl(coverUrl);
-  }
-
-  /** H2-1：候选在网格里显示用的图片地址；默认封面项换成内置封面图。 */
-  private coverCandidatePath(candidate: ChangeCoverCandidate): string {
-    if (candidate.coverUrl === CHANGE_COVER_DEFAULT_URL || candidate.coverUrl === BUILTIN_DEFAULT_COVER) {
-      const seed = this.book.title.length > 0 ? this.book.title : this.book.author;
-      return CoverAlbumRepository.defaultCoverPath(this.isNight, seed);
-    }
-    return candidate.coverUrl;
   }
 
   /** 书名点击：带书名进搜索页（:296）。 */
@@ -1223,60 +1182,6 @@ export struct BookInfoPage {
   }
 
   /** 封面全屏预览（:301）：点任意处关闭。 */
-  /**
-   * H2-1/H2-2/H2-3：换封面面板，对齐上游 `BookInfoSheets.kt:194-272 ChangeCoverSheet`。
-   * 标题「封面换源」+ 右上搜索/停止按钮 + 搜索中顶部进度条 + 三列封面网格。
-   */
-  @Builder
-  private CoverSheet() {
-    Column() {
-      Row() {
-        Text('封面换源').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
-          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-        // 上游 endAction：搜索中是 MoreVert（more_menu），空闲是 Refresh（refresh）。
-        // AppGlyph 是组件，不能挂 textAlign；用外层 Row 做 40×40 命中区并居中。
-        Row() {
-          AppGlyph({
-            name: this.coverSearching ? 'more' : 'profileRefresh',
-            glyphSize: 20, tint: this.themeColorTextPrimary
-          })
-        }
-          .width(40).height(40).justifyContent(FlexAlign.Center)
-          .accessibilityText(this.coverSearching ? '更多菜单' : '重新搜索')
-          .onClick(() => this.runCoverSearch())
-      }.width('100%').padding({ bottom: 12 })
-      if (this.coverSearching) {
-        // 上游 `AppLinearProgressIndicator(Modifier.fillMaxWidth())` + Spacer(12.dp)。
-        Progress({ value: 50, total: 100, type: ProgressType.Linear })
-          .width('100%').height(4).color(this.themeColorAccent)
-        Blank().height(12)
-      }
-      if (this.coverCandidates.length === 0) {
-        Text(this.coverSearching ? '正在搜索封面…' : '没有搜到可用封面')
-          .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
-          .width('100%').textAlign(TextAlign.Center).padding({ top: 32, bottom: 32 })
-      } else {
-        Grid() {
-          ForEach(this.coverCandidates, (candidate: ChangeCoverCandidate) => {
-            GridItem() {
-              Column({ space: 4 }) {
-                Image(this.coverCandidatePath(candidate))
-                  .width('100%').aspectRatio(5 / 7).objectFit(ImageFit.Cover)
-                  .borderRadius(4)
-                  .onError(() => {})
-                Text(candidate.originName).fontSize(LABEL_SMALL).fontWeight(FontWeight.Medium)
-                  .fontColor(this.themeColorTextSecondary).maxLines(2)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-              }.width('100%').padding(8).borderRadius(4)
-                .onClick(() => this.chooseCoverCandidate(candidate.coverUrl))
-            }
-          }, (candidate: ChangeCoverCandidate) => `${candidate.sourceUrl}-${candidate.coverUrl}`)
-        }
-        .columnsTemplate('1fr 1fr 1fr').columnsGap(12).rowsGap(12)
-        .width('100%').layoutWeight(1).scrollBar(BarState.Off)
-      }
-    }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
-  }
 
   /**
    * H3-3/H3-4：封面大图对话框。
@@ -2639,11 +2544,9 @@ export struct BookInfoPage {
           this.logDetailText = '';
           this.deleteShowCopiesList = false;
           this.knowledgeSheetVisible = false;
-          // H2-1：面板关掉就把在途的换封面搜索作废，别再回填结果。
-          this.coverSearchToken = this.coverSearchToken + 1;
+          // H2-1：面板关掉即收起换封面面板；在途搜索由 `ChangeCoverSheet`
+          // 自己在 `aboutToDisappear` 里作废（它持有令牌）。
           this.coverSheetVisible = false;
-          this.coverSearching = false;
-          this.coverCandidates = [];
           this.variableSheetVisible = false;
           // H2-6：面板收起时清空清单与压缩包路径，避免下次打开先闪上一次的文件。
           this.webFileSheetVisible = false;
@@ -2955,7 +2858,15 @@ export struct BookInfoPage {
       this.VariableSheet()
     } else if (this.coverSheetVisible) {
       // H2-1：换封面面板优先于其他面板（上游是独立 Sheet 类型）。
-      this.CoverSheet()
+      // 走公共组件，与编辑页 `BookInfoEditPage` 共用同一份实现
+      // （上游 `BookInfoScreen.kt:524` 与 `BookInfoEditScreen.kt:150` 调的是同一个 composable）。
+      ChangeCoverSheet({
+        bookName: this.book.title,
+        author: this.book.author,
+        isNight: this.isNight,
+        onSelect: (coverUrl: string) => this.chooseCoverCandidate(coverUrl),
+        onMessage: (message: string) => this.onUnavailableAction(message)
+      })
     } else if (this.knowledgeSheetVisible) {
       // I-2：知识库四面板（人物/关系网/世界知识/事记），由人物区四个入口按钮打开。
       BookKnowledgeSheet({
