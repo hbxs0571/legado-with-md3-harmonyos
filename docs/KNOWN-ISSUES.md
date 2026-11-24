@@ -2941,6 +2941,69 @@ README 只提了已读/未读，实际有五个阅读状态组（在读 / 未读
 
 ---
 
+## 外部参考：FlClash-ohos 的形变指示器与动态取色（r370 盘点，只作参考不照搬）
+
+**背景**：用户发现 [`tljk/FlClash-ohos`](https://github.com/tljk/FlClash-ohos)（FlClash 的鸿蒙分支，Flutter for OpenHarmony）仪表盘「网络检测」卡片里有一个「很像形变组件」的东西，并怀疑它支持动态取色。本轮只读代码核对这两个问题，并判断对本地（ArkUI/ArkTS）意味着什么。**没有上机、没有改任何代码、没有测帧率。**
+
+### 一、那个控件是 `CommonCircleLoading`，一个参数化形状插值指示器
+
+- 位置 [`lib/views/dashboard/widgets/network_detection.dart`](https://github.com/tljk/FlClash-ohos/blob/v0.8.99-ohos/lib/views/dashboard/widgets/network_detection.dart)，卡片下半截 `FadeThroughBox`（`:122`）里，**只在「正在取 IP、还没取到」时出现**（`:142`）；取到就换 IP 文本，超时换红色 `Timeout`。
+- 容器 `Container(padding: EdgeInsets.all(2))` + `AspectRatio(1)`，默认直径 48（[`lib/widgets/loading.dart`](https://github.com/tljk/FlClash-ohos/blob/v0.8.99-ohos/lib/widgets/loading.dart) 的 `defaultDimension = 48`），实际绘制按 `38 / 48` 缩放。
+- 它不是 Flutter SDK 或 M3 官方组件，是应用自写的（`lib/widgets/loading.dart` 276 行，`enum LoadingIndicatorM3EVariant { defaultStyle, contained }`）。
+- 手法是 **M3 Expressive `LoadingIndicator` 那一套**，但形状序列比官方长：官方的 `DeterminateIndicatorPolygons` 只有 `[Circle.transformed(rotateZ(18°)), SoftBurst]` 两个，这里排了 7 个。
+
+### 二、做法：参数化多边形 + 逐字段插值 + 每帧重算路径
+
+- 每个形状是一组 7 个参数 `_ShapeSpec(points, innerRadiusRatio, pointRounding, valleyRounding, widthScale, heightScale, squash)`；7 组序列实测：软爆发 `10 / 0.78 / 0.55 / 0.35`、九边饼干 `9 / 0.86 / 0.62 / 0.28`、五边形 `5 / 0.81 / 0.25`、水平胶囊 `2 / 1 / 0.5 / 0.5` + `0.95 / 0.52` + squash `1`、太阳 `8 / 0.58 / 0.52 / 0.18`、四边饼干 `4 / 0.78 / 0.62 / 0.28`、垂直椭圆 `2 / 1 / 0.5 / 0.5` + `0.62 / 0.95` + squash `1`。
+- 每 650ms（`_morphInterval`）前进一个形状；进度由弹簧驱动：`SpringSimulation(SpringDescription.withDampingRatio(mass: 1, stiffness: 200, ratio: 0.6), 0, 1, 5, snapToEnd: true)`，`AnimationController.unbounded` + `animateWith`，不足 650ms 用 `Future.delayed` 补齐。
+- **变形是参数在插值**：`_ShapeSpec.lerp(a, e, p)` 逐字段线性插值（`a + (e - a) * p`），每帧用插出来的参数重建 `StarBorder`，再 `canvas.drawPath(border.getOuterPath(rect))`。不是两张图交叉淡入。
+- **旋转两段叠加**：每变形一次目标 `+90°`，另有 4666ms 一圈的持续自转；最终角度 = `progress × 90° + 累计目标 + 全局自转`。
+- 两种外观：`defaultStyle`（前景 `colorScheme.primary`、透明底）/ `contained`（前景 `onPrimaryContainer`、底 `primaryContainer`、999 圆角）；`polygons` 参数可换自定义形状列表。
+- 细节：`RepaintBoundary` 隔离重绘、`Semantics` 给无障碍标签。
+
+### 三、对本地：能复刻，但必须走 Canvas，不能走 `Polygon.points`
+
+- 本地已有能力：本文件「组件级形变：ArkUI 能做，`@AnimatableExtend` 已上机验证（r356）」一节，实测 `@AnimatableExtend` 能驱动 `Polygon.points` 逐帧插值（探针在 `N:/HarmonyProjects/tmp/probe-animatable/`，118.6–240.0 次/秒）。
+- **但那条路复刻不了这个控件**：`Polygon.points` 是「顶点数固定、逐点插值」，r356 验证的是同一形状内的顶点微调；而这里 `points` 从 10 变到 9 再到 5、2，**顶点数本身在变**，靠 `points` 数组插不过去。要么补一层「参数化多边形 → 生成点列」的转换（等价于 `StarBorder`），要么直接 Canvas 逐帧重绘。
+- 要补的算法：`StarBorder.getOuterPath` 的圆角星形路径生成（`points` 个尖 + `innerRadiusRatio` 内径 + `pointRounding` 尖圆角 + `valleyRounding` 谷圆角 + `squash` 挤压）。这段来自 Flutter 框架源码，不是 M3 规范里的值，要自己移植或按参数重写。
+- 结论：**属于「有能力但没做」，不是「平台不给」**；代价是要写一段路径生成 + 一个逐帧重绘的绘制层（`displaySync` 或 `@Watch` 驱动），不是现成 API。
+
+### 四、动态取色：确实支持，链路完整
+
+- 依赖：`pubspec.yaml` 的 `dynamic_color: ^2.1.0` 与 `material_color_utilities: ^0.13.0`（ohos 分支；main 分支还是 `^1.8.1`）。
+- 取色：[`lib/bootstrap.dart:51`](https://github.com/tljk/FlClash-ohos/blob/v0.8.99-ohos/lib/bootstrap.dart) 的 `_initDynamicColor()` → `_getSystemPrimaryPalette()` 用 `DynamicColorPlugin.channel.invokeMethod<List<dynamic>>` 拿系统主色的整条色调，`TonalPalette.fromList(...)` 还原；随后 `lightSeed = Color(palette.get(40))`、`darkSeed = Color(palette.get(80))`（M3 的 tone 40 / tone 80），另取 `DynamicColorPlugin.getAccentColor()`。两段各自 `try/catch`，失败只打 warning、不阻断启动。
+- 用色：[`lib/providers/state/theme.dart`](https://github.com/tljk/FlClash-ohos/blob/v0.8.99-ohos/lib/providers/state/theme.dart) 的 `genColorScheme(brightness)`，优先级 **用户手选主色 > 动态 seed（按 brightness 取 light/dark）> 系统 accent > 默认主色**；最后 `ColorScheme.fromSeed(seedColor, brightness, schemeVariant, pureBlack)` 派生全套色位。唯一消费点 `lib/application.dart:92`。
+
+### 五、鸿蒙这一支能不能真拿到系统色：倾向「拿不到」
+
+- 鸿蒙壳 `ohos/entry/src/main/ets/plugins/` 只有两个自写插件：`AppPlugin.ets`（通道 `com.follow.clash/app`，实测 9 个方法：`moveTaskToBack` / `updateExcludeFromRecents` / `initShortcuts` / `getPackages` / `getChinaPackageNames` / `getPackageIcon` / `tip` / `didCrashOnPreviousExecution` / `setBackgroundRunning`）与 `ServicePlugin.ets`，**没有 dynamic_color 的鸿蒙端实现**。
+- `pubspec.yaml` 的 `dependency_overrides` 把 `sqlite3` / `native_toolchain_rust` / `device_info_plus` / `package_info_plus` / `connectivity_plus` / `file_picker` 换成了自己的 fork，**唯独没换 `dynamic_color`**。
+- 所以推断：`invokeMethod` 若无对应平台实现会抛 `MissingPluginException`，被 `bootstrap.dart` 那两段 `catch` 吞掉 → `lightSeed` / `darkSeed` 皆 `null`、`accentColor` 回默认 → `seedColor = defaultPrimaryColor`。**即代码支持动态取色，鸿蒙版大概率只能退回默认主色。**
+- 这条**未验证**：没查到 `dynamic_color 2.1.0` 包内是否自带 `ohos/` 平台目录（pub.dev 请求超时），也没在设备上跑过。
+
+### 六、对本地：系统取色这半截平台不给，派生这半截可做
+
+- 鸿蒙没有等价的「从壁纸 / 系统主题取主色」API，本地 `data/ThemePalette.ets` 的「动态取色」档（index 0）只能回落 `DEFAULT_LIGHT` / `DEFAULT_DARK`（此前已在 KI-THEME2 记过）。
+- 可借的是后半截：**种子色 → `fromSeed` 派生全套色位**。这正是 KI-THEME2 缺的那层 M3 派生能力（本地只广播 9 个键，上游 34 个色位有真实引用、`LegadoColorScheme` 共 53 个）。
+- `material_color_utilities` 的 HCT + tonal palette 是纯计算、无平台依赖，可以移植到 ArkTS；落地时归 KI-THEME2 的那批，不单独立项。
+
+### 七、判断
+
+- **形变指示器**：方案可借、代码不能借（Flutter `CustomPainter` vs ArkUI Canvas）；要做就写 Canvas 版，并把「形状序列长度」对齐 Compose M3 的 2 形状，而不是照抄这 7 个——本项目对齐对象是上游，不是 FlClash。
+- **动态取色**：系统取色不可得，别写「支持动态取色」这类承诺；派生能力可做，归 KI-THEME2。
+- 两条都不是「平台卡住」，只有动态取色的**系统读取**这一步是平台不给。
+
+### 八、没验
+
+- 没在 FlClash 的鸿蒙包上跑过，没看到它实际显示成什么样；
+- 没查到 `dynamic_color` 是否自带 ohos 平台实现；
+- 7 形状序列在 ArkUI Canvas 上的帧率没测（r356 的 118.6–240.0 次/秒是 `@AnimatableExtend` + `Polygon.points` 的数，不能直接套到这里）；
+- `StarBorder.getOuterPath` 的圆角星形算法没读到 Flutter 源码细节，只按参数名与调用点判断。
+
+关联：本文件「M3 色位缺口（r352 盘点，未修）」与「组件级形变：ArkUI 能做，`@AnimatableExtend` 已上机验证（r356）」两节。
+
+---
+
 ## 设备范围
 
 - API 12 真机兼容尚未验证。HOS 模拟器检查只代表验证记录中列出的操作；N 端 API 26 数据不作为 E 端或 API 12 结论。
