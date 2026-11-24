@@ -4,6 +4,7 @@ import { util } from '@kit.ArkTS';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { Book, BookChapter, BookMediaType, LocalBookFormat, bookCoverColor, bookCoverMark } from '../model/Book';
 import { AppLog } from '../lib/AppLog';
+import { BookSourceCallback, CALLBACK_EVENT_DEL_BOOK_SHELF } from '../bookSource/BookSourceCallback';
 import { EpubRepository, EpubChapterMeta } from './EpubRepository';
 import { UmdRepository } from './UmdRepository';
 import { PdfRepository } from './PdfRepository';
@@ -352,6 +353,31 @@ export class BookRepository {
   private static readonly selectBookByUrlSql: string =
     `SELECT ${BOOK_COLUMNS} FROM \`books\` WHERE \`bookUrl\` = ?`;
 
+  /**
+   * 按 url 批量回查书目（上游 `BookDao.getBooksByUrls`，见
+   * `BookshelfManageScreenViewModel.kt:395` 的 `bookRepository.getBooksByUrls(bookUrls)`）。
+   *
+   * 管理页跨分组选中时，选中的书不一定在当前分组列表里，靠「当前列表过滤」会漏；
+   * 这里直接查库拿实体，与分组无关。
+   */
+  static async getBooksByUrls(context: Context, bookUrls: string[]): Promise<Book[]> {
+    if (bookUrls.length === 0) { return []; }
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const placeholders = bookUrls.map(() => '?').join(', ');
+    const sql = `SELECT ${BOOK_COLUMNS} FROM \`books\` WHERE \`bookUrl\` IN (${placeholders})`;
+    const resultSet = await store.querySql(sql, bookUrls);
+    const books: Book[] = [];
+    try {
+      while (resultSet.goToNextRow()) {
+        books.push(BookRepository.readBookRow(resultSet));
+      }
+    } finally {
+      resultSet.close();
+    }
+    return books;
+  }
+
   /** 写入或覆盖一行书目。36 列全部给值，主键冲突时整行覆盖。 */
   private static readonly upsertBookSql: string =
     'INSERT OR REPLACE INTO `books` (`bookUrl`, `tocUrl`, `origin`, `originName`, `name`, `author`, ' +
@@ -406,6 +432,14 @@ export class BookRepository {
   /** 写库前把 delTag / 源文件名 / 源文件大小合成一个 variable JSON；都没有则写 null。 */
   private static buildBookVariable(book: Book): string | null {
     const payload: Record<string, string | number> = {};
+    // 先把 Book.variable 里的原始 JSON 整条搬过来，再覆盖下面三个本地已知字段，
+    // 这样 `custom` 等未知键（书籍变量编辑面板写入）不会因为重建 JSON 被抹掉。
+    if (book.variable !== undefined && book.variable.length > 0) {
+      try {
+        const parsed = JSON.parse(book.variable) as Record<string, string | number>;
+        Object.keys(parsed).forEach((key: string) => { payload[key] = parsed[key]; });
+      } catch (error) { /* 原 JSON 损坏时只写下面三个已知字段 */ }
+    }
     if (book.delTag !== undefined) { payload['delTag'] = book.delTag; }
     if (book.originFileName !== undefined && book.originFileName.length > 0) {
       payload['originFileName'] = book.originFileName;
@@ -985,7 +1019,7 @@ private static isGroupNamesField(value: string | undefined): boolean {
   }
 
 private static parseBookType(value: string): BookMediaType {
-    if (value === 'audio' || value === 'image') { return value; }
+    if (value === 'audio' || value === 'image' || value === 'webFile') { return value; }
     return 'text';
   }
 
@@ -1040,6 +1074,17 @@ static restoreEmbeddedCover(context: Context, book: Book): Book {
     const embeddedPath = `${context.filesDir}/covers/${book.id}.img`;
     const embeddedUri = fileIo.accessSync(embeddedPath) ? `file://${embeddedPath}` : undefined;
     return BookRepository.copyWithCover(book, embeddedUri, undefined);
+  }
+
+  /**
+   * 按封面地址换封面（第五表 H2-1）：上游 `BookInfoViewModel.updateCover` 写的是
+   * `book.customCoverUrl = coverUrl`，这里落到本地两个字段上——
+   * `coverUri` 存地址（http 直链，或 `use_default_cover` 哨兵），`customCoverUri` 清空
+   * （那是「用户本地选的图片路径」，网络封面不该占这个位）。
+   * 传空串表示恢复成书里自带的封面。
+   */
+  static applyCoverUrl(book: Book, coverUrl: string): Book {
+    return BookRepository.copyWithCover(book, coverUrl.length > 0 ? coverUrl : undefined, undefined);
   }
 
 static removeCustomCover(path: string | undefined): void {
@@ -1245,7 +1290,9 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       customCoverUri: RdbCodec.optionalText(resultSet, 16),
       // type 列是位掩码：本地书带 256 位（bookTypeMask 写入），必须按位与还原媒体类型，
       // 否则图片书 320 / 听书 288 会被误判成 text，图片书一图一页与书架「图片」标签都会失效。
-      bookType: (bookTypeValue & 64) !== 0 ? 'image' : (bookTypeValue & 32) !== 0 ? 'audio' : 'text',
+      bookType: (bookTypeValue & 64) !== 0 ? 'image'
+        : (bookTypeValue & 32) !== 0 ? 'audio'
+        : (bookTypeValue & 128) !== 0 ? 'webFile' : 'text',
       fixedType: config.fixedType === true,
       // 在线书的 bookUrl 是详情页 URL，并非本地文件路径；本仓下游普遍用 contentPath 作书的逻辑主键，
       // 这里仍回填为 bookUrl（仅作 key），真正读正文时按 isLocal 分流到在线内容提供器，不读本地文件。
@@ -1283,6 +1330,7 @@ private static copyWithCover(book: Book, coverUri: string | undefined, customCov
       // 导致 toBookArgs 每次把它写回 0，手工改库也会被下次保存冲掉。
       isPrivate: RdbCodec.boolean(resultSet, 27, false),
       isLocal: isLocal,
+      variable: RdbCodec.optionalText(resultSet, 28),
       delTag: BookRepository.delTagFromVariable(RdbCodec.optionalText(resultSet, 28)),
       originFileName: BookRepository.variableString(RdbCodec.optionalText(resultSet, 28), 'originFileName'),
       sourceSize: BookRepository.variableNumber(RdbCodec.optionalText(resultSet, 28), 'sourceSize'),
@@ -1780,6 +1828,24 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
   }
 
   /**
+   * 批量把若干本书设成**多个**分组（H-5：上游 GroupSelectSheet 是多选，
+   * BookInfoSheets.kt:144-177 用 `selectedGroupId ± group.groupId` 加减掩码）。
+   *
+   * 与 setBooksGroup 的差别只在 groupNames 是数组：传空数组 = 移回「本地未分组」（掩码 0），
+   * 传多个名字时 maskFromNames 会把各 groupId 相加得到组合掩码。
+   */
+  static async setBooksGroups(context: Context, bookKeys: string[], groupNames: string[]): Promise<void> {
+    const store = await RdbStore.getStore(context);
+    await RdbSchema.ensure(store);
+    const groupMask = BookGroupRepository.maskFromNames(groupNames);
+    for (let index = 0; index < bookKeys.length; index += 1) {
+      const key = bookKeys[index];
+      if (key === undefined || key.length === 0) { continue; }
+      await store.executeSql('UPDATE `books` SET `group` = ? WHERE `bookUrl` = ?', [groupMask, key]);
+    }
+  }
+
+  /**
    * 批量删书（批 5 的 :148 / :149）。逐本走 deleteBook，保证章节表一起清。
    * deleteSource 只决定删完后要不要清应用内导入副本（book.contentPath），
    * 用户的原始文件从来不由应用删除。
@@ -1788,6 +1854,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
     for (let index = 0; index < books.length; index += 1) {
       const book = books[index];
       if (book === undefined) { continue; }
+      // 上游 DeleteBooksUseCase.kt:16-23：非本地书先让书源跑一次 delBookShelf 回调，再删章节与书目。
+      // 回调失败只记日志，不影响删书（与上游 callBackBook 的 onError 一致）。
+      if (book.isLocal !== true) {
+        BookSourceCallback.callBackBook(CALLBACK_EVENT_DEL_BOOK_SHELF, book.origin ?? '', book);
+      }
       await BookRepository.deleteBook(context, book);
       if (deleteSource) {
         try {
@@ -2057,7 +2128,11 @@ static saveImportedBooks(context: Context, books: Book[]): Promise<void> {
 
   /** 上游 BookType 位掩码：text=8、audio=32、image=64、upError=16，本地书再加 local=256。 */
   static bookTypeMask(book: Book): number {
-    const media = book.bookType === 'image' ? 64 : book.bookType === 'audio' ? 32 : 8;
+    // webFile 位取 128（上游 `BookType.webFile = 0b10000000`），
+    // 供详情页判断是否走「导入在线书籍文件」面板。
+    const media = book.bookType === 'image' ? 64
+      : book.bookType === 'audio' ? 32
+      : book.bookType === 'webFile' ? 128 : 8;
     // 批3（r359）：upError 位过去没有写入方，自动刷新目录失败后就无从标记。
     const errorBit = book.upError === true ? 16 : 0;
     // 批8（r362）：notShelf 位 = 上游 BookType.notShelf（0b100_0000_0000 = 1024）。

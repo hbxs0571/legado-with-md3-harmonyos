@@ -79,7 +79,11 @@ export class LegadoSourceMapper {
     const ri = LegadoSourceMapper.obj(raw, 'ruleBookInfo');
     LegadoSourceMapper.copyRule(src.bookInfoRule, ri,
       ['init', 'name', 'author', 'intro', 'kind', 'lastChapter', 'updateTime', 'coverUrl', 'tocUrl', 'wordCount']);
-    // canReName / downloadUrls / relatedBooks 引擎无，静默跳过。
+    // canReName / relatedBooks 引擎无，静默跳过。
+    // downloadUrls 引擎的 BookInfoRule 也没这个字段（`Book.ts:429-441`），
+    // 但原始规则字符串必须留着：`WebBookService.getBookInfo` 从 rawSourceJson
+    // 里读 `ruleBookInfo.downloadUrls` 再交给 AnalyzeRule.getStringList 取值，
+    // 这样不必改引擎源码。
 
     const rt = LegadoSourceMapper.obj(raw, 'ruleToc');
     LegadoSourceMapper.copyRule(src.tocRule, rt,

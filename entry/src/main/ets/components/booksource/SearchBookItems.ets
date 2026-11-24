@@ -37,6 +37,8 @@ const MIN_COVER_HEIGHT: number = 80;
 const MAX_COVER_HEIGHT: number = 140;
 /** 上游 `CoilBookCover` 的默认 `radius: Dp = 4.dp`。 */
 const COVER_RADIUS: number = 4;
+/** 上游 `Modifier.blur(8.dp)`：质量屏蔽时封面模糊半径。 */
+const QUALITY_MASK_BLUR: number = 8;
 /** 上游 `SearchBookListItem` 封面与文字的间距 `Spacer(Modifier.width(8.dp))`。 */
 const COVER_GAP: number = 8;
 /** 上游 `TextCard` 默认 `cornerRadius = 8.dp`，但三处角标都显式传 `4.dp`。 */
@@ -196,6 +198,8 @@ export struct SearchBookListItem {
           a11yText: this.a11yLabel(),
           sharedKey: this.sharedKey
         })
+        // 上游 `:126`：`if (qualityMasked) Modifier.blur(8.dp) else Modifier`，封面先糊再盖 scrim。
+        .blur(this.qualityMasked ? QUALITY_MASK_BLUR : 0)
         if (this.qualityMasked) {
           // 上游：`scrim.copy(alpha = 0.58f)` 铺满封面 + 居中 `content_quality_excluded`。
           Column() {
@@ -374,6 +378,8 @@ export struct SearchBookGridItem {
           a11yText: this.a11yLabel(),
           sharedKey: this.sharedKey
         })
+        // 上游 `:296`：网格项同样 `if (qualityMasked) Modifier.blur(8.dp) else Modifier`。
+        .blur(this.qualityMasked ? QUALITY_MASK_BLUR : 0)
         if (this.qualityMasked) {
           Column() {
             Text('内容质量检测已排除')

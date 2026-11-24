@@ -1,4 +1,4 @@
-import { preferences } from '@kit.ArkData';
+import { LocalPreferencesKeys, LocalPreferencesRepository } from './LocalPreferencesRepository';
 
 /**
  * 探索页的展示偏好：布局模式 + 两套网格列数。
@@ -7,8 +7,9 @@ import { preferences } from '@kit.ArkData';
  *   EXPLORE_LAYOUT_MODE             intPreferencesKey("explore_layout_mode")
  *   EXPLORE_LAYOUT_GRID_PORTRAIT    intPreferencesKey("explore_layout_grid_portrait")
  *   EXPLORE_LAYOUT_GRID_LANDSCAPE   intPreferencesKey("explore_layout_grid_landscape")
- * 本地没有通用 preferences 门面（data/ 下都是按域划分的仓储），所以照 `BookInfoSettings.ets`
- * 那份最简范式单独建一个。
+ * 容器是 `preferencesDataStore(name = "local_ui_status")`（`LocalPreferences.kt:13`）。
+ * 本地此前没有通用门面，这三个键单独落在 `legado_explore_layout` 库里；
+ * 现已由 `data/LocalPreferencesRepository.ets` 提供同库同键名的通用门面，本文件改为走它。
  *
  * 默认值对齐上游 `ExploreShowViewModel.kt:81-87`：
  * `layoutState = 0`（列表）、`gridCount = if (landscape) 7 else 3`。
@@ -42,10 +43,6 @@ export const DEFAULT_EXPLORE_LAYOUT_SETTINGS: ExploreLayoutSettings = {
 };
 
 export class ExploreLayoutSettingsRepository {
-  private static readonly preferenceName: string = 'legado_explore_layout';
-  private static readonly keyLayoutMode: string = 'explore_layout_mode';
-  private static readonly keyGridPortrait: string = 'explore_layout_grid_portrait';
-  private static readonly keyGridLandscape: string = 'explore_layout_grid_landscape';
   private static cached: ExploreLayoutSettings = {
     layoutMode: EXPLORE_LAYOUT_MODE_LIST,
     gridPortrait: EXPLORE_GRID_PORTRAIT_DEFAULT,
@@ -86,16 +83,16 @@ export class ExploreLayoutSettingsRepository {
     return landscape ? settings.gridLandscape : settings.gridPortrait;
   }
 
-  /** 从偏好读一次并进缓存。 */
+  /** 从通用 UI 状态偏好读一次并进缓存。 */
   static async load(context: Context): Promise<ExploreLayoutSettings> {
     let layoutMode = DEFAULT_EXPLORE_LAYOUT_SETTINGS.layoutMode;
     let gridPortrait = DEFAULT_EXPLORE_LAYOUT_SETTINGS.gridPortrait;
     let gridLandscape = DEFAULT_EXPLORE_LAYOUT_SETTINGS.gridLandscape;
     try {
-      const store = await preferences.getPreferences(context, ExploreLayoutSettingsRepository.preferenceName);
-      layoutMode = store.getSync(ExploreLayoutSettingsRepository.keyLayoutMode, layoutMode) as number;
-      gridPortrait = store.getSync(ExploreLayoutSettingsRepository.keyGridPortrait, gridPortrait) as number;
-      gridLandscape = store.getSync(ExploreLayoutSettingsRepository.keyGridLandscape, gridLandscape) as number;
+      await LocalPreferencesRepository.load(context);
+      layoutMode = LocalPreferencesRepository.getInt(LocalPreferencesKeys.EXPLORE_LAYOUT_MODE, layoutMode);
+      gridPortrait = LocalPreferencesRepository.getInt(LocalPreferencesKeys.EXPLORE_LAYOUT_GRID_PORTRAIT, gridPortrait);
+      gridLandscape = LocalPreferencesRepository.getInt(LocalPreferencesKeys.EXPLORE_LAYOUT_GRID_LANDSCAPE, gridLandscape);
     } catch (error) {
       console.error(`探索页布局设置读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -130,12 +127,13 @@ export class ExploreLayoutSettingsRepository {
     await ExploreLayoutSettingsRepository.write(context, next);
   }
 
+  /** 三个键同批写入，只 flush 一次。 */
   private static async write(context: Context, settings: ExploreLayoutSettings): Promise<void> {
-    const store = await preferences.getPreferences(context, ExploreLayoutSettingsRepository.preferenceName);
-    await store.put(ExploreLayoutSettingsRepository.keyLayoutMode, settings.layoutMode);
-    await store.put(ExploreLayoutSettingsRepository.keyGridPortrait, settings.gridPortrait);
-    await store.put(ExploreLayoutSettingsRepository.keyGridLandscape, settings.gridLandscape);
-    await store.flush();
+    const values: Map<string, number> = new Map<string, number>();
+    values.set(LocalPreferencesKeys.EXPLORE_LAYOUT_MODE, settings.layoutMode);
+    values.set(LocalPreferencesKeys.EXPLORE_LAYOUT_GRID_PORTRAIT, settings.gridPortrait);
+    values.set(LocalPreferencesKeys.EXPLORE_LAYOUT_GRID_LANDSCAPE, settings.gridLandscape);
+    await LocalPreferencesRepository.putInts(context, values);
     ExploreLayoutSettingsRepository.publish(settings);
   }
 }

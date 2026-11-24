@@ -1,5 +1,8 @@
 import { fileIo, picker } from '@kit.CoreFileKit';
+import { rcp } from '@kit.RemoteCommunicationKit';
+import { util } from '@kit.ArkTS';
 import { Book } from '../model/Book';
+import { PreciseSearchEntry } from '../bookSource/PreciseSearchCoordinator';
 
 /**
  * 上游「书单」导入/导出的条目格式，对应 ExportBookshelfUseCase.kt:20-79。
@@ -65,6 +68,12 @@ export class BookshelfListTransfer {
     const uris = await new picker.DocumentViewPicker(context).select(options);
     const uri = uris[0];
     if (uri === undefined) { return undefined; }
+    const text = BookshelfListTransfer.readPickedText(context, uri);
+    return BookshelfListTransfer.parseEntries(text);
+  }
+
+  /** 把选择器给的 file uri 读成文本：先落 filesDir 临时文件再 readTextSync。 */
+  static readPickedText(context: Context, uri: string): string {
     const tempPath = `${context.filesDir}/booklist-${Date.now()}.json`;
     let text = '';
     try {
@@ -82,56 +91,98 @@ export class BookshelfListTransfer {
     } finally {
       if (fileIo.accessSync(tempPath)) { fileIo.unlinkSync(tempPath); }
     }
-    const parsed = JSON.parse(text) as BookshelfListEntry[];
-    if (!Array.isArray(parsed)) { return []; }
+    return text;
+  }
+
+  /**
+   * 判断输入是不是一个绝对地址，对应上游 `text.isAbsUrl()`
+   * （`ImportBookshelfUseCase.kt:35`）。上游只认 http/https 两种前缀。
+   */
+  static isAbsUrl(text: string): boolean {
+    const trimmed = text.trim();
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  }
+
+  /**
+   * 按地址下载书单文本，对应上游 `import(str)` 的第一分支：
+   * `okHttpClient.newCallResponseBody { url(text) }.decompressed().text()` 后再递归解析。
+   * 本地用 rcp 的 GET，超时与 DirectLinkUpload 同口径。
+   */
+  static async fetchText(url: string): Promise<string> {
+    const session = rcp.createSession({ headers: { 'accept': '*/*' } });
+    try {
+      const response = await session.fetch(new rcp.Request(url, 'GET', undefined, undefined,
+        undefined, undefined, {
+          transfer: {
+            timeout: { connectMs: 15000, transferMs: 120000 }
+          }
+        }));
+      const body = response.body;
+      const text = body === undefined ? '' : new util.TextDecoder('utf-8').decodeToString(new Uint8Array(body));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`下载书单失败，HTTP ${response.statusCode}`);
+      }
+      return text;
+    } finally {
+      session.close();
+    }
+  }
+
+  /**
+   * 把书单文本解析成条目数组，对应上游 `importByJson` 的入参校验：
+   * 不是 JSON 数组就 `throw NoStackTraceException("格式不对")`。
+   */
+  static parseEntries(text: string): BookshelfListEntry[] {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      throw new Error('格式不对');
+    }
+    let parsed: BookshelfListEntry[] = [];
+    try {
+      parsed = JSON.parse(trimmed) as BookshelfListEntry[];
+    } catch (error) {
+      throw new Error('格式不对');
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error('格式不对');
+    }
     return parsed;
   }
 
   /**
-   * 把书单条目转成本地 Book。按书名+作者判重（已在书架或本批已加的都跳过），
-   * 没有正文文件，androidOriginalPath 用稳定的合成键保证能落库且 isBodyMissing 为真。
+   * 把书单文本按上游 `import(str, groupId)` 的三分支统一成条目数组：
+   * 绝对地址先下载，其余当 JSON 解析。页面侧两条入口（选文件 / 手动输入）共用它。
    */
-  static toBooks(entries: BookshelfListEntry[], existing: Book[]): Book[] {
-    const added: Book[] = [];
+  static async entriesOf(context: Context, raw: string): Promise<BookshelfListEntry[]> {
+    const text = BookshelfListTransfer.isAbsUrl(raw) ? await BookshelfListTransfer.fetchText(raw.trim()) : raw;
+    return BookshelfListTransfer.parseEntries(text);
+  }
+
+  /**
+   * 把书单条目补全成书架书目。
+   *
+   * 上游 `importByJson`（`ImportBookshelfUseCase.kt:66-109`）的语义是：条目只是
+   * 「书名 + 作者」，必须用**全部启用书源**逐个 `WebBook.preciseSearchAwait` 精确
+   * 搜索（name 与 author 严格相等）补全成真正的在线书才入库；一本都搜不到就只提示
+   * 「没有搜索到<书名><作者>」，**不入库**。补全逻辑在
+   * `bookSource/PreciseSearchCoordinator.ets`，这里只负责把条目转成它的入参。
+   *
+   * 旧实现（`toBooks`）直接落一条 `isLocal: true` 的「缺正文」记录冒充导入成功，
+   * 与上游行为不同，已删除。
+   */
+  static toSearchEntries(entries: BookshelfListEntry[]): PreciseSearchEntry[] {
+    const result: PreciseSearchEntry[] = [];
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index];
       if (entry === undefined) { continue; }
       const name = (entry.name ?? '').trim();
-      const author = (entry.author ?? '').trim();
       if (name.length === 0) { continue; }
-      const duplicate = existing.some((book: Book) => book.title === name && book.author === author)
-        || added.some((book: Book) => book.title === name && book.author === author);
-      if (duplicate) { continue; }
-      const hash = BookshelfListTransfer.fnv(`${name} ${author}`);
-      const book: Book = {
-        id: `booklist-${hash}`,
-        title: name,
-        author: author,
-        // 上游本地书导入时 kind 是空的，标签由 `upKind()` 现算（格式名 + 文件大小 + 字数）。
-      // 本地原来把 kind 写死成「本地」，详情页标签行就多出一个上游没有的「本地」。
-      category: '',
-        groupName: '本地未分组',
-        groupNames: [],
-        chapterIndex: 0,
-        chapterProgress: 0,
-        lastChapter: '',
-        progress: 0,
-        description: (entry.intro ?? '').trim(),
-        androidOriginalPath: `bookshelf-import://${hash}`,
-        format: 'txt',
-        isLocal: true
-      };
-      added.push(book);
+      result.push({
+        name: name,
+        author: (entry.author ?? '').trim(),
+        intro: (entry.intro ?? '').trim()
+      });
     }
-    return added;
-  }
-
-  private static fnv(text: string): string {
-    let hash = 2166136261;
-    for (let index = 0; index < text.length; index++) {
-      hash ^= text.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16);
+    return result;
   }
 }

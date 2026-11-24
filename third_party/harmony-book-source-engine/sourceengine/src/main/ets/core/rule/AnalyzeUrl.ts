@@ -12,6 +12,15 @@ import { BookSourceDebugContext } from '../book/BookSourceDebugModels';
 import { BookSourceHeaderRuntime } from '../book/BookSourceHeaderRuntime';
 import { SourceEngineHost } from '../host/SourceEngineHost';
 import { BookUrlResolver } from '../book/BookUrlResolver';
+// 【@js: URL 规则求值】上游 AnalyzeUrl.initUrl()→analyzeJs() 用 Rhino 执行 URL 规则里的
+// @js:/<js> 脚本（书源的探索分类 URL 大量用这种写法，如「分类::@js:...」）。本地引擎原本只
+// stripLeadingJs() 剥 <js> 标签，不执行 @js:，导致 @js:xxx 落到 parse() 的 @ POST 分支被剥成
+// js:xxx 当 URL 发出去，报 HTTP 0 Invalid URL format。这里引入受控的 StageWebRuntime（支持
+// java.ajax），在 parse 前求值。形成 AnalyzeUrl→StageWebRuntime→AnalyzeUrl 的引用环与既有
+// AnalyzeUrl→HeaderRuntime→StageWebRuntime 同构，调用发生在方法内而非模块顶层，安全。
+import { BookSourceStageWebRuntime, StageWebRuntimeRequest } from '../book/BookSourceStageWebRuntime';
+import type { StageWebRuntimeResult } from '../book/BookSourceStageWebRuntime';
+import { SourceRuntimeStage } from '../book/BookSourceRuntimeRouter';
 
 export interface UrlConfig {
   url: string;
@@ -48,6 +57,10 @@ export class AnalyzeUrl {
   private stageRate: BookSourceStageRate | null = null;
   private staticSourceHeader: boolean = true;
   private sourceAuthoredUrl: boolean = false;
+  // 【@js: URL 规则求值】URL 规则里的脚本会读 page/key 两个变量（上游 analyzeJs 的 bindings），
+  // 由调用方在 fetch 前经 setUrlContext 注入；缺省值对齐上游的 1 / 空串。
+  private urlPage: string = '1';
+  private urlKey: string = '';
 
   constructor(source: BookSource | null, client: HttpClient,
     runtimeSourceHeaders: Record<string, string> = {}) {
@@ -119,6 +132,61 @@ export class AnalyzeUrl {
     return this;
   }
 
+  /**
+   * 【@js: URL 规则求值】注入 URL 脚本可见的 page/key 变量（对齐上游 analyzeJs 的 bindings）。
+   * 由 WebBookService 等调用方在 fetch 前设置；不设置时按上游默认 page=1、key=''。
+   */
+  setUrlContext(key: string, page: number | string): AnalyzeUrl {
+    this.urlKey = key || '';
+    this.urlPage = String(page || '1');
+    return this;
+  }
+
+  /**
+   * 【@js: URL 规则求值】在 parse() 之前把 URL 规则里的 @js:/<js> 脚本在受控运行时里求值，
+   * 返回可直接交给 parse() 的普通 URL 串；没有脚本时原样返回。
+   *
+   * 对齐上游 `AnalyzeUrl.kt:177-199 analyzeJs()` 与 `WebBook.kt` 把分类 URL 交给 AnalyzeUrl
+   * 求值的语义：脚本可以读 page/key/source/source.getVariable()/result，也能用 java.ajax 取
+   * 数据拼 URL（番茄/福书网等书源的探索分类就是这么写的）。运行时不可用时保留原串，避免
+   * 把整段 JS 当 URL 发出去——parse() 对残留的 @js: 会给出明确错误而不是 HTTP 0。
+   */
+  private async evaluateUrlRule(urlTemplate: string): Promise<string> {
+    const raw = (urlTemplate || '').trim();
+    if (!raw) return raw;
+    const isAtJs = /^@js\s*:/i.test(raw);
+    const isJsBlock = /^<js>/i.test(raw);
+    if (!isAtJs && !isJsBlock) return raw;
+    let code: string;
+    if (isAtJs) {
+      code = raw.replace(/^@js\s*:\s*/i, '');
+    } else {
+      const end = raw.toLowerCase().lastIndexOf('</js>');
+      code = end > 4 ? raw.substring(4, end) : raw.substring(4);
+    }
+    if (!code.trim()) return raw;
+    if (!this.source) return raw;
+    const runtime = BookSourceStageWebRuntime.get();
+    if (!runtime.isAvailable() && !await runtime.waitUntilAvailable(1500)) return raw;
+    const request = new StageWebRuntimeRequest();
+    request.applyStageBudget(SourceRuntimeStage.EXPLORE);
+    request.source = this.source;
+    request.baseUrl = this.source.bookSourceUrl || '';
+    request.code = code;
+    request.variables = { key: this.urlKey, searchKey: this.urlKey, keyword: this.urlKey,
+      page: this.urlPage, pageIndex: this.urlPage };
+    request.ownerId = 'analyze-url:' + (this.source.bookSourceUrl || '');
+    try {
+      const result: StageWebRuntimeResult = await runtime.execute(request);
+      if ((result.errorMessage || '').length > 0) return raw;
+      const value = (result.value || '').trim();
+      // 脚本可能返回带选项 JSON 的 URL（"... ,{...}"），原样交给 parse 解析。
+      return value.length > 0 ? value : raw;
+    } catch (_) {
+      return raw;
+    }
+  }
+
   parse(urlTemplate: string): UrlConfig {
     this.config = this.emptyConfig(urlTemplate);
     if (!urlTemplate) return this.config;
@@ -138,6 +206,12 @@ export class AnalyzeUrl {
     }
 
     // 2. 解析 @ 前缀 → POST 方法, body 在 ? 之后
+    // 【@js: URL 规则求值】残留的 @js:/<js> 说明脚本未能在 evaluateUrlRule 里求值（运行时不可用
+    // 或脚本报错）。若按普通 @ POST 处理会剥掉 @ 变成 js:xxx 当 URL，发出去就是 HTTP 0，
+    // 排查极难。这里给出明确错误，让调用方与用户立刻知道是 URL 脚本没跑起来。
+    if (/^@js\s*:/i.test(url) || /^<js>/i.test(url)) {
+      throw new Error('URL 脚本求值失败（@js:/<js> 未执行）');
+    }
     if (url.startsWith('@')) {
       this.config.method = 'POST';
       url = url.substring(1);
@@ -568,7 +642,10 @@ export class AnalyzeUrl {
     if (this.source && !this.scriptResolvedHeaders && BookSourceHeaderRuntime.script(this.source.header || '').trim()) {
       this.runtimeSourceHeaders = await BookSourceHeaderRuntime.resolve(this.source);
     }
-    this.parse(urlTemplate);
+    // 【@js: URL 规则求值】先执行 URL 规则里的 @js:/<js> 脚本（对齐上游 analyzeJs），
+    // 再把结果交给同步的 parse()。放在 async 的 fetch 里才能 await 受控运行时。
+    const resolvedUrl = await this.evaluateUrlRule(urlTemplate);
+    this.parse(resolvedUrl);
     const req = this.buildRequest();
     if (maxResponseBytes !== undefined) {
       req.maxResponseBytes = maxResponseBytes;
@@ -617,7 +694,9 @@ export class AnalyzeUrl {
     if (this.source && !this.scriptResolvedHeaders && BookSourceHeaderRuntime.script(this.source.header || '').trim()) {
       this.runtimeSourceHeaders = await BookSourceHeaderRuntime.resolve(this.source);
     }
-    this.parse(urlTemplate);
+    // 【@js: URL 规则求值】与 fetch() 同口径：parse 前先在受控运行时里求值 URL 脚本。
+    const resolvedUrl = await this.evaluateUrlRule(urlTemplate);
+    this.parse(resolvedUrl);
     const req = this.buildRequest();
     req.maxResponseBytes = maxResponseBytes;
     const failed = (error: string): HttpBinaryResponse =>

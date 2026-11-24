@@ -1,4 +1,4 @@
-export type BookMediaType = 'text' | 'audio' | 'image';
+export type BookMediaType = 'text' | 'audio' | 'image' | 'webFile';
 
 /** 本地书籍的正文形态。与上游 BookExtensions.kt:74-89 的五个谓词一一对应。 */
 export type LocalBookFormat = 'txt' | 'epub' | 'pdf' | 'mobi' | 'umd';
@@ -143,6 +143,22 @@ export interface Book {
   tocUrl?: string;
   /** 分类（对齐上游 Book.kind，与 books 表 kind 列同列）。 */
   kind?: string;
+  /**
+   * 网页文件的下载直链列表（对应上游 Book.downloadUrls）。
+   *
+   * 上游 `data/entities/Book.kt:169` 标 @Ignore，不落库，每次进详情页由
+   * `BookInfo.kt:171` 从 `ruleBookInfo.downloadUrls` 现取；本地同样不落库，
+   * 由 `BookInfoPage` 按需向书源取一次。
+   */
+  downloadUrls?: string[];
+  /**
+   * books.variable 列的原始 JSON 字符串（对应上游 Book.variable）。
+   *
+   * 上游 `Book.getCustomVariable()` 读 `variableMap["custom"]`、`putCustomVariable()` 写回；
+   * 本地保存整条 JSON 原文，写库时由 `BookRepository.buildBookVariable()` 合并
+   * 已知字段（delTag / originFileName / sourceSize）后再落库，避免丢未知键。
+   */
+  variable?: string;
 }
 
 /**

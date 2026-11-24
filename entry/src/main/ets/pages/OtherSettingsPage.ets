@@ -217,7 +217,8 @@ export struct OtherSettingsPage {
       webPort: this.otherSettings.webPort,
       recordLog: this.otherSettings.recordLog,
       recordHeapDump: this.otherSettings.recordHeapDump,
-      fontSort: this.otherSettings.fontSort
+      fontSort: this.otherSettings.fontSort,
+      deleteBookOriginal: this.otherSettings.deleteBookOriginal,
     };
     this.saveOtherSettings();
   }
@@ -232,7 +233,8 @@ export struct OtherSettingsPage {
       webPort: port,
       recordLog: this.otherSettings.recordLog,
       recordHeapDump: this.otherSettings.recordHeapDump,
-      fontSort: this.otherSettings.fontSort
+      fontSort: this.otherSettings.fontSort,
+      deleteBookOriginal: this.otherSettings.deleteBookOriginal,
     };
     this.saveOtherSettings();
   }
@@ -246,7 +248,8 @@ export struct OtherSettingsPage {
       webPort: this.otherSettings.webPort,
       recordLog: value,
       recordHeapDump: this.otherSettings.recordHeapDump,
-      fontSort: this.otherSettings.fontSort
+      fontSort: this.otherSettings.fontSort,
+      deleteBookOriginal: this.otherSettings.deleteBookOriginal,
     };
     this.saveOtherSettings();
   }
@@ -260,7 +263,8 @@ export struct OtherSettingsPage {
       webPort: this.otherSettings.webPort,
       recordLog: this.otherSettings.recordLog,
       recordHeapDump: value,
-      fontSort: this.otherSettings.fontSort
+      fontSort: this.otherSettings.fontSort,
+      deleteBookOriginal: this.otherSettings.deleteBookOriginal,
     };
     this.saveOtherSettings();
   }
@@ -283,7 +287,8 @@ export struct OtherSettingsPage {
         webPort: this.otherSettings.webPort,
         recordLog: this.otherSettings.recordLog,
         recordHeapDump: this.otherSettings.recordHeapDump,
-        fontSort: this.otherSettings.fontSort
+        fontSort: this.otherSettings.fontSort,
+        deleteBookOriginal: this.otherSettings.deleteBookOriginal,
       };
       this.saveOtherSettings();
     } catch (error) {

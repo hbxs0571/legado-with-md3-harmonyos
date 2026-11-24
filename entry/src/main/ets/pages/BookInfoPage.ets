@@ -1,12 +1,15 @@
 import { DURATION_FADE } from '../components/UiTokens';
-import { fileIo } from '@kit.CoreFileKit';
+import { fileIo, fileUri } from '@kit.CoreFileKit';
 import { Book, BookMediaType, bookCoverColor } from '../model/Book';
 import { BookGroup } from '../model/BookGroup';
 import { BookRepository } from '../data/BookRepository';
+import { BookSourceRepository } from '../data/BookSourceRepository';
+import { BookSource } from '../model/BookSource';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookCover } from '../components/BookCover';
 import { BookInfoBackdropStyle, resolveBookInfoBackdropStyleFor } from '../data/BookInfoBackdropStyle';
 import { cardRadiusOf } from '../data/ThemeCardStyle';
+import { realAuthorOf } from '../data/BookExportSettings';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 import { lerpHexColor, withAlphaHex } from '../data/ColorLerp';
 import { ProgressiveBackdrop } from '../components/ProgressiveBackdrop';
@@ -16,9 +19,22 @@ import { BookReadRecordDay, BookReadRecordPanel, BookReadRecordSession } from '.
 import { RelatedBooksBanner } from '../components/RelatedBooksBanner';
 import { RelatedBooksModule, RelatedBooksService } from '../bookSource/RelatedBooksService';
 import { SearchBookItem } from '../bookSource/SourceModels';
+import { ChangeCoverCandidate, ChangeCoverCoordinator, CHANGE_COVER_DEFAULT_URL } from '../bookSource/ChangeCoverCoordinator';
+// H2-6/H2-7/H2-8：网页书的下载文件清单与后缀三判据（对齐上游 `BookInfoWebFile`）。
+import { BookInfoWebFile, WebFileCoordinator } from '../bookSource/WebFileCoordinator';
+// H2-8：压缩包条目列举与按条目导入。
+import { ArchiveImporter } from '../data/ArchiveImporter';
+// H3-2：「打开方式」把下载下来的文件交给外部应用。
+import { WantLauncher } from '../lib/WantLauncher';
+import { BUILTIN_DEFAULT_COVER } from '../data/CoverAlbumRepository';
 import { HighlightTagRule } from '../model/HighlightTagRule';
 import { HighlightedTag, matchHighlightTags } from '../data/HighlightTagMatcher';
 import { pasteboard } from '@kit.BasicServicesKit';
+// H3-4：保存封面到相册（image 转码 + photoAccessHelper 写入）。
+import image from '@ohos.multimedia.image';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+// H3-4：网络封面要先下到 cacheDir 才能交给 image.createImageSource。
+import { rcp } from '@kit.RemoteCommunicationKit';
 import { common, Want } from '@kit.AbilityKit';
 import {
   TopBarButton, TopBarBackButton, topBarButtonSize, topBarActionSpacing,
@@ -26,9 +42,14 @@ import {
 } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { AppLog, AppLogEntry } from '../lib/AppLog';
+import {
+  BookKnowledgeRepository, CharacterEvent, CharacterProfile, KnowledgeEntry,
+  BK_ROLE_MALE_LEAD, BK_ROLE_FEMALE_LEAD, BK_ROLE_MALE_SUPPORTING, BK_ROLE_FEMALE_SUPPORTING
+} from '../data/BookKnowledgeRepository';
+import { BookKnowledgeSheet } from '../components/BookKnowledgeSheet';
 import { WebDavSync } from '../lib/WebDavSync';
 import { RichIntro } from '../components/RichIntro';
-import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+import { BODY_LARGE, BODY_MEDIUM, BODY_SMALL, BODY_SMALL_LINE_HEIGHT, HEADLINE_LARGE, HEADLINE_MEDIUM, HEADLINE_SMALL, LABEL_LARGE, LABEL_LARGE_EMPHASIZED, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
 
 /** 溢出菜单面板宽度。上游宽度由内容驱动，本地给固定宽并让长文案省略。 */
 const OVERFLOW_MENU_WIDTH: number = 220;
@@ -43,11 +64,20 @@ export struct BookInfoPage {
   @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
   @StorageProp('themeColorTextTertiary') themeColorTextTertiary: string = '#6A6D77';
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
+  /** 上游 `BookInfoScreen.kt:1337/1567` 的来源行与章节总数用 `colorScheme.primary`。 */
+  @StorageProp('themeColorPrimary') themeColorPrimary: string = '#3F5BD9';
+  /** 上游 `BookInfoScreen.kt:1558` 最新一章用 `colorScheme.onSurfaceVariant`。 */
+  @StorageProp('themeColorOnSurfaceVariant') themeColorOnSurfaceVariant: string = '#2E3038';
+  /** I-3 人物卡底色（上游 `surfaceContainerLow`）与头像圈底色（`surfaceContainerHighest`）。 */
+  @StorageProp('themeColorSurfaceContainerLow') themeColorSurfaceContainerLow: string = '#F7F8FA';
+  @StorageProp('themeColorSurfaceContainerHighest') themeColorSurfaceContainerHighest: string = '#E3E5EA';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#FFFFFF';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   /** 分组容器色（上游 secondaryContainer）。详情页背景取色叠层的插值基色，见 `seedOverlayBaseColor()`。 */
   @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE7C8';
+  /** 上游 MediumTonalButton 的内容色（`secondaryContainer` 底 + `onSecondaryContainer` 字）。 */
+  @StorageProp('themeColorOnSecondaryContainer') themeColorOnSecondaryContainer: string = '#101C4E';
   /** 详情页摘要「|」与已读状态文字。上游 `BookInfoScreen.kt:1574/1583/1588` 用 `colorScheme.secondary`。 */
   @StorageProp('themeColorSecondary') themeColorSecondary: string = '#586249';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
@@ -160,6 +190,14 @@ export struct BookInfoPage {
   /** 单本私密标记（:294）；Index 落库后刷新 books 与 selectedBook。 */
   onSetPrivate: (book: Book, isPrivate: boolean) => void = (_book: Book, _isPrivate: boolean) => {};
   onChooseCover: () => void = () => {};
+  /** H2-1：换封面面板选中某个候选后回写封面地址（http 直链或 `use_default_cover` 哨兵）。 */
+  onSelectCoverUrl: (coverUrl: string) => void = (_coverUrl: string) => {};
+  /** H2-7：把下载到本地的网页书文件导入书架（`openAfterImport` 为真时顺带进阅读页）。 */
+  onImportWebFile: (uri: string, openAfterImport: boolean) => Promise<void> =
+    async (_uri: string, _openAfterImport: boolean) => {};
+  /** H2-8：按条目从压缩包导入（上游 `importArchiveBook`）。 */
+  onImportWebArchiveEntries: (archiveUri: string, entryNames: string[], openAfterImport: boolean) => Promise<void> =
+    async (_archiveUri: string, _entryNames: string[], _openAfterImport: boolean) => {};
   onRestoreCover: () => void = () => {};
   onSaveMetadata: (title: string, author: string, category: string, description: string,
     remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) => Promise<boolean> = async (_title: string, _author: string,
@@ -167,7 +205,6 @@ export struct BookInfoPage {
     _bookType: BookMediaType, _fixedType: boolean): Promise<boolean> => false;
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   /** 批10（:565）：导出本书为 EPUB；落盘与保存对话框在 Index 侧（那边有 EpubExporter）。 */
-  onExportEpub: () => void = () => {};
   /** 打开书源登录页（:283）：页面不做路由，只把书源 URL 交给 Index。 */
   onOpenSourceLogin: (sourceUrl: string) => void = (_sourceUrl: string) => {};
   /** 打开书源编辑页去改源变量（:285）：变量面板在书源编辑页里，详情页跳过去。 */
@@ -197,6 +234,11 @@ export struct BookInfoPage {
    */
   onSetBooksGroup: (bookKeys: string[], groupName: string) => void =
     (_bookKeys: string[], _groupName: string) => {};
+  /**
+   * G-6/G-7：从删除面板的副本提示卡跳到该副本的详情。
+   * 对齐上游 `BookInfoScreen.kt:546` `onOpenCopy = { onIntent(BookInfoIntent.OpenShelfDuplicate(it)) }`。
+   */
+  onOpenShelfDuplicate: (bookKey: string) => void = (_bookKey: string) => {};
   /** 批8（:369）：刚点过「放入书架」，等书变成在架后播两段引导（上游 awaitingShelfAddition）。 */
   @State awaitingShelfAddition: boolean = false;  @State showShelfRemoveHint: boolean = false;
   @State showLongPressGroupHint: boolean = false;
@@ -224,18 +266,72 @@ export struct BookInfoPage {
   @State deleteSourceChecked: boolean = false;
   /** 封面长按看大图（:301）。 */
   @State photoPreviewVisible: boolean = false;
+  /** H2-1：换封面面板是否打开（上游 `BookInfoSheet.CoverPicker`）。 */
+  @State coverSheetVisible: boolean = false;
+  /** H2-1：换封面候选列表，首项恒为「默认封面」。 */
+  @State coverCandidates: ChangeCoverCandidate[] = [];
+  /** H2-2：搜索中显示顶部进度条，并让右上按钮切成「停止」（上游 `isSearching`）。 */
+  @State coverSearching: boolean = false;
+  /** H3-5：全屏忙碌指示器（上游 `state.isBusy`）。 */
+  @State isBusy: boolean = false;
+  /** H3-1：编辑备注对话框是否打开。 */
+  @State remarkDialogVisible: boolean = false;
+  /** H3-1：编辑备注对话框里的草稿文本。 */
+  @State remarkDraft: string = '';
+  /** 换封面搜索的代次号：面板关闭或再次点搜索时自增，旧请求回来直接丢弃。 */
+  private coverSearchToken: number = 0;
   /** 大图加载失败过，改用打包内置默认封面兜底（上游 `PhotoDialog.kt:71` 的 `.error(...)`）。 */
   @State photoPreviewFailed: boolean = false;
   /** 溢出菜单「日志」打开的日志面板（上游 `BookInfoMenuAction.ShowLog` → `AppLogSheet`）。 */
   @State logSheetVisible: boolean = false;
   /** 日志面板的行，打开时从 AppLog 内存缓冲取一次。 */
   @State logEntries: AppLogEntry[] = [];
+  /** H-5：日志行点开后的全文，空串表示未展开（上游 `AppLogSheet.kt:70-72` 的 showDetail）。 */
+  @State logDetailText: string = '';
+  /** G-7：删除面板里副本列表是否展开（上游 `ShelfDeleteSheet.kt:137` 的 showCopiesList）。 */
+  @State deleteShowCopiesList: boolean = false;
+  /** H2-9 变量编辑面板：上游 `VariableEditorSheet.kt` 的 state（title/key/value/comment）。 */
+  @State variableSheetVisible: boolean = false;
+  @State variableSheetTitle: string = '';
+  @State variableSheetKey: string = '';
+  @State variableDraft: string = '';
+  @State variableComment: string = '';
+  /** H2-6：网页书「导入在线书籍文件」面板是否打开（上游 `BookInfoSheet.WebFiles`）。 */
+  @State webFileSheetVisible: boolean = false;
+  /** H2-6：面板标题。网页书是「导入在线书籍文件」，压缩包条目是「导入选择书籍」。 */
+  @State webFileSheetTitle: string = '';
+  /** H2-6：待选文件清单，来自 `WebBookService.getBookInfo().downloadUrls`。 */
+  @State webFileCandidates: BookInfoWebFile[] = [];
+  /** H2-7：选完文件后是否直接进阅读页（上游 `WebFiles.openAfterImport`）。 */
+  @State webFileOpenAfterImport: boolean = false;
+  /** H2-6：清单加载中（拉详情要发网络请求）。 */
+  @State webFileLoading: boolean = false;
+  /** H2-8：压缩包已下载到本地的路径，空串表示当前不在「选条目」阶段。 */
+  @State webFileArchiveUri: string = '';
+  /** H3-2：不支持文件提示框（上游 `BookInfoDialog.UnsupportedWebFile`）。 */
+  @State unsupportedVisible: boolean = false;
+  /** H3-2：提示框里显示的文件名。 */
+  @State unsupportedFileName: string = '';
+  /** H3-2：提示框确认后是否进阅读页。 */
+  @State unsupportedOpenAfterImport: boolean = false;
+  /** H3-2：提示框确认后要下载并交给外部应用的文件 url。 */
+  @State unsupportedFileUrl: string = '';
   /**
    * 关联书籍分组。对齐上游 `BookInfoContract.kt:39 relatedBooks` 与
    * `BookInfoScreen.kt:482-497` 的 `state.relatedBooks.forEach { RelatedBooksBanner(...) }`。
    * 空数组表示没有关联书籍（书源没配 relatedBooks 规则、或兜底搜索也没结果）。
    */
   @State relatedBooks: RelatedBooksModule[] = [];
+  /**
+   * I-1：人物 / 世界知识 / 事记三组数据。对齐上游 `BookInfoContract.kt` 的
+   * `characters` / `knowledgeEntries` / `recentEvents`，任一非空即渲染人物区。
+   */
+  @State characters: CharacterProfile[] = [];
+  @State knowledgeEntries: KnowledgeEntry[] = [];
+  @State recentEvents: CharacterEvent[] = [];
+  /** I-2：四个入口按钮打开知识库面板，tab 决定落在哪个面板。 */
+  @State knowledgeSheetVisible: boolean = false;
+  @State knowledgeSheetTab: number = 0;
   private infoScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
@@ -243,6 +339,30 @@ export struct BookInfoPage {
     this.loadCoverSeedColor();
     this.refreshHighlightedTags();
     this.scheduleRelatedBooksLoad();
+    this.scheduleKnowledgeLoad();
+  }
+
+  /**
+   * I-1：人物 / 世界知识 / 事记加载。三组都取最新 20 条，与上游
+   * `BookInfoViewModel` 的首屏取数口径一致（列表页才是全量）。
+   * 读库失败时保持空数组，人物区自然不渲染，不打断页面。
+   */
+  private scheduleKnowledgeLoad(): void {
+    const context = this.getUIContext().getHostContext();
+    const bookUrl = this.book.contentPath ?? '';
+    this.characters = [];
+    this.knowledgeEntries = [];
+    this.recentEvents = [];
+    if (context === undefined || bookUrl.length === 0) { return; }
+    BookKnowledgeRepository.getCharacterProfiles(context, bookUrl, 20)
+      .then((rows: CharacterProfile[]) => { this.characters = rows; })
+      .catch(() => {});
+    BookKnowledgeRepository.searchKnowledgeEntries(context, bookUrl, '', undefined, undefined, 20)
+      .then((rows: KnowledgeEntry[]) => { this.knowledgeEntries = rows; })
+      .catch(() => {});
+    BookKnowledgeRepository.getCharacterEvents(context, bookUrl, undefined, undefined, 20)
+      .then((rows: CharacterEvent[]) => { this.recentEvents = rows; })
+      .catch(() => {});
   }
 
   /**
@@ -326,6 +446,7 @@ export struct BookInfoPage {
     // scheduleRelatedBooksLoad，并用 `isCurrentBookSource` 丢弃过期结果；本地用整份替换
     // relatedBooks 达到同样效果（旧请求回来时 book 已换，直接覆盖成新书的结果）。
     this.scheduleRelatedBooksLoad();
+    this.scheduleKnowledgeLoad();
     const nowOnShelf = this.book.notShelf !== true;
     if (this.awaitingShelfAddition && nowOnShelf) {
       this.awaitingShelfAddition = false;
@@ -353,6 +474,12 @@ export struct BookInfoPage {
   private onShelfCardClick(): void {
     if (this.inBookshelf()) {
       this.requestRemoveFromShelf();
+      return;
+    }
+    // H2-7：网页书不在架时「放入书架」先摊开文件清单（上游 `onShelfClick` 的
+    // `else if (book.isWebFile) setSheet(WebFiles(openAfterImport = false))`）。
+    if (this.isWebFileBook()) {
+      this.openWebFileSheet(false);
       return;
     }
     if (this.conflictCandidates().length > 0) {
@@ -761,6 +888,61 @@ export struct BookInfoPage {
     this.photoPreviewVisible = true;
   }
 
+  /**
+   * H2-1：打开换封面面板（上游 `BookInfoIntent.CoverClick -> setSheet(BookInfoSheet.CoverPicker)`）。
+   * 面板一打开先只放「默认封面」这一项，然后自动跑一次搜索。
+   */
+  private openCoverSheet(): void {
+    this.coverCandidates = [];
+    this.coverSearching = false;
+    this.coverSheetVisible = true;
+    this.runCoverSearch();
+  }
+
+  /**
+   * H2-1：跑一次换封面搜索。上游 `startOrStopSearch()` 在空闲时启动、搜索中则停止，
+   * 这里用代次号 `coverSearchToken` 实现「停止」——旧请求回来时代次号已变，结果直接丢弃。
+   */
+  private runCoverSearch(): void {
+    if (this.coverSearching) {
+      this.coverSearchToken = this.coverSearchToken + 1;
+      this.coverSearching = false;
+      return;
+    }
+    this.coverSearchToken = this.coverSearchToken + 1;
+    const token = this.coverSearchToken;
+    this.coverSearching = true;
+    const name = this.book.title;
+    // 上游 `ChangeCoverViewModel.initData` 先去掉作者前缀再拿去搜。
+    const author = realAuthorOf(this.book.author);
+    ChangeCoverCoordinator.searchCovers(name, author).then((candidates: ChangeCoverCandidate[]) => {
+      if (token !== this.coverSearchToken) { return; }
+      this.coverCandidates = candidates;
+      this.coverSearching = false;
+    }).catch((error: Error) => {
+      if (token !== this.coverSearchToken) { return; }
+      this.coverSearching = false;
+      this.onUnavailableAction(error.message.length > 0 ? error.message : '换封面搜索失败');
+    });
+  }
+
+  /** H2-1：选中某个候选，回写封面并关面板（上游 `SelectCover -> updateCover`）。 */
+  private chooseCoverCandidate(coverUrl: string): void {
+    this.coverSearchToken = this.coverSearchToken + 1;
+    this.coverSearching = false;
+    this.coverSheetVisible = false;
+    this.onSelectCoverUrl(coverUrl);
+  }
+
+  /** H2-1：候选在网格里显示用的图片地址；默认封面项换成内置封面图。 */
+  private coverCandidatePath(candidate: ChangeCoverCandidate): string {
+    if (candidate.coverUrl === CHANGE_COVER_DEFAULT_URL || candidate.coverUrl === BUILTIN_DEFAULT_COVER) {
+      const seed = this.book.title.length > 0 ? this.book.title : this.book.author;
+      return CoverAlbumRepository.defaultCoverPath(this.isNight, seed);
+    }
+    return candidate.coverUrl;
+  }
+
   /** 书名点击：带书名进搜索页（:296）。 */
   private searchByTitle(): void {
     if (this.book.title.length === 0) { return; }
@@ -801,39 +983,148 @@ export struct BookInfoPage {
    * `BookRepository.discardImportedCopy` 清掉的 `book.contentPath`（应用内副本），
    * 用户选的原始文件应用无权删除，所以文案写「应用内副本」。
    */
+  /**
+   * G-8：副本来源名拼接，对齐上游 `ShelfDeleteSheet.kt:77-80`：
+   * `copies.take(3).joinToString("】、【") { it.sourceName } + if (size > 3) "等" else ""`。
+   */
+  private deleteSourcesText(): string {
+    const copies = this.conflictCandidates();
+    const names: string[] = [];
+    const limit = Math.min(3, copies.length);
+    for (let i = 0; i < limit; i++) {
+      names.push(copies[i].originName ?? '本地');
+    }
+    return names.join('】、【') + (copies.length > 3 ? '等' : '');
+  }
+
+  /**
+   * 上游 `ConflictBookCard`（定义在 `ui/widget/components/conflict/BookshelfConflictSheet.kt`）：
+   * 52vp 5:7 封面 + 书名 + 作者（labelLargeEmphasized）+ 来源名（labelMediumEmphasized/primary）
+   * + 章节数（labelSmallEmphasized/onSurfaceVariant），底色 onSheetContent。
+   */
+  @Builder
+  private ConflictBookCard(item: Book) {
+    Row() {
+      BookCover({
+        book: item, compact: true, fillWidth: false, displayWidth: 52, displayHeight: 73,
+        coverSettings: this.coverSettings, isNight: this.isNight
+      })
+      Column() {
+        Text(item.title).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+        if (item.author.length > 0) {
+          Text(item.author).fontSize(LABEL_LARGE).fontWeight(FontWeight.Medium)
+            .fontColor(this.themeColorTextPrimary).maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').margin({ top: 2 })
+        }
+        Text(item.originName ?? '本地').fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorPrimary).maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').margin({ top: 2 })
+        Text(`共 ${item.chapterCount ?? '0'} 章`).fontSize(LABEL_SMALL)
+          .fontColor(this.themeColorOnSurfaceVariant).maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').margin({ top: 2 })
+      }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 10 })
+    }.width('100%').padding(10)
+      .borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 12))
+      .backgroundColor(this.themeColorSurfaceElevated)
+  }
+
+  /**
+   * 自绘移出书架面板（:337），替代原来的系统确认框。
+   *
+   * 对齐上游 `ShelfDeleteSheet.kt`（183 行）：
+   * - G-1 标题 `sure_del`「是否确认删除?」；
+   * - 当前书一张 `ConflictBookCard`；
+   * - G-3/G-8/G-9 有副本时出消歧提示卡（12dp 圆角 + secondaryContainer 0.45 底 + info 图标 +
+   *   `shelf_delete_other_copies_hint` + 最多 3 个来源名）；
+   * - G-6 提示卡右下「查看该副本」（单副本）/「查看副本 (N)」（多副本，展开/收起）；
+   * - G-7 多副本且展开时出 240vp 上限的副本列表；
+   * - G-2 `delete_book_file`「删除源文件」勾选（本地只能删应用内副本，勾选下方补一行说明）；
+   * - G-4 `cancel` / `delete`「取消」/「删除」。
+   */
   @Builder
   private DeleteSheet() {
     Column() {
-      Text('移出书架？').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
-        .width('100%').margin({ bottom: 8 })
-      Text(BookRepository.isBodyMissing(this.book)
-        ? '移出后只删除这条缺正文书目记录；Android 兼容归档和原始文件不会更改。'
-        : '移出后会清理应用内的导入副本，原始文件会保留。')
-        .fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#AEB0BA').width('100%')
+      Text('是否确认删除?').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor('#ECEEF2')
+        .width('100%').margin({ bottom: 12 })
+      this.ConflictBookCard(this.book)
       if (this.conflictCandidates().length > 0) {
-        Text(this.conflictCandidates().length === 1
-          ? `书架里还有 1 本同名书：${this.book.title}`
-          : `书架里还有 ${this.conflictCandidates().length} 本同名书：${this.book.title}`)
-          .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 12 })
+        Column() {
+          Row() {
+            AppGlyph({ name: 'info', glyphSize: 18, tint: this.themeColorPrimary })
+              .margin({ top: 2 })
+            Text(`书架中仍保留有该书的其他 ${this.conflictCandidates().length} 个副本` +
+              `（来自【${this.deleteSourcesText()}】），删除当前副本不影响其他副本。`)
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorTextPrimary)
+              .layoutWeight(1).margin({ left: 8 })
+          }.width('100%').alignItems(VerticalAlign.Top)
+          Row() {
+            Blank()
+            if (this.conflictCandidates().length === 1) {
+              Row() {
+                Text('查看该副本').fontSize(LABEL_MEDIUM)
+                  .fontColor(this.themeColorOnSecondaryContainer)
+                AppGlyph({
+                  name: 'arrowForward', glyphSize: 14, tint: this.themeColorOnSecondaryContainer
+                }).margin({ left: 4 })
+              }.padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                .backgroundColor(this.themeColorSecondaryContainer).borderRadius(8)
+                .onClick(() => this.onOpenShelfDuplicate(this.bookKey(this.conflictCandidates()[0])))
+            } else {
+              Row() {
+                Text(`查看副本 (${this.conflictCandidates().length})`).fontSize(LABEL_MEDIUM)
+                  .fontColor(this.themeColorOnSecondaryContainer)
+                AppGlyph({
+                  name: this.deleteShowCopiesList ? 'unfoldMore' : 'profileExpandMore',
+                  glyphSize: 14, tint: this.themeColorOnSecondaryContainer
+                }).margin({ left: 4 })
+              }.padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                .backgroundColor(this.themeColorSecondaryContainer).borderRadius(8)
+                .onClick(() => this.deleteShowCopiesList = !this.deleteShowCopiesList)
+            }
+          }.width('100%').margin({ top: 8 })
+        }.width('100%').padding(12).margin({ top: 12 })
+          .borderRadius(12)
+          .backgroundColor(withAlphaHex(this.themeColorSecondaryContainer, 0.45))
+      }
+      if (this.conflictCandidates().length > 1 && this.deleteShowCopiesList) {
+        List({ space: 8 }) {
+          ForEach(this.conflictCandidates(), (item: Book) => {
+            ListItem() {
+              Column() {
+                this.ConflictBookCard(item)
+              }.width('100%')
+                .onClick(() => this.onOpenShelfDuplicate(this.bookKey(item)))
+            }
+          }, (item: Book) => item.id)
+        }.width('100%').constraintSize({ maxHeight: 240 })
+          .scrollBar(BarState.Off).margin({ top: 8 })
       }
       if (this.book.isLocal) {
-        Row() {
-          Toggle({ type: ToggleType.Checkbox, isOn: this.deleteSourceChecked })
-            .onChange((value: boolean) => this.deleteSourceChecked = value)
-          Text('同时删除应用内副本').fontSize(TITLE_SMALL).fontColor('#D0D2DB').margin({ left: 8 })
+        Column() {
+          Row() {
+            Toggle({ type: ToggleType.Checkbox, isOn: this.deleteSourceChecked })
+              .onChange((value: boolean) => this.deleteSourceChecked = value)
+            Text('删除源文件').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+              .margin({ left: 8 })
+          }.width('100%')
+          Text('本地只能清理应用内的导入副本，用户选择的原始文件应用无权删除。')
+            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
+            .width('100%').margin({ top: 2, left: 30 })
         }.width('100%').margin({ top: 12 })
       }
       Row() {
         Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
           .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
           .onClick(() => this.deleteSheetVisible = false)
-        Text('移出书架').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
+        Text('删除').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
           .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
           .margin({ left: 10 }).onClick(() => {
             this.deleteSheetVisible = false;
             this.onRemoveFromShelf(this.deleteSourceChecked);
           })
-      }.width('100%').margin({ top: 20 })
+      }.width('100%').margin({ top: 16 })
     }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
   }
 
@@ -932,23 +1223,266 @@ export struct BookInfoPage {
   }
 
   /** 封面全屏预览（:301）：点任意处关闭。 */
+  /**
+   * H2-1/H2-2/H2-3：换封面面板，对齐上游 `BookInfoSheets.kt:194-272 ChangeCoverSheet`。
+   * 标题「封面换源」+ 右上搜索/停止按钮 + 搜索中顶部进度条 + 三列封面网格。
+   */
+  @Builder
+  private CoverSheet() {
+    Column() {
+      Row() {
+        Text('封面换源').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        // 上游 endAction：搜索中是 MoreVert（more_menu），空闲是 Refresh（refresh）。
+        // AppGlyph 是组件，不能挂 textAlign；用外层 Row 做 40×40 命中区并居中。
+        Row() {
+          AppGlyph({
+            name: this.coverSearching ? 'more' : 'profileRefresh',
+            glyphSize: 20, tint: this.themeColorTextPrimary
+          })
+        }
+          .width(40).height(40).justifyContent(FlexAlign.Center)
+          .accessibilityText(this.coverSearching ? '更多菜单' : '重新搜索')
+          .onClick(() => this.runCoverSearch())
+      }.width('100%').padding({ bottom: 12 })
+      if (this.coverSearching) {
+        // 上游 `AppLinearProgressIndicator(Modifier.fillMaxWidth())` + Spacer(12.dp)。
+        Progress({ value: 50, total: 100, type: ProgressType.Linear })
+          .width('100%').height(4).color(this.themeColorAccent)
+        Blank().height(12)
+      }
+      if (this.coverCandidates.length === 0) {
+        Text(this.coverSearching ? '正在搜索封面…' : '没有搜到可用封面')
+          .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .width('100%').textAlign(TextAlign.Center).padding({ top: 32, bottom: 32 })
+      } else {
+        Grid() {
+          ForEach(this.coverCandidates, (candidate: ChangeCoverCandidate) => {
+            GridItem() {
+              Column({ space: 4 }) {
+                Image(this.coverCandidatePath(candidate))
+                  .width('100%').aspectRatio(5 / 7).objectFit(ImageFit.Cover)
+                  .borderRadius(4)
+                  .onError(() => {})
+                Text(candidate.originName).fontSize(LABEL_SMALL).fontWeight(FontWeight.Medium)
+                  .fontColor(this.themeColorTextSecondary).maxLines(2)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+              }.width('100%').padding(8).borderRadius(4)
+                .onClick(() => this.chooseCoverCandidate(candidate.coverUrl))
+            }
+          }, (candidate: ChangeCoverCandidate) => `${candidate.sourceUrl}-${candidate.coverUrl}`)
+        }
+        .columnsTemplate('1fr 1fr 1fr').columnsGap(12).rowsGap(12)
+        .width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      }
+    }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
+  }
+
+  /**
+   * H3-3/H3-4：封面大图对话框。
+   *
+   * 上游 `BookInfoScreen.kt:2084-2109` 是 `AppAlertDialog(title = img_cover「封面」,
+   * confirmText = "保存到相册", dismissText = cancel)`，内容为图片
+   * （`heightIn(max = 420.dp).fillMaxWidth(0.6f)`）。本地没有通用 AlertDialog 组件，
+   * 按本页既有约定自绘一层对话框浮层：卡片 + 标题 + 图片 + 底部「取消 / 保存到相册」。
+   * 保存按钮用安全控件 SaveButton（免 WRITE_IMAGEVIDEO 权限），与阅读页一致。
+   */
   @Builder
   private PhotoPreview() {
     Stack({ alignContent: Alignment.Center }) {
-      Column().width('100%').height('100%').backgroundColor('#000000')
-      Image(this.photoPreviewSource())
-        .objectFit(ImageFit.Contain).width('100%').height('100%')
-        // 加载失败兜底到打包内置图，对齐上游 `PhotoDialog.kt:71` 的 `.error(BookCover.defaultDrawable)`
-        // 与 `BookCover.kt:65-78`（相册为空时取 `R.drawable.image_cover_default`）。
-        .onError(() => { this.photoPreviewFailed = true; })
-      if (this.photoPreviewFailed) {
-        Image($r('app.media.image_cover_default'))
-          .objectFit(ImageFit.Contain).width('100%').height('100%')
-          .hitTestBehavior(HitTestMode.None)
+      // 遮罩：点空白关闭（上游 onDismissRequest 即取消）。
+      Column().width('100%').height('100%').backgroundColor('#99000000')
+        .onClick(() => { this.photoPreviewVisible = false; this.photoPreviewFailed = false; })
+      Column() {
+        Text('封面').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).width('100%')
+          .padding({ left: 4, right: 4, bottom: 12 })
+        Image(this.photoPreviewSource())
+          .objectFit(ImageFit.Contain)
+          .constraintSize({ maxHeight: 420 })
+          .width('100%')
+          // 加载失败兜底到打包内置图，对齐上游 `PhotoDialog.kt:71` 的 `.error(BookCover.defaultDrawable)`
+          // 与 `BookCover.kt:65-78`（相册为空时取 `R.drawable.image_cover_default`）。
+          .onError(() => { this.photoPreviewFailed = true; })
+        if (this.photoPreviewFailed) {
+          Image($r('app.media.image_cover_default'))
+            .objectFit(ImageFit.Contain).width('100%')
+            .constraintSize({ maxHeight: 420 })
+            .hitTestBehavior(HitTestMode.None)
+        }
+        Row() {
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
+            .height(40).padding({ left: 12, right: 12 })
+            .onClick(() => { this.photoPreviewVisible = false; this.photoPreviewFailed = false; })
+          Blank()
+          // 安全控件免权限，写法同 `pages/ReaderPage.ets` 的阅读页图片保存。
+          SaveButton({
+            icon: SaveIconStyle.FULL_FILLED,
+            text: SaveDescription.SAVE_IMAGE,
+            buttonType: ButtonType.Capsule
+          })
+            .onClick(async (event: ClickEvent, result: SaveButtonOnClickResult) => {
+              if (result === SaveButtonOnClickResult.SUCCESS) {
+                await this.saveCoverToGallery();
+              } else {
+                this.onUnavailableAction('未获得保存权限');
+              }
+            })
+        }.width('100%').margin({ top: 16 })
       }
-      Column().width('100%').height('100%').backgroundColor('#01000000')
-        .onClick(() => this.photoPreviewVisible = false)
+      .width('86%').constraintSize({ maxWidth: 360 })
+      .padding(18).borderRadius(22)
+      .backgroundColor(this.themeColorSurfaceSecondary)
+      .onClick(() => {})
     }.width('100%').height('100%').zIndex(1002)
+  }
+
+  /**
+   * H3-4：把当前封面存到相册。
+   *
+   * 上游 `BookInfoViewModel.saveCoverToGallery(path)` 走 Coil 取 bitmap 再 `ImageSaveUtils.saveImageToGallery`；
+   * 本地没有 Coil，用 `image.createImageSource` 读像素再打包 JPEG，写入走
+   * `photoAccessHelper.createAsset`（写法同 `pages/ReaderPage.ets:2331-2364`）。
+   * 网络封面 `image.createImageSource` 读不了 http，所以先用 rcp 下到 cacheDir。
+   */
+  private async saveCoverToGallery(): Promise<void> {
+    const source = this.photoPreviewSource();
+    if (typeof source !== 'string' || source.length === 0) {
+      this.onUnavailableAction('没有可保存的封面');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('保存失败：无法访问本地存储');
+      return;
+    }
+    this.isBusy = true;
+    let localUri: string = source;
+    let downloaded: string = '';
+    let imageSource: image.ImageSource | undefined = undefined;
+    let pixelMap: image.PixelMap | undefined = undefined;
+    let packer: image.ImagePacker | undefined = undefined;
+    try {
+      if (source.startsWith('http://') || source.startsWith('https://')) {
+        downloaded = `${context.cacheDir}/cover_${Date.now()}.img`;
+        const session = rcp.createSession({});
+        try {
+          const destination: rcp.DownloadToFile = { kind: 'file', file: downloaded };
+          const response = await session.downloadToFile(source, destination);
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            this.onUnavailableAction(`保存失败：下载封面出错（HTTP ${response.statusCode}）`);
+            return;
+          }
+        } finally {
+          session.close();
+        }
+        localUri = downloaded;
+      }
+      imageSource = image.createImageSource(localUri);
+      if (imageSource === undefined) {
+        this.onUnavailableAction('保存失败：无法读取图片');
+        return;
+      }
+      pixelMap = await imageSource.createPixelMap();
+      if (pixelMap === undefined) {
+        this.onUnavailableAction('保存失败：无法解码图片');
+        return;
+      }
+      packer = image.createImagePacker();
+      const options: image.PackingOption = { format: 'image/jpeg', quality: 100 };
+      const packed = await packer.packToData(pixelMap, options);
+      if (packed === undefined) {
+        this.onUnavailableAction('保存失败：无法编码图片');
+        return;
+      }
+      const bytes = new Uint8Array(packed);
+      const helper = photoAccessHelper.getPhotoAccessHelper(context);
+      const assetUri = await helper.createAsset(photoAccessHelper.PhotoType.IMAGE, 'jpg',
+        { title: 'Cover_' + Date.now() });
+      const file = fileIo.openSync(assetUri, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+      try {
+        fileIo.writeSync(file.fd, bytes.buffer);
+      } finally {
+        fileIo.closeSync(file);
+      }
+      // 上游成功文案是「保存成功」。
+      this.onUnavailableAction('保存成功');
+    } catch (error) {
+      this.onUnavailableAction('保存出错：' + JSON.stringify(error));
+    } finally {
+      if (packer !== undefined) { await packer.release(); }
+      if (pixelMap !== undefined) { await pixelMap.release(); }
+      if (imageSource !== undefined) { imageSource.release(); }
+      if (downloaded.length > 0) {
+        try { fileIo.unlinkSync(downloaded); } catch (_) {}
+      }
+      this.isBusy = false;
+    }
+  }
+
+  /**
+   * H3-5：全屏忙碌指示器。
+   * 上游 `BookInfoScreen.kt:2111-2119` 是 `AppAlertDialog(show = state.isBusy, onDismissRequest = {})`
+   * 包一个居中的 `AppCircularProgressIndicator()`——点遮罩不关。
+   */
+  @Builder
+  private BusyOverlay() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column().width('100%').height('100%').backgroundColor('#99000000')
+      LoadingProgress().width(48).height(48).color('#FFFFFF')
+    }.width('100%').height('100%').zIndex(1003)
+  }
+
+  /**
+   * H3-1：编辑备注对话框。
+   *
+   * 上游 `BookInfoScreen.kt:2049-2065`：`AppAlertDialog(title = edit_remark「编辑备注」,
+   * content = AppTextField(label = book_remark「书籍备注」), confirmText = ok, dismissText = cancel)`。
+   * 确认后走 `BookInfoIntent.UpdateRemark(remarkText)` → 落库；本地复用 `onSaveMetadata`
+   * （其余字段原样回传，只换 remark）。
+   */
+  @Builder
+  private RemarkDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column().width('100%').height('100%').backgroundColor('#99000000')
+        .onClick(() => this.remarkDialogVisible = false)
+      Column() {
+        Text('编辑备注').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).width('100%')
+        Text('书籍备注').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .width('100%').margin({ top: 12, bottom: 4 })
+        TextInput({ text: this.remarkDraft, placeholder: '' })
+          .height(44).fontSize(BODY_MEDIUM).width('100%')
+          .onChange((value: string) => { this.remarkDraft = value; })
+        Row() {
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
+            .height(40).padding({ left: 12, right: 12 })
+            .onClick(() => this.remarkDialogVisible = false)
+          Blank()
+          Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
+            .height(40).padding({ left: 12, right: 12 })
+            .onClick(() => { void this.submitRemark(); })
+        }.width('100%').margin({ top: 16 })
+      }
+      .width('86%').constraintSize({ maxWidth: 360 })
+      .padding(18).borderRadius(22)
+      .backgroundColor(this.themeColorSurfaceSecondary)
+      .onClick(() => {})
+    }.width('100%').height('100%').zIndex(1004)
+  }
+
+  /** H3-1：提交备注，其余元数据原样回传（上游只改 remark）。 */
+  private async submitRemark(): Promise<void> {
+    this.isBusy = true;
+    const ok = await this.onSaveMetadata(
+      this.book.title, this.book.author, this.book.category,
+      this.book.description ?? '', this.remarkDraft,
+      this.book.customTag ?? '', this.book.groupNames ?? [],
+      this.book.bookType ?? 'text', this.book.fixedType === true);
+    this.isBusy = false;
+    if (ok) {
+      this.remarkDialogVisible = false;
+    }
   }
 
   /** 全屏预览的图源：先自定义封面，再书籍封面；都空时直接用内置默认封面。 */
@@ -976,13 +1510,6 @@ export struct BookInfoPage {
    * 做出来」，这里全部列出，未接入的项在 `onOverflowSelect` 里提示「未接入」。
    */
   private overflowItems(): UiMenuItem[] {
-    // 批10（:565）：导出 EPUB 仅对有正文的本地书出现。ArkTS 不允许在 spread 三元里写
-    // 未声明类型的对象字面量（arkts-no-untyped-obj-literals / arkts-no-noninferrable-arr-literals），
-    // 所以先显式声明成 UiMenuItem[] 再展开。
-    const exportItems: UiMenuItem[] = [];
-    if (this.book.isLocal && (this.book.contentPath ?? '').length > 0) {
-      exportItems.push({ key: 'export_epub', title: '导出为 EPUB' });
-    }
     const items: UiMenuItem[] = [
       { key: 'custom_button', title: '自定义按钮' },
       { key: 'edit', title: '编辑' },
@@ -1000,7 +1527,6 @@ export struct BookInfoPage {
       { key: 'set_book_variable', title: '设置书籍变量' },
       { key: 'copy_book_url', title: '拷贝书籍 URL' },
       { key: 'copy_toc_url', title: '拷贝目录 URL' },
-      ...exportItems,
       { key: 'to_top', title: '置顶' },
       // 允许更新：选中态对齐上游 isSelected = book.canUpdate（缺省视为 true）。
       { key: 'allow_update', title: '允许更新', selected: this.book.canUpdate !== false },
@@ -1020,7 +1546,13 @@ export struct BookInfoPage {
         selected: this.book.isPrivate === true
       }
     ];
-    return items;
+    // D2-14：允许更新只对在线书籍开放（上游 `BookInfoScreen.kt:1107-1112`
+    // `if (book?.isLocal == false)`）。本地 `isLocal` 未置位时按在线书处理，
+    // 与上游「非本地才显示」同口径。
+    return items.filter((item: UiMenuItem) => {
+      if (item.key === 'allow_update') { return this.book.isLocal !== true; }
+      return true;
+    });
   }
 
   /** 点溢出菜单某一项。关闭在回调里做，面板自己不关自己。 */
@@ -1038,12 +1570,12 @@ export struct BookInfoPage {
       this.copyBookUrl();
     } else if (key === 'copy_toc_url') {
       this.copyTocUrl();
-    } else if (key === 'export_epub') {
-      this.onExportEpub();
     } else if (key === 'login') {
       this.openSourceLogin();
     } else if (key === 'set_source_variable') {
-      this.openSourceEdit();
+      this.openSourceVariableSheet();
+    } else if (key === 'set_book_variable') {
+      this.openBookVariableSheet();
     } else if (key === 'upload_to_remote') {
       this.uploadBook();
     } else if (key === 'allow_update') {
@@ -1090,6 +1622,125 @@ export struct BookInfoPage {
       //   引擎侧有（`sourceengine/src/main/ets/model/data/Book.ts:37 variable`、`:58 variableMap`）
       //   但本地书模型没映射过来。
       this.onUnavailableAction(`${this.overflowTitleOf(key)} 未接入`);
+    }
+  }
+
+  /**
+   * H2-9 打开「设置源变量」面板。
+   *
+   * 对齐上游 `BookInfoViewModel.kt:708-760 requestSourceVariableSheet()`：
+   * 取书源 sourceJson 里的 `variable`，标题 `set_source_variable`，key = 书源 URL；
+   * 说明文案走 `getDisplayVariableComment("源变量，可在js中通过source.getVariable()获取")`
+   * ——书源自带 `variableComment` 时优先用它。
+   */
+  private openSourceVariableSheet(): void {
+    const sourceUrl = this.book.origin ?? '';
+    if (sourceUrl.length === 0) {
+      this.onUnavailableAction('这本书没有关联书源');
+      return;
+    }
+    const matched = BookSourceRepository.getAll()
+      .find((item: BookSource) => item.bookSourceUrl === sourceUrl);
+    if (matched === undefined) {
+      this.onUnavailableAction('找不到这本书的书源');
+      return;
+    }
+    let variable = '';
+    let comment = '';
+    try {
+      const parsed = JSON.parse(matched.sourceJson) as Record<string, Object>;
+      const v = parsed['variable'];
+      if (typeof v === 'string') { variable = v; }
+      const c = parsed['variableComment'];
+      if (typeof c === 'string') { comment = c; }
+    } catch (error) { /* sourceJson 损坏时按空变量处理 */ }
+    this.variableSheetTitle = '设置源变量';
+    this.variableSheetKey = sourceUrl;
+    this.variableDraft = variable;
+    this.variableComment = comment.length > 0
+      ? comment : '源变量，可在js中通过source.getVariable()获取';
+    this.variableSheetVisible = true;
+  }
+
+  /**
+   * H2-9 打开「设置书籍变量」面板。
+   *
+   * 对齐上游 `requestBookVariableSheet()`：编辑 `book.getCustomVariable()`，
+   * 即 books.variable JSON 里的 `custom` 键；标题 `set_book_variable`。
+   */
+  private openBookVariableSheet(): void {
+    let custom = '';
+    if (this.book.variable !== undefined && this.book.variable.length > 0) {
+      try {
+        const parsed = JSON.parse(this.book.variable) as Record<string, Object>;
+        const v = parsed['custom'];
+        if (typeof v === 'string') { custom = v; }
+      } catch (error) { /* 原 JSON 损坏时按空变量处理 */ }
+    }
+    this.variableSheetTitle = '设置书籍变量';
+    this.variableSheetKey = this.book.id;
+    this.variableDraft = custom;
+    this.variableComment = '书籍变量，可在js中通过book.getVariable("custom")获取';
+    this.variableSheetVisible = true;
+  }
+
+  /**
+   * H2-9 保存变量。
+   *
+   * 对齐上游 `BookInfoViewModel.kt setVariable(key, variable)` 的两分支：
+   * key 命中书源 URL → 写书源 sourceJson.variable 并整表保存；
+   * key 命中当前书 → 写 books.variable 的 custom 键并落库。
+   */
+  private async saveVariableSheet(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const variable = this.variableDraft;
+    const key = this.variableSheetKey;
+    const sourceUrl = this.book.origin ?? '';
+    this.isBusy = true;
+    try {
+      if (key === sourceUrl && sourceUrl.length > 0) {
+        const all = BookSourceRepository.getAll();
+        const index = all.findIndex((item: BookSource) => item.bookSourceUrl === sourceUrl);
+        if (index < 0) {
+          this.onUnavailableAction('找不到这本书的书源');
+          return;
+        }
+        const target = all[index];
+        let parsed: Record<string, Object> = {};
+        try { parsed = JSON.parse(target.sourceJson) as Record<string, Object>; } catch (error) {
+          this.onUnavailableAction('书源 JSON 已损坏，无法写入变量');
+          return;
+        }
+        parsed['variable'] = variable;
+        all[index] = {
+          bookSourceUrl: target.bookSourceUrl,
+          bookSourceName: target.bookSourceName,
+          bookSourceGroup: target.bookSourceGroup,
+          bookSourceType: target.bookSourceType,
+          enabled: target.enabled,
+          customOrder: target.customOrder,
+          sourceJson: JSON.stringify(parsed)
+        };
+        await BookSourceRepository.save(context, all);
+      } else {
+        let parsed: Record<string, string | number> = {};
+        if (this.book.variable !== undefined && this.book.variable.length > 0) {
+          try { parsed = JSON.parse(this.book.variable) as Record<string, string | number>; } catch (error) {
+            parsed = {};
+          }
+        }
+        parsed['custom'] = variable;
+        const updated: Book = BookRepository.copyBook(this.book);
+        updated.variable = JSON.stringify(parsed);
+        await BookRepository.saveImportedBooks(context, [updated]);
+      }
+      this.variableSheetVisible = false;
+      this.onUnavailableAction('变量已保存');
+    } catch (error) {
+      this.onUnavailableAction(`保存变量失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.isBusy = false;
     }
   }
 
@@ -1247,37 +1898,278 @@ export struct BookInfoPage {
     this.logSheetVisible = true;
   }
 
-  /** 日志面板：与书架页 `LogSheetContent` 同一形态，行取自 AppLog 内存缓冲。 */
+  /** I-3：角色枚举 → 中文名，对齐上游 `CharacterEntryCard` 的 `roleDisplayName`。 */
+  private characterRoleLabel(role: string): string {
+    if (role === BK_ROLE_MALE_LEAD) { return '男主'; }
+    if (role === BK_ROLE_FEMALE_LEAD) { return '女主'; }
+    if (role === BK_ROLE_MALE_SUPPORTING) { return '男配'; }
+    if (role === BK_ROLE_FEMALE_SUPPORTING) { return '女配'; }
+    return '';
+  }
+
+  /** I-3：`tagsJson` 是 JSON 数组字符串，这里只做展示用拼接（去括号引号，`·` 分隔）。 */
+  private characterTagsText(profile: CharacterProfile): string {
+    const raw = profile.tagsJson ?? '';
+    const cleaned = raw.replace(/[\[\]"]/g, ' ').trim();
+    if (cleaned.length === 0) { return ''; }
+    return cleaned.split(',').map((part: string) => part.trim())
+      .filter((part: string) => part.length > 0).join(' · ');
+  }
+
+  /** I-1：任一数据非空才渲染人物区，对齐上游 `BookInfoScreen.kt:437-441`。 */
+  private hasKnowledgeSection(): boolean {
+    return this.characters.length > 0
+      || this.knowledgeEntries.length > 0
+      || this.recentEvents.length > 0;
+  }
+
+  /** I-2：人物区右上四个入口按钮（SmallTonalButton，32vp 高 + 8vp 内边距）。 */
   @Builder
-  private LogSheet() {
+  private CharacterActionButton(icon: AppGlyphName, label: string, tab: number) {
+    Row() {
+      AppGlyph({ name: icon, glyphSize: 18, tint: this.themeColorAccent })
+    }.height(32).padding({ left: 8, right: 8 })
+      .accessibilityText(label)
+      .onClick(() => { this.knowledgeSheetTab = tab; this.knowledgeSheetVisible = true; })
+  }
+
+  /**
+   * I-3：人物条目卡。对齐上游 `BookInfoScreen.kt:2241-2322 CharacterEntryCard`：
+   * 宽 160dp、`surfaceContainerLow` 底、内边距 10dp、行距 4dp；
+   * 36dp 圆头像（`surfaceContainerHighest` 底，无图时人形图标）+ 姓名 labelLarge
+   * + 角色 labelSmall/onSurfaceVariant；标签行 labelSmall/onSurfaceVariant 单行。
+   */
+  @Builder
+  private CharacterEntryCard(profile: CharacterProfile) {
+    Column() {
+      Row({ space: 8 }) {
+        Stack({ alignContent: Alignment.Center }) {
+          if ((profile.avatarUri ?? '').length > 0) {
+            Image(profile.avatarUri).width(36).height(36).borderRadius(18)
+              .objectFit(ImageFit.Cover)
+          } else {
+            AppGlyph({ name: 'profile', glyphSize: 18, tint: this.themeColorOnSurfaceVariant })
+          }
+        }.width(36).height(36).borderRadius(18)
+          .backgroundColor(this.themeColorSurfaceContainerHighest)
+        Column() {
+          Text(profile.name).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary)
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+          if (this.characterRoleLabel(profile.role).length > 0) {
+            Text(this.characterRoleLabel(profile.role)).fontSize(LABEL_SMALL)
+              .fontColor(this.themeColorOnSurfaceVariant)
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%').margin({ top: 1 })
+          }
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+      }.width('100%').alignItems(VerticalAlign.Center)
+      if (this.characterTagsText(profile).length > 0) {
+        Text(this.characterTagsText(profile)).fontSize(LABEL_SMALL)
+          .fontColor(this.themeColorOnSurfaceVariant)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%').margin({ top: 4 })
+      }
+    }.width(160).padding(10)
+      .borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 12))
+      .backgroundColor(this.themeColorSurfaceContainerLow)
+      .alignItems(HorizontalAlign.Start)
+      .onClick(() => { this.knowledgeSheetTab = 0; this.knowledgeSheetVisible = true; })
+  }
+
+  /**
+   * I-1/I-2：人物区。对齐上游 `BookInfoScreen.kt:2171-2238 BookInfoCharacters`：
+   * 标题固定是 `book_info_knowledge`「知识」（不是「人物」），右侧四个入口按钮，
+   * 下方 `LazyRow` 横滑人物卡。
+   */
+  @Builder
+  private BookInfoCharacters() {
     Column() {
       Row() {
-        Text('日志').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
-        Blank()
-        Text('清空').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
-          .onClick(() => { AppLog.clear(); this.logEntries = []; })
-      }.width('100%').padding({ left: 16, right: 16, top: 18, bottom: 12 })
-      if (this.logEntries.length === 0) {
+        Text('知识').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        this.CharacterActionButton('list', '人物', 0)
+        this.CharacterActionButton('group', '关系网', 1)
+        this.CharacterActionButton('book', '世界知识', 2)
+        this.CharacterActionButton('profileTimeline', '事记', 3)
+      }.width('100%').padding({ left: 16, right: 16 }).alignItems(VerticalAlign.Center)
+      Scroll() {
+        Row({ space: 8 }) {
+          ForEach(this.characters, (item: CharacterProfile) => {
+            this.CharacterEntryCard(item)
+          }, (item: CharacterProfile) => item.id)
+        }.align(Alignment.Start)
+      }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        .align(Alignment.Start).padding({ left: 16, right: 16 })
+    }.width('100%').padding({ top: 8, bottom: 8 })
+      .backgroundColor(this.pageBaseColor()).alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * I-5：知识条目卡。对齐上游 `BookInfoScreen.kt:2374-2399 KnowledgeInfoCard`：
+   * 宽 140dp、`surfaceContainerLow` 底、内边距 12dp、行距 4dp；
+   * 标题 titleSmall 单行 + 摘要 bodySmall/onSurfaceVariant 两行（空则「暂无内容」）。
+   */
+  @Builder
+  private KnowledgeInfoCard(title: string, summary: string) {
+    Column() {
+      Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+      Text(summary.length > 0 ? summary : '暂无内容').fontSize(BODY_SMALL)
+        .fontColor(this.themeColorOnSurfaceVariant).maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%').margin({ top: 4 })
+    }.width(140).padding(12)
+      .borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 12))
+      .backgroundColor(this.themeColorSurfaceContainerLow)
+      .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * I-4：知识区。对齐上游 `BookInfoScreen.kt:2325-2371 BookInfoKnowledge`：
+   * 标题 `book_knowledge`「世界知识」+ 「查看全部」箭头，下方横滑知识卡。
+   * 上游此 composable 已定义但**未在 BookInfoScreen 里调用**，本地同样保留不调用。
+   */
+  @Builder
+  private BookInfoKnowledge() {
+    Column() {
+      Row() {
+        Text('世界知识').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        this.CharacterActionButton('arrowForward', '查看全部', 2)
+      }.width('100%').padding({ left: 16, right: 16 }).alignItems(VerticalAlign.Center)
+      Scroll() {
+        Row({ space: 8 }) {
+          ForEach(this.knowledgeEntries, (item: KnowledgeEntry) => {
+            this.KnowledgeInfoCard(item.title, item.content)
+          }, (item: KnowledgeEntry) => item.id)
+        }.align(Alignment.Start)
+      }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        .align(Alignment.Start).padding({ left: 16, right: 16 })
+    }.width('100%').padding({ top: 8, bottom: 8 })
+      .backgroundColor(this.pageBaseColor()).alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * I-7：事件条目卡。对齐上游 `BookInfoScreen.kt:2454-2479 EventInfoCard`：
+   * 宽 160dp、内边距 12dp、行距 4dp，标题 titleSmall 单行 + 正文 bodySmall 两行。
+   */
+  @Builder
+  private EventInfoCard(title: string, content: string) {
+    Column() {
+      Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+      Text(content.length > 0 ? content : '暂无内容').fontSize(BODY_SMALL)
+        .fontColor(this.themeColorOnSurfaceVariant).maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%').margin({ top: 4 })
+    }.width(160).padding(12)
+      .borderRadius(cardRadiusOf(this.themeCardOverride, this.themeCardRadius, 12))
+      .backgroundColor(this.themeColorSurfaceContainerLow)
+      .alignItems(HorizontalAlign.Start)
+  }
+
+  /** I-7：事件卡标题 = 「人物名 · 章节名」，两段都空时用「事件详情」。 */
+  private eventTitleOf(event: CharacterEvent): string {
+    const name = this.characterNameOf(event.characterId);
+    const parts: string[] = [];
+    if (name.length > 0) { parts.push(name); }
+    if ((event.chapterTitle ?? '').length > 0) { parts.push(event.chapterTitle); }
+    return parts.length > 0 ? parts.join(' · ') : '事件详情';
+  }
+
+  private characterNameOf(characterId: string): string {
+    for (let i = 0; i < this.characters.length; i++) {
+      if (this.characters[i].id === characterId) { return this.characters[i].name; }
+    }
+    return '';
+  }
+
+  /**
+   * I-6：事件区。对齐上游 `BookInfoScreen.kt:2402-2451 BookInfoEvents`：
+   * 标题 `plot_events`「事记」+ 「查看全部」箭头，下方横滑事件卡。
+   * 上游此 composable 已定义但**未在 BookInfoScreen 里调用**，本地同样保留不调用。
+   */
+  @Builder
+  private BookInfoEvents() {
+    Column() {
+      Row() {
+        Text('事记').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        this.CharacterActionButton('arrowForward', '查看全部', 3)
+      }.width('100%').padding({ left: 16, right: 16 }).alignItems(VerticalAlign.Center)
+      Scroll() {
+        Row({ space: 8 }) {
+          ForEach(this.recentEvents, (item: CharacterEvent) => {
+            this.EventInfoCard(this.eventTitleOf(item), item.content)
+          }, (item: CharacterEvent) => item.id)
+        }.align(Alignment.Start)
+      }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        .align(Alignment.Start).padding({ left: 16, right: 16 })
+    }.width('100%').padding({ top: 8, bottom: 8 })
+      .backgroundColor(this.pageBaseColor()).alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 日志面板：对齐上游 `ui/widget/components/log/AppLogSheet.kt`（137 行）。
+   * - 标题 `log`「日志」+ endAction 清空（`deleteSweep`）；
+   * - 空态 `no_logs`「暂无日志」；
+   * - 行 = 时间（labelMedium/outline）+ 正文（bodyMedium/onSurface，maxLines 2），整行可点；
+   * - H-5：点行后弹 `LogDetailSheet`（上游 `LogDetailSheet.kt`：`AppAlertDialog` +
+   *   `heightIn(max=400.dp)` 竖向滚动 + `bodySmall` 全文 + 确认键 `android.R.string.ok`）。
+   */
+  @Builder
+  private LogSheet() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Row() {
+          Text('日志').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+            .fontColor(this.themeColorTextPrimary)
+          Blank()
+          AppGlyph({ name: 'deleteSweep', glyphSize: 18, tint: this.themeColorAccent })
+            .accessibilityText('清空')
+            .onClick(() => { AppLog.clear(); this.logEntries = []; })
+        }.width('100%').padding({ left: 16, right: 16, top: 18, bottom: 12 })
+        if (this.logEntries.length === 0) {
+          Column() {
+            Text('暂无日志').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+          }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+        } else {
+          List() {
+            ForEach(this.logEntries, (entry: AppLogEntry) => {
+              ListItem() {
+                // 上游 AppLogSheet.kt:115-135：时间行 labelMedium/outline，正文 bodyMedium/onSurface。
+                Column() {
+                  Text(AppLog.formatTime(entry.timestamp)).fontSize(LABEL_MEDIUM)
+                    .fontColor(this.themeColorTextTertiary).width('100%')
+                  Text(entry.content()).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+                    .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .width('100%').margin({ top: 4 })
+                }.width('100%').alignItems(HorizontalAlign.Start)
+              }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                .onClick(() => this.logDetailText = entry.content())
+            }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
+          }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+        }
+      }.width('100%').height('100%').backgroundColor('#17181E')
+      if (this.logDetailText.length > 0) {
         Column() {
-          Text('暂无日志').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
-        }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
-      } else {
-        List() {
-          ForEach(this.logEntries, (entry: AppLogEntry) => {
-            ListItem() {
-              // 上游 AppLogSheet.kt:115-135：时间行 labelMedium/outline，正文 bodyMedium/onSurface。
-              Column() {
-                Text(AppLog.formatTime(entry.timestamp)).fontSize(LABEL_MEDIUM)
-                  .fontColor(this.themeColorTextTertiary).width('100%')
-                Text(entry.content()).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
-                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .width('100%').margin({ top: 4 })
-              }.width('100%').alignItems(HorizontalAlign.Start)
-            }.padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          }, (entry: AppLogEntry) => `${entry.timestamp}:${entry.message.length}`)
-        }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+          Text('Log').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+            .fontColor(this.themeColorTextPrimary).width('100%')
+          Scroll() {
+            Text(this.logDetailText).fontSize(BODY_SMALL)
+              .fontColor(this.themeColorTextPrimary).width('100%')
+              .copyOption(CopyOptions.LocalDevice)
+          }.width('100%').constraintSize({ maxHeight: 400 }).margin({ top: 12 })
+          Row() {
+            Text('确认').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
+              .layoutWeight(1).padding({ top: 12, bottom: 12 })
+              .backgroundColor('#B9C6FF').borderRadius(14)
+              .onClick(() => this.logDetailText = '')
+          }.width('100%').margin({ top: 16 })
+        }.width('86%').constraintSize({ maxWidth: 360 }).padding(18)
+          .backgroundColor(this.themeColorSurfaceElevated).borderRadius(16)
       }
-    }.width('100%').height('100%').backgroundColor('#17181E')
+    }.width('100%').height('100%')
   }
 
   build() {
@@ -1327,33 +2219,39 @@ export struct BookInfoPage {
               // 封面：点击换封面、长按看大图（:301）。容器在调用处包，BookCover 内部加
               // onClick 会吞掉书架整卡的点击。
               Stack({ alignContent: Alignment.Center }) {
-                BookCover({ book: this.book, displayWidth: 112, displayHeight: 157, coverSettings: this.coverSettings, applyAspectRatio: true })
+                BookCover({ book: this.book, displayWidth: 112, coverSettings: this.coverSettings, applyAspectRatio: true, clampAspectHeight: true })
               }
                 // 长按与短按必须互斥：onClick 与 gesture 并存时长按会顺带触发点击，
                 // 实测表现为长按打开换封面选择器。用 Exclusive 手势组，长按优先。
                 .gesture(
                   GestureGroup(GestureMode.Exclusive,
+                    // 上游 `BookInfoScreen.kt:433-435`：单击开「封面换源」面板，长按才是大图预览。
                     LongPressGesture({ duration: 500 }).onAction(() => this.openPhotoPreview()),
-                    TapGesture({ count: 1 }).onAction(() => this.onChooseCover())
+                    TapGesture({ count: 1 }).onAction(() => this.openCoverSheet())
                   )
                 )
-                .accessibilityText(`${this.book.title}，封面。点击更换封面，长按查看大图`)
+                .accessibilityText(`${this.book.title}，封面。点击封面换源，长按查看大图`)
               Column() {
                 // 书名：点击进搜索、长按弹「搜索书名 / 展开收起」（:296）。
-                Text(this.book.title).fontSize(HEADLINE_MEDIUM).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
-                  .maxLines(this.titleExpanded ? 20 : 3).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.book.title).fontSize(HEADLINE_SMALL).fontWeight(FontWeight.Bold).fontColor('#F1F2F6')
+                  .maxLines(this.titleExpanded ? 999 : 2).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .onClick(() => this.searchByTitle())
                   .bindContextMenu(this.TitleMenu, ResponseType.LongPress,
                     { placement: Placement.BottomLeft })
                 // 作者：点击进作者搜索（:297）。上游长按走另一分支，本地不做长按。
-                Text(this.book.author.length > 0 ? this.book.author : '作者未知')
+                // 上游 `BookInfoScreen.kt:1326` 传的是 `book.realAuthor`（= `getRealAuthor()`，
+                // `data/entities/Book.kt:179`），即先按 `AppPattern.authorRegex`
+                // （`constant/AppPattern.kt:36` `^\\s*作\\s*者[:：\\s]+|\\s+著`）剥掉「作者：」前缀
+                // 与「 著」后缀；`author_show = %s`（zh-rCN strings.xml:249）本身没有字面前缀。
+                // 原来直接显示 `book.author` 原值，「作者：张三 著」会整串露出来。
+                Text(realAuthorOf(this.book.author).length > 0 ? realAuthorOf(this.book.author) : '作者未知')
                   .fontSize(BODY_LARGE).fontColor('#D0D2DB').margin({ top: 8 })
                   .onClick(() => this.searchByAuthor())
                 // 来源行：上游 `BookInfoScreen.kt:1334-1339` 只有一行
                 // `origin_show`（`%s` = book.originName），没有「本地书籍 / 本地文件」这种
                 // 状态前缀。本地原来拆成 statusLabel + ' · ' + sourceLabel 两段，
                 // 用户在详情页看到的是「本地书籍 · 本地文件」，与上游不符，这里只留名字。
-                Text(this.originNameLabel()).fontSize(LABEL_LARGE).fontColor('#9FA6C8')
+                Text(this.originNameLabel()).fontSize(LABEL_MEDIUM).fontColor(this.themeColorPrimary)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .margin({ top: 8 })
                   .onClick(() => this.onOriginClick())
@@ -1375,7 +2273,7 @@ export struct BookInfoPage {
                   }.width('100%').margin({ top: 8 })
                 }
               }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 16 })
-            }.width('100%').alignItems(VerticalAlign.Center).padding({ left: 18, right: 18, bottom: 18 })
+            }.width('100%').alignItems(VerticalAlign.Center).padding({ left: 16, right: 16, top: 16, bottom: 8 })
 
             // 标签行拆两路，对齐上游 `BookInfoScreen.kt:1354-1385`：
             // 左边一个分组名（`groupNames` 单串），右边是 kindLabels 的横向列表。
@@ -1442,18 +2340,26 @@ export struct BookInfoPage {
             .padding({ left: 16, right: 16, top: 8, bottom: 8 })
             .backgroundColor(this.themeColorSurfacePrimary)
 
+          // I-11：人物 / 知识 / 事记区在动作卡之后、摘要之前，
+          // 对齐上游 `BookInfoScreen.kt:437-441`（BookInfoCharacters）先于 `:461`（BookInfoSummary）。
+          if (this.hasKnowledgeSection()) {
+            this.BookInfoCharacters()
+          }
+
           Column() {
-            Text(this.book.progress > 0 ? `在读 · ${this.book.lastChapter}` : '尚未开始阅读')
-              .fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
+            // 上游 `toc_s = 在读 · %s`，%s 取 `book.durChapterTitle`，空时回落「加载中…」
+            // （本地 durChapterTitle 对应 `book.lastChapter`）。
+            Text(`在读 · ${this.book.lastChapter.length > 0 ? this.book.lastChapter : '加载中…'}`)
+              .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Bold).fontColor(this.themeColorTextPrimary)
             // 第二行是「最新章节」，不是「当前阅读章」：上游接的是 latestChapterTitle。
             Text(`最新 · ${this.book.latestChapterTitle ?? ''}`)
-              .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).margin({ top: 4 })
+              .fontSize(BODY_MEDIUM).fontColor(this.themeColorOnSurfaceVariant).margin({ top: 4 })
             Row() {
               Text(this.getChapterTotal() > 0 ? `共 ${this.getChapterTotal()} 章` : '章节总数待读取')
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
-              Text('  |  ').fontSize(TITLE_SMALL).fontColor(this.themeColorSecondary)
+                .fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Bold).fontColor(this.themeColorPrimary)
+              Text('  |  ').fontSize(LABEL_MEDIUM).fontColor(this.themeColorSecondary)
               Text(this.readStateLabel())
-                .fontSize(TITLE_SMALL).fontColor(this.themeColorSecondary)
+                .fontSize(LABEL_MEDIUM).fontColor(this.themeColorSecondary)
             }.margin({ top: 4 })
           }.width('100%').alignItems(HorizontalAlign.Start)
             // 上游 `BookInfoSummary`（BookInfoScreen.kt:1544-1550）是
@@ -1506,7 +2412,12 @@ export struct BookInfoPage {
                   .alignSelf(ItemAlign.Start).margin({ top: 12 })
                 Text(this.book.remark ?? '').fontSize(TITLE_SMALL).lineHeight(TITLE_SMALL_LINE_HEIGHT).fontColor('#BFC1CB')
                   .alignSelf(ItemAlign.Start).margin({ top: 4 })
-              }.width('100%').onClick(() => this.onOpenEditPage())
+              }.width('100%').onClick(() => {
+                // H3-1：上游 `BookInfoScreen.kt:1598-1606` 点备注打开「编辑备注」对话框，
+                // 不是跳编辑页。
+                this.remarkDraft = this.book.remark ?? '';
+                this.remarkDialogVisible = true;
+              })
             }
           }.width('100%').alignItems(HorizontalAlign.Start)
             .padding({ left: 16, right: 16, top: 8, bottom: 24 })
@@ -1610,7 +2521,15 @@ export struct BookInfoPage {
         // AOSP `ExtendedFabPrimaryTokens.ContainerElevation = ElevationTokens.Level3`，Level3 = 6dp。
         .shadow({ radius: 6, color: '#33000000', offsetY: 4 })
         .margin({ right: 16, bottom: 16 })
-        .onClick(() => this.onRead())
+        .onClick(() => {
+          // H2-7：网页书「阅读」先摊开文件清单，选完文件导入后再进阅读页
+          // （上游 `onReadClick`：`if (book.isWebFile) setSheet(WebFiles(openAfterImport = true))`）。
+          if (this.isWebFileBook()) {
+            this.openWebFileSheet(true);
+          } else {
+            this.onRead();
+          }
+        })
       }
       }.width('100%').layoutWeight(1)
 
@@ -1677,12 +2596,26 @@ export struct BookInfoPage {
       if (this.photoPreviewVisible) {
         this.PhotoPreview()
       }
+      // H3-5：全屏忙碌指示器浮在最上层。
+      if (this.isBusy) {
+        this.BusyOverlay()
+      }
+      // H3-1：编辑备注对话框。
+      if (this.remarkDialogVisible) {
+        this.RemarkDialog()
+      }
+      // H3-2：不支持文件提示框。
+      if (this.unsupportedVisible) {
+        this.UnsupportedDialog()
+      }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
       // 移出书架确认面板、日志面板与批8 的同名冲突面板共用这一个 bindSheet：
       // 同一节点挂两个 bindSheet 只有最后一个生效（书架页 :2118 踩过同一个坑），
       // 所以用一个合并条件 + 内容分支，不用两个独立 sheet。
       .bindSheet(this.deleteSheetVisible || this.logSheetVisible || this.conflictSheetVisible
-        || this.groupSheetVisible, this.InfoSheetContent(), {
+        || this.groupSheetVisible || this.knowledgeSheetVisible || this.coverSheetVisible
+        || this.variableSheetVisible || this.webFileSheetVisible,
+        this.InfoSheetContent(), {
         height: this.logSheetVisible ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
@@ -1696,14 +2629,334 @@ export struct BookInfoPage {
           this.conflictSheetVisible = false;
           this.groupSheetVisible = false;
           this.logSheetVisible = false;
+          this.logDetailText = '';
+          this.deleteShowCopiesList = false;
+          this.knowledgeSheetVisible = false;
+          // H2-1：面板关掉就把在途的换封面搜索作废，别再回填结果。
+          this.coverSearchToken = this.coverSearchToken + 1;
+          this.coverSheetVisible = false;
+          this.coverSearching = false;
+          this.coverCandidates = [];
+          this.variableSheetVisible = false;
+          // H2-6：面板收起时清空清单与压缩包路径，避免下次打开先闪上一次的文件。
+          this.webFileSheetVisible = false;
+          this.webFileCandidates = [];
+          this.webFileArchiveUri = '';
+          this.webFileSheetTitle = '';
+          this.webFileLoading = false;
         }
       })
   }
 
   /** 详情页 sheet 内容：日志优先，其余落回移出书架确认面板。 */
+  /**
+   * H2-9 变量编辑面板。
+   *
+   * 对齐上游 `VariableEditorSheet.kt:29-71`：标题 + 右上「保存」按钮
+   * （`MediumTonalButton(AppIcons.Check, action_save)`）、`AppTextField(label = "variable", minLines = 3)`、
+   * `variable_comment` 小标题、可选中复制的说明正文（`SelectionContainer`）。
+   */
+  @Builder
+  private VariableSheet() {
+    Column() {
+      Row() {
+        Text(this.variableSheetTitle).fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('保存').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
+          .height(40).padding({ left: 12, right: 12 })
+          .accessibilityText('保存')
+          .onClick(() => { void this.saveVariableSheet(); })
+      }.width('100%').padding({ bottom: 12 })
+      Text('variable').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+        .width('100%').padding({ bottom: 6 })
+      TextArea({ text: this.variableDraft, placeholder: '' })
+        .width('100%').constraintSize({ minHeight: 96, maxHeight: 200 })
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .backgroundColor(this.themeColorSurfaceTertiary).borderRadius(8)
+        .onChange((value: string) => { this.variableDraft = value; })
+      Text('变量说明').fontSize(LABEL_MEDIUM).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextSecondary).width('100%')
+        .padding({ top: 16, bottom: 6 })
+      Scroll() {
+        Text(this.variableComment).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .width('100%').textAlign(TextAlign.Start)
+          .copyOption(CopyOptions.LocalDevice)
+      }.width('100%').constraintSize({ maxHeight: 200 })
+    }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 16 })
+  }
+
+
+  /** H2-7：这本书是不是网页书（上游 `book.isWebFile`，本地按媒体类型判）。 */
+  private isWebFileBook(): boolean {
+    return this.book.bookType === 'webFile';
+  }
+
+  /**
+   * H2-6：打开网页书文件面板。
+   *
+   * 上游 `BookInfoViewModel.loadWebFile`：拉详情取 `downloadUrls` 再逐条转 `BookInfoWebFile`；
+   * 失败时清空清单并 toast「LoadWebFileError」。本地同样在面板里显示加载态。
+   */
+  private openWebFileSheet(openAfterImport: boolean): void {
+    this.webFileOpenAfterImport = openAfterImport;
+    this.webFileSheetTitle = '导入在线书籍文件';
+    this.webFileCandidates = [];
+    this.webFileArchiveUri = '';
+    this.webFileSheetVisible = true;
+    this.webFileLoading = true;
+    WebFileCoordinator.loadFiles(this.book)
+      .then((files: BookInfoWebFile[]) => {
+        this.webFileCandidates = files;
+        this.webFileLoading = false;
+      })
+      .catch((error: Error) => {
+        this.webFileCandidates = [];
+        this.webFileLoading = false;
+        AppLog.put(`读取网页书文件清单失败：${error.message}`);
+      });
+  }
+
+  /**
+   * H2-6/H2-7/H2-8：选中一个文件。
+   *
+   * 上游 `handleWebFileSelection` 三分支：
+   * `isSupported` → 下载后导入并可选进阅读页；
+   * `isSupportDecompress` → 下载后列条目，单条目直接导、多条目转「导入选择书籍」面板；
+   * 其余 → 弹「不支持」对话框。
+   */
+  private async selectWebFile(file: BookInfoWebFile): Promise<void> {
+    if (WebFileCoordinator.isSupportedFile(file.name)) {
+      this.isBusy = true;
+      try {
+        const downloaded = await this.downloadWebFile(file);
+        if (downloaded.length === 0) { return; }
+        await this.onImportWebFile(downloaded, this.webFileOpenAfterImport);
+        this.webFileSheetVisible = false;
+      } finally {
+        this.isBusy = false;
+      }
+      return;
+    }
+    if (WebFileCoordinator.isArchiveFile(file.name)) {
+      if (!WebFileCoordinator.isDecompressible(file.name)) {
+        // 平台 zlib 只解 zip / cbz；rar / 7z 上游能解，本地必须说清而不是静默失败。
+        this.unsupportedFileName = file.name;
+        this.unsupportedFileUrl = file.url;
+        this.unsupportedOpenAfterImport = this.webFileOpenAfterImport;
+        this.unsupportedVisible = true;
+        return;
+      }
+      this.isBusy = true;
+      try {
+        const downloaded = await this.downloadWebFile(file);
+        if (downloaded.length === 0) { return; }
+        const context = this.getUIContext().getHostContext();
+        if (context === undefined) {
+          this.onUnavailableAction('无法访问本地存储');
+          return;
+        }
+        const entries = await ArchiveImporter.listBookEntries(context, downloaded);
+        if (entries.length === 0) {
+          // 包内没有书文件（例如整包是图片），交给整包导入链路。
+          await this.onImportWebArchiveEntries(downloaded, [], this.webFileOpenAfterImport);
+          this.webFileSheetVisible = false;
+          return;
+        }
+        if (entries.length === 1) {
+          await this.onImportWebArchiveEntries(downloaded, entries, this.webFileOpenAfterImport);
+          this.webFileSheetVisible = false;
+          return;
+        }
+        // 多条目：换成「导入选择书籍」面板（上游 `BookInfoSheet.ArchiveEntries`）。
+        this.webFileArchiveUri = downloaded;
+        this.webFileSheetTitle = '导入选择书籍';
+        this.webFileCandidates = entries.map((name: string): BookInfoWebFile => {
+          return { url: downloaded, name: name };
+        });
+      } catch (error) {
+        this.onUnavailableAction(error instanceof Error ? `读取压缩包失败：${error.message}` : '读取压缩包失败');
+      } finally {
+        this.isBusy = false;
+      }
+      return;
+    }
+    // 既不是书文件也不是压缩包：上游弹 `UnsupportedWebFile`。
+    this.unsupportedFileName = file.name;
+    this.unsupportedFileUrl = file.url;
+    this.unsupportedOpenAfterImport = this.webFileOpenAfterImport;
+    this.unsupportedVisible = true;
+  }
+
+  /** 选完压缩包里的某一条：按条目导入（上游 `importArchiveBook(uri, name)`）。 */
+  private async selectArchiveEntry(entryName: string): Promise<void> {
+    if (this.webFileArchiveUri.length === 0) { return; }
+    this.isBusy = true;
+    try {
+      await this.onImportWebArchiveEntries(this.webFileArchiveUri, [entryName], this.webFileOpenAfterImport);
+      this.webFileSheetVisible = false;
+    } finally {
+      this.isBusy = false;
+    }
+  }
+
+  /** 把网页书文件下到 cacheDir，返回本地路径；失败返回空串并 toast。 */
+  private async downloadWebFile(file: BookInfoWebFile): Promise<string> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.onUnavailableAction('下载失败：无法访问本地存储');
+      return '';
+    }
+    const target = `${context.cacheDir}/webfile/${WebFileCoordinator.safeFileName(file.name)}`;
+    try {
+      fileIo.mkdirSync(`${context.cacheDir}/webfile`, true);
+    } catch (error) {
+      // 目录已存在时 mkdirSync 抛错，忽略。
+    }
+    let session: rcp.Session | undefined = undefined;
+    try {
+      session = rcp.createSession({});
+      const destination: rcp.DownloadToFile = { kind: 'file', file: target };
+      const response = await session.downloadToFile(file.url, destination);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        this.onUnavailableAction(`下载失败：HTTP ${response.statusCode}`);
+        return '';
+      }
+      return target;
+    } catch (error) {
+      this.onUnavailableAction(error instanceof Error ? `下载失败：${error.message}` : '下载失败');
+      return '';
+    } finally {
+      if (session !== undefined) { session.close(); }
+    }
+  }
+
+  /**
+   * H3-2：不支持的文件——按上游 `OpenUnsupportedWebFile`，下载后交给外部应用打开。
+   *
+   * 上游弹的是 `AppAlertDialog(title = draw, text = file_not_supported(fileName),
+   * confirmText = open_fun)`，确认后 `importOrDownloadWebFile<Uri>` 再 `OpenFile(uri, "*&#47;*")`。
+   */
+  private async openUnsupportedFile(): Promise<void> {
+    const url = this.unsupportedFileUrl;
+    const name = this.unsupportedFileName;
+    this.unsupportedVisible = false;
+    if (url.length === 0) { return; }
+    this.isBusy = true;
+    try {
+      const downloaded = await this.downloadWebFile({ url: url, name: name });
+      if (downloaded.length === 0) { return; }
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+      const opened = await WantLauncher.openFile(context, downloaded);
+      if (!opened) {
+        this.onUnavailableAction('没有可打开该文件的应用');
+      }
+    } finally {
+      this.isBusy = false;
+    }
+  }
+
+  /**
+   * H2-6：网页书文件面板。
+   *
+   * 上游 `BookInfoSheets.kt:69-106 WebFileSheet`：`AppModalBottomSheet(title)`；
+   * 空态一行文案；否则逐条 `GlassCard`（图标 + 文件名）。
+   * 图标判据照上游：zip / rar / 7z 用压缩包图标，其余用图片/文件图标。
+   */
+  @Builder
+  private WebFileSheet() {
+    Column() {
+      Row() {
+        Text(this.webFileSheetTitle).fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').padding({ bottom: 12 })
+
+      if (this.webFileLoading) {
+        Row() {
+          LoadingProgress().width(24).height(24).color(this.themeColorAccent)
+          Text('正在读取文件列表…').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextTertiary)
+            .margin({ left: 8 })
+        }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 24, bottom: 24 })
+      } else if (this.webFileCandidates.length === 0) {
+        Text('没有可导入的文件').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextTertiary)
+          .width('100%').textAlign(TextAlign.Center).padding({ top: 24, bottom: 24 })
+      } else {
+        List({ space: 8 }) {
+          ForEach(this.webFileCandidates, (file: BookInfoWebFile) => {
+            ListItem() {
+              Row({ space: 12 }) {
+                AppGlyph({
+                  name: WebFileCoordinator.isArchiveFile(file.name) ? 'folder' : 'book',
+                  glyphSize: 20,
+                  tint: this.themeColorTextSecondary
+                })
+                Text(file.name).fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+              }.width('100%').padding(16)
+              .backgroundColor(this.themeColorSurfaceSecondary).borderRadius(12)
+              .onClick(() => {
+                if (this.webFileArchiveUri.length > 0) {
+                  void this.selectArchiveEntry(file.name);
+                } else {
+                  void this.selectWebFile(file);
+                }
+              })
+            }
+          }, (file: BookInfoWebFile) => `${file.url}|${file.name}`)
+        }.width('100%').constraintSize({ maxHeight: 480 })
+      }
+    }.width('100%').padding({ left: 16, right: 16, bottom: 16 })
+  }
+
+  /**
+   * H3-2：不支持文件提示框。
+   *
+   * 上游 `BookInfoScreen.kt:2067-2082`：`title = draw「提醒」`、
+   * `text = file_not_supported(fileName)`「文件 %1$s 不受支持，是否继续打开？」、
+   * `confirmText = open_fun「打开方式」`、`dismissText = cancel「取消」`。
+   */
+  @Builder
+  private UnsupportedDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column().width('100%').height('100%').backgroundColor('#99000000')
+        .onClick(() => this.unsupportedVisible = false)
+      Column() {
+        Text('提醒').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).width('100%')
+        Text(`文件 ${this.unsupportedFileName} 不受支持，是否继续打开？`)
+          .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
+          .width('100%').margin({ top: 12 })
+        Row() {
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .onClick(() => this.unsupportedVisible = false)
+          Text('打开方式').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent)
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .margin({ left: 8 })
+            .onClick(() => { void this.openUnsupportedFile(); })
+        }.width('100%').justifyContent(FlexAlign.End).margin({ top: 20 })
+      }.width('86%').constraintSize({ maxWidth: 360 }).padding(20)
+      .borderRadius(22).backgroundColor(this.themeColorSurfaceSecondary)
+    }.width('100%').height('100%').zIndex(1005)
+  }
+
   @Builder
   InfoSheetContent() {
-    if (this.logSheetVisible) {
+    if (this.webFileSheetVisible) {
+      // H2-6：网页书文件面板（上游 `BookInfoSheet.WebFiles` / `ArchiveEntries`）。
+      this.WebFileSheet()
+    } else if (this.variableSheetVisible) {
+      this.VariableSheet()
+    } else if (this.coverSheetVisible) {
+      // H2-1：换封面面板优先于其他面板（上游是独立 Sheet 类型）。
+      this.CoverSheet()
+    } else if (this.knowledgeSheetVisible) {
+      // I-2：知识库四面板（人物/关系网/世界知识/事记），由人物区四个入口按钮打开。
+      BookKnowledgeSheet({
+        bookUrl: this.book.contentPath ?? '',
+        initialTab: this.knowledgeSheetTab,
+        onClose: () => this.knowledgeSheetVisible = false
+      })
+    } else if (this.logSheetVisible) {
       this.LogSheet()
     } else if (this.conflictSheetVisible) {
       this.ConflictSheet()
@@ -1731,12 +2984,14 @@ struct BookTypeChoice {
 
 @Component
 struct BookInfoTag {
-  @StorageProp('themeColorTextSecondary') themeColorTextSecondary: string = '#2E3038';
+  /** 上游 `BookInfoScreen.kt:1354-1385` 的 TextCard：底 surfaceContainer、字 onSurfaceVariant。 */
+  @StorageProp('themeColorSurfaceContainer') themeColorSurfaceContainer: string = '#F1F2F6';
+  @StorageProp('themeColorOnSurfaceVariant') themeColorOnSurfaceVariant: string = '#2E3038';
   @Prop label: string = '';
   build() {
-    Text(this.label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary)
+    Text(this.label).fontSize(LABEL_LARGE_EMPHASIZED).fontColor(this.themeColorOnSurfaceVariant)
       .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-      .backgroundColor('#171820').borderRadius(14).margin({ right: 8 })
+      .backgroundColor(this.themeColorSurfaceContainer).borderRadius(14).margin({ right: 8 })
   }
 }
 

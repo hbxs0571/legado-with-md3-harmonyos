@@ -1,3 +1,5 @@
+import { decodeEntities, HtmlNode, innerHtml, parseBodyFragment, removeByTagNames } from './HtmlDom';
+
 /**
  * 把书源给的富文本简介洗成纯文本，对齐上游
  * `app/src/main/java/io/legado/app/utils/HtmlFormatter.kt`（`formatDisplayText` / `formatIntroText` /
@@ -11,12 +13,9 @@
  *   formatSummaryText(html)  在 intro 之上压成单行（列表卡片只显示一两行并 ellipsis，
  *                            保留换行会让首段之后的内容被直接截断）。
  *
- * 与上游的一处能力差别（已记入 `tmp/appearance-impl-report.md` 待办账本）：
- * 上游用 Jsoup 的 `parseBodyFragment` 建 DOM 再取 `body.html()`，顺带得到两件事——
- * ① 未闭合标签被自动补齐；② 文本节点里的 `&` `<` 被转义成实体（所以最后要 `unescapeHtml4` 一次）。
- * 本地没有 HTML 解析器，这里用正则直接处理原始串：对书源简介里常见的
- * 「成对标签 + 段落标签 + 实体」结果一致；差别只在畸形 HTML（标签未闭合、
- * 属性里带 `>`）上，那类输入上游靠解析器容错，本地会少删或多删一段文本。
+ * 解析层用 `lib/HtmlDom.ets`（`parseBodyFragment` + `innerHtml` + `decodeEntities`），
+ * 对齐上游 Jsoup 的两条关键语义：① 未闭合标签自动补齐；② 序列化时文本节点的 `&` `<` `>`
+ * 重新转义成实体，因此末尾要反转义一次。这两条正是正则实现做不到的部分。
  */
 
 /** 上游 `nbspRegex`。 */
@@ -56,6 +55,9 @@ const MARKDOWN_MEDIA_REGEX: RegExp = /!\[[^\]]*\]\([^)]*\)/g;
 const INTRO_PREFIX_REGEX: RegExp = /^<(usehtml|useweb|md)>/i;
 /** 上游 `onClickSuffixRegex`。 */
 const ON_CLICK_SUFFIX_REGEX: RegExp = /@onclick:[^<\n]*/gi;
+
+/** 上游 `formatDisplayText` 里 `body.select("script, style, noscript").remove()` 的三个标签。 */
+const DROP_TAGS: string[] = ['script', 'style', 'noscript'];
 
 /** 上游 `PARAGRAPH_INDENT`：两个全角空格。 */
 const PARAGRAPH_INDENT: string = '　　';
@@ -123,7 +125,7 @@ function indentLines(lines: string[]): string {
 function format(html: string, otherRegex: RegExp, paragraphIndent: string): string {
   // 上游的 `lineSequence()` 同时认 \r\n 与单独的 \r；这里先把两种换行统一成 \n，
   // 否则 CRLF 书源会把 \r 留在行尾，trim 掉之后行数与上游一致但缩进正则匹配不上。
-  let text = html
+  const text = html
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(NBSP_REGEX, ' ')
@@ -139,29 +141,32 @@ function format(html: string, otherRegex: RegExp, paragraphIndent: string): stri
 }
 
 /**
+ * 上游 `parseBodyFragment(html)` + `outputSettings().prettyPrint(false)` +
+ * `body.select("script, style, noscript").remove()` + 取 `body.html()`。
+ * 单独抽出来，`formatDisplayText` 与 `formatReadableText` 共用。
+ */
+function bodyHtmlOf(html: string): string {
+  const body: HtmlNode = parseBodyFragment(html);
+  removeByTagNames(body, DROP_TAGS);
+  return innerHtml(body);
+}
+
+/**
  * 上游 `formatDisplayText`：给纯文本 UI 面用的清洗。
  * script/style 必须连内容一起删掉，否则脚本源码会被当成正文。
  */
 export function formatDisplayText(html: string): string {
   if (html === undefined || html === null || html.trim().length === 0) { return ''; }
-  // 先整体删掉容器型媒体/脚本块（含内容），再删自闭合元素与残留的 data: URI。
-  const stripped = html
-    .replace(MEDIA_BLOCK_REGEX, '')
-    .replace(UNCLOSED_SVG_REGEX, '')
-    .replace(VOID_MEDIA_REGEX, '')
-    .replace(DATA_URI_REGEX, '')
-    .replace(XML_DECL_REGEX, '')
-    .replace(MARKDOWN_MEDIA_REGEX, '');
-  const flattened = format(stripped, OTHER_HTML_REGEX, '');
+  const flattened = format(bodyHtmlOf(html), OTHER_HTML_REGEX, '');
   const lines: string[] = [];
   for (const line of nonEmptyLines(flattened)) {
     if (META_LINE_REGEX.test(line)) { continue; }
     const withoutLabel = trimBlank(line.replace(INTRO_LABEL_REGEX, ''));
     if (withoutLabel.length > 0) { lines.push(withoutLabel); }
   }
-  // 上游在这一步之后还有一次 `unescapeHtml4`（因为 body.html() 会把文本节点重新转义）。
-  // 本地没有那一步重新转义，但书源原文里的实体同样需要还原，所以这里直接做一次反转义。
-  return unescapeHtml4(indentLines(lines));
+  // 上游这一步的 `unescapeHtml4` 是为了还原 `body.html()` 序列化时对文本节点的再转义；
+  // 本地 `innerHtml` 同样做了转义（见 lib/HtmlDom.ets 的 escapeText），所以这里必须还原。
+  return decodeEntities(indentLines(lines));
 }
 
 /**
@@ -186,32 +191,27 @@ export function formatSummaryText(html: string): string {
   return nonEmptyLines(formatIntroText(html)).join(' ');
 }
 
-/** 上游用 `StringEscapeUtils.unescapeHtml4` 还原实体；这里覆盖 HTML4 常用命名实体 + 数字实体。 */
-function unescapeHtml4(text: string): string {
-  const named: Map<string, string> = new Map<string, string>([
-    ['amp', '&'], ['lt', '<'], ['gt', '>'], ['quot', '"'], ['apos', '\''],
-    ['nbsp', '\u00a0'], ['ensp', '\u2002'], ['emsp', '\u2003'], ['thinsp', '\u2009'],
-    ['copy', '\u00a9'], ['reg', '\u00ae'], ['trade', '\u2122'], ['hellip', '\u2026'],
-    ['mdash', '\u2014'], ['ndash', '\u2013'], ['lsquo', '\u2018'], ['rsquo', '\u2019'],
-    ['ldquo', '\u201c'], ['rdquo', '\u201d'], ['middot', '\u00b7'], ['bull', '\u2022'],
-    ['times', '\u00d7'], ['divide', '\u00f7'], ['laquo', '\u00ab'], ['raquo', '\u00bb']
-  ]);
-  return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (whole: string, body: string): string => {
-    if (body.charAt(0) === '#') {
-      const isHex = body.charAt(1) === 'x' || body.charAt(1) === 'X';
-      const digits = isHex ? body.substring(2) : body.substring(1);
-      const code = parseInt(digits, isHex ? 16 : 10);
-      if (Number.isNaN(code) || code <= 0 || code > 0x10ffff) { return whole; }
-      return String.fromCodePoint(code);
-    }
-    const mapped = named.get(body.toLowerCase());
-    return mapped === undefined ? whole : mapped;
-  });
+/**
+ * 上游 `formatReadableText`（`HtmlFormatter.kt:198-216`）：只读卡片用的纯文本。
+ * 先剥 `<usehtml>/<useweb>/<md>` 前缀与按钮里的 `@onclick:` 片段，再走同一套 DOM 清洗，
+ * 但**不补段首缩进**（上游明确：只读卡片里每行缩进会显得奇怪）。
+ */
+export function formatReadableText(html: string): string {
+  if (html === undefined || html === null || html.trim().length === 0) { return ''; }
+  let body: string = html.trim();
+  const prefixMatch: RegExpMatchArray | null = body.match(INTRO_PREFIX_REGEX);
+  if (prefixMatch !== null && prefixMatch.index !== undefined) {
+    const lastLt = body.lastIndexOf('<');
+    const prefixEnd = prefixMatch.index + prefixMatch[0].length;
+    body = lastLt > prefixEnd ? body.substring(prefixEnd, lastLt) : body.substring(prefixEnd);
+  }
+  body = body.replace(ON_CLICK_SUFFIX_REGEX, '');
+  return decodeEntities(format(bodyHtmlOf(body), OTHER_HTML_REGEX, ''));
 }
 
 /**
- * 上游 `formatReadableText` 的前缀与 onclick 片段剥离，供详情页简介的纯文本回退使用。
- * 上游实现见 HtmlFormatter.kt 的 `introPrefixRegex` / `onClickSuffixRegex`。
+ * 上游 `stripIntroDecorations`：`formatReadableText` 的两步前缀剥离单独拿出来，
+ * 供详情页简介的纯文本回退直接复用。
  */
 export function stripIntroDecorations(text: string): string {
   return text.replace(INTRO_PREFIX_REGEX, '').replace(ON_CLICK_SUFFIX_REGEX, '');
@@ -228,4 +228,46 @@ export function stripIntroDecorations(text: string): string {
 export function formatHtml(html: string): string {
   if (html === undefined || html === null || html.length === 0) { return ''; }
   return format(html, OTHER_HTML_REGEX, PARAGRAPH_INDENT);
+}
+
+/**
+ * 上游 `countReadableTextLength`（`HtmlFormatter.kt:225-236`）：统计正文真实可读字数。
+ * 先剔除媒体标签及其内容、残留 data: URI 与 Markdown 图片语法，再按纯文本计数。
+ */
+export function countReadableTextLength(content: string): number {
+  if (content === undefined || content === null || content.length === 0) { return 0; }
+  let text: string = content
+    .replace(MEDIA_BLOCK_REGEX, '')
+    .replace(UNCLOSED_SVG_REGEX, '')
+    .replace(VOID_MEDIA_REGEX, '')
+    .replace(MARKDOWN_MEDIA_REGEX, '')
+    .replace(XML_DECL_REGEX, '')
+    .replace(DATA_URI_REGEX, '');
+  // 上游用 `Jsoup.parse(text).text()` 解出纯文本（含实体解码与去标签）
+  const body: HtmlNode = parseBodyFragment(text);
+  text = textOf(body);
+  let count = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charAt(i);
+    if (c !== ' ' && c !== '\t' && c !== '\n' && c !== '\r' && c !== '\f' &&
+      c !== '\u00a0' && c !== '\u3000') {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** 递归取节点下所有文本（等价 Jsoup `Element.text()`：块间补空格、压缩连续空白）。 */
+function textOf(node: HtmlNode): string {
+  const parts: string[] = [];
+  collectText(node, parts);
+  return parts.join('').replace(/\s+/g, ' ').trim();
+}
+
+function collectText(node: HtmlNode, parts: string[]): void {
+  if (node.tagName === '#text') {
+    parts.push(node.text);
+    return;
+  }
+  for (const child of node.children) { collectText(child, parts); }
 }

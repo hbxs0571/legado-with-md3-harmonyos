@@ -31,6 +31,11 @@ export interface RemoteBookDetail {
   wordCount: string;
   updateTime: string;
   tocUrl: string;
+  /**
+   * 网页文件的下载直链（对应上游 BookInfoRule.downloadUrls / Book.downloadUrls）。
+   * 非网页书的书源不填，取到的空数组与上游 isNullOrEmpty 判据一致。
+   */
+  downloadUrls: string[];
 }
 
 /** 目录里的一章。 */

@@ -20,9 +20,37 @@ import { ChapterDownloadQueue, DownloadState } from '../bookSource/ChapterDownlo
 import { fileIo, fileShare, picker } from '@kit.CoreFileKit';
 import { Context } from '@kit.AbilityKit';
 import { BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL, TITLE_SMALL_EMPHASIZED, TITLE_SMALL_LINE_HEIGHT } from '../components/typography/TypographyTokens';
+import { BookSourceRepository } from '../data/BookSourceRepository';
+import { BookSource } from '../model/BookSource';
+import { realAuthorOf } from '../data/BookExportSettings';
+import { OtherSettingsRepository } from '../data/OtherSettingsRepository';
+import {
+  BookshelfManageUiState,
+  ManageEffect,
+  ManageEffectType,
+  ManageIntent,
+  ManageIntentType,
+  BatchChangeSourcePreviewItem,
+  emptyManageUiState,
+  isCustomEpubExportEnabled as computeCustomEpubEnabled,
+  MANAGE_COMMON_CHARSETS,
+  MANAGE_EXPORT_TYPES,
+  manageIntent
+} from '../data/BookshelfManageState';
 
 /** 卡片式菜单的统一宽度，与书架页、详情页同口径。 */
 const MANAGE_MENU_WIDTH: number = 260;
+/**
+ * B-8 / C-14：列表行间距。上游 `BookshelfManageScreen.kt:538`
+ * `verticalArrangement = Arrangement.spacedBy(8.dp)`。
+ */
+const MANAGE_ROW_GAP: number = 8;
+/** C-1：卡片圆角。上游 `GlassCard` 走 M3 shapes.medium，封面内圆角 4dp（`BookItem.kt:275`）。 */
+const MANAGE_CARD_RADIUS: number = 12;
+/** C-10：选中态容器色。上游 `secondaryContainer`（`BookshelfManageScreen.kt:551-559`）。 */
+const MANAGE_ROW_SELECTED_COLOR: string = '#2A2D3A';
+/** C-15：上游 `R.string.no_group` =「未分组」。 */
+const MANAGE_NO_GROUP_TEXT: string = '未分组';
 
 
 /**
@@ -63,6 +91,12 @@ export struct BookshelfManagePage {
     (_book: Book, _scopeSpec: string, _chaptersPerVolume: number) => {};
   /** 批10（:564）：选择模式「批量换源」，交给 Index 打开 BatchChangeSourceSheet。 */
   onBatchChangeSource: (books: Book[]) => void = (_books: Book[]) => {};
+  /**
+   * G-1：行内「更多 → 换源」的单本换源入口。上游 `BookshelfManageScreen.kt:770-788` 的
+   * `ChangeSourceSheet(data=singleChangeSourceBook)` 是「按书名自动搜候选」的单本流程，
+   * 与选择模式下的批量向导（`BatchChangeSourceSheet`）不是同一条链，不能合并。
+   */
+  onOpenChangeSource: (book: Book) => void = (_book: Book) => {};
 
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
   @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#F1F2F6';
@@ -72,6 +106,14 @@ export struct BookshelfManagePage {
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#17181E';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#23242C';
   @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#1F2027';
+  /**
+   * C-1 / C-10：上游 GlassCard 的容器色取 `surfaceContainer`（非 miuix 引擎）或
+   * `surfaceContainerLow`（miuix 引擎），选中态取 `secondaryContainer`
+   * （BookshelfManageScreen.kt:551-559 `animateColorAsState`）。
+   */
+  @StorageProp('themeColorSurfaceContainer') themeColorSurfaceContainer: string = '#1E1F25';
+  @StorageProp('themeColorSurfaceContainerLow') themeColorSurfaceContainerLow: string = '#191A20';
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE7C8';
   @StorageProp('appTopInset') appTopInset: number = 0;
 
   @State currentGroupName: string = '';
@@ -82,6 +124,16 @@ export struct BookshelfManagePage {
   @State selectedBookKeys: Set<string> = new Set<string>();
   @State showDeleteConfirm: boolean = false;
   @State deleteOriginalFile: boolean = false;
+  /** B-7：选择态 FAB 菜单展开态（上游 `fabMenuExpanded`，:181 saveable）。 */
+  @State fabMenuExpanded: boolean = false;
+  /** C-11：拖动排序当前拖起的下标（-1 表示没在拖）。 */
+  @State draggingIndex: number = -1;
+  /** C-11：拖动浮起预览显示的书名。 */
+  @State dragPreviewTitle: string = '';
+  /** D-10：批量换源进度/错误框可见性（上游 `isChangingSource || changeSourceError != null`）。 */
+  @State showChangeSourceStatus: boolean = false;
+  /** D-9：导出文件夹选择中间 Sheet（上游 `showFilePickerSheet`）。 */
+  @State showExportFolderPicker: boolean = false;
   @State pendingDeleteKeys: string[] = [];
   @State showExportSheet: boolean = false;
   @State showExportSettings: boolean = false;
@@ -147,16 +199,38 @@ export struct BookshelfManagePage {
    * ArkUI 里 Map 原地 set 不触发刷新，一律整体替换（同 exportMsgByKey 的坑）。
    */
   @State bookDownloadStates: Map<string, DownloadState> = new Map<string, DownloadState>();
+  /** D-4：批量缓存确认框（上游 `showBatchDownloadConfirmDialog`，`BookshelfManageScreen.kt:913-930`）。 */
+  @State showBatchDownloadConfirm: boolean = false;
+  /** D-5：下载全部确认框（上游 `showDownloadAllConfirmDialog`，`:995-1012`）。 */
+  @State showDownloadAllConfirm: boolean = false;
 
   private listScroller: Scroller = new Scroller();
   /** 下载队列订阅的取消函数；aboutToDisappear 必须调，否则页面销毁后回调还在跑。 */
   private downloadUnsubscribe: (() => void) | undefined = undefined;
+
+  /**
+   * A-2（上游 `BookshelfManageScreenViewModel.kt:97-126`）：统一状态对象。
+   *
+   * 上游是 ViewModel 里的一个 StateFlow<UiState>，19 个字段一次成形；本地原先散成 30 多个
+   * @State，跨分组选中、cacheVersion 这类跨字段一致性无处收敛。这里引入 uiState 作为
+   * 「上游那一个对象」的等价物：凡是上游 UiState 里有字段的，都从它读；页面自己的纯 UI
+   * 显隐（showExportSheet 等 28 个）仍留在 @State —— 上游那些也是 Screen 里的 remember，
+   * 不在 UiState 内。
+   */
+  @State uiState: BookshelfManageUiState = emptyManageUiState();
+  /**
+   * A-7（上游 :128-185）：38 类 Intent 的统一入口。
+   * 所有用户动作都先变成 Intent 再落地，方便逐条对照上游的分支逻辑。
+   */
+  private pendingEffects: ManageEffect[] = [];
 
   aboutToAppear(): void {
     this.currentGroupName = this.initialGroupName;
     this.downloadUnsubscribe = ChapterDownloadQueue.subscribe(() => this.refreshDownloadStates());
     this.refreshDownloadStates();
     void this.loadExportSettings();
+    // A-1/A-7：上游进页第一件事是 dispatch(Initialize(groupId))，把分组、书单、书源一次装满。
+    this.dispatch(manageIntent(ManageIntentType.Initialize));
   }
 
   aboutToDisappear(): void {
@@ -164,6 +238,463 @@ export struct BookshelfManagePage {
       this.downloadUnsubscribe();
       this.downloadUnsubscribe = undefined;
     }
+  }
+
+  /**
+   * B-10（上游 `BookshelfManageScreen.kt:275-277`
+   * `BackHandler(enabled = inSelectionMode) { clearSelection() }`）：
+   * 选择态下按系统返回键先退出选择态，而不是直接退出页面。
+   * 返回 true 表示已消费该次返回。
+   */
+  onBackPress(): boolean {
+    if (this.selectionMode) {
+      this.clearSelection();
+      return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------- A 区：Intent 分派
+
+  /**
+   * A-7（上游 `BookshelfManageScreenViewModel.kt:128-185` 的 38 类 Intent）。
+   *
+   * 上游每个 Intent 在 ViewModel 里有一个 when 分支改 UiState；这里同构：
+   * 按 type 改 this.uiState（整体换新对象以触发刷新），再统一消费 effects。
+   */
+  private dispatch(intent: ManageIntent): void {
+    switch (intent.type) {
+      case ManageIntentType.Initialize:
+        this.handleInitialize();
+        break;
+      case ManageIntentType.ChangeGroup:
+        this.handleChangeGroup(intent.groupId ?? -1);
+        break;
+      case ManageIntentType.ToggleBookSelection: {
+        const url = intent.bookUrl ?? '';
+        if (url.length > 0) { this.toggleSelectionByUrl(url); }
+        break;
+      }
+      case ManageIntentType.SelectVisibleBooks:
+        this.handleSelectVisible(intent.visibleBookUrls ?? []);
+        break;
+      case ManageIntentType.InvertVisibleBooks:
+        this.handleInvertVisible(intent.visibleBookUrls ?? []);
+        break;
+      case ManageIntentType.ClearBookSelection:
+        this.clearSelection();
+        break;
+      case ManageIntentType.MoveBookOrder: {
+        const from = intent.fromIndex ?? -1;
+        const to = intent.toIndex ?? -1;
+        if (from >= 0 && to >= 0) { void this.handleMoveBookOrder(from, to); }
+        break;
+      }
+      case ManageIntentType.SetExportUseReplace:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.exportUseReplace = intent.enabled === true;
+        });
+        break;
+      case ManageIntentType.SetEnableCustomExport:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.enableCustomExport = intent.enabled === true;
+        });
+        break;
+      case ManageIntentType.SetExportNoChapterName:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.exportNoChapterName = intent.enabled === true;
+        });
+        break;
+      case ManageIntentType.SetExportToWebDav:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.exportToWebDav = intent.enabled === true;
+        });
+        break;
+      case ManageIntentType.SetExportPictureFile:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.exportPictureFile = intent.enabled === true;
+        });
+        break;
+      case ManageIntentType.SetParallelExportBook:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.parallelExportBook = intent.enabled === true;
+        });
+        break;
+      case ManageIntentType.SetExportType:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.exportType = intent.exportTypeIndex ?? 0;
+        });
+        break;
+      case ManageIntentType.SetExportCharset:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.exportCharset = (intent.charset ?? '').length > 0 ? (intent.charset ?? '') : 'UTF-8';
+        });
+        break;
+      case ManageIntentType.SetBookExportFileName:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.bookExportFileName = intent.fileName ?? '';
+        });
+        break;
+      case ManageIntentType.SetEpisodeExportFileName:
+        void this.patchExportSettings((draft: BookExportSettings) => {
+          draft.episodeExportFileName = intent.fileName ?? '';
+        });
+        break;
+      case ManageIntentType.ClearCachesForBooks: {
+        const urls = intent.bookUrls ?? [];
+        if (urls.length > 0) {
+          const books = this.books.filter((book: Book) => urls.includes(this.bookKey(book)));
+          this.onClearSelectedCache(books);
+          this.bumpCacheVersion();
+        }
+        break;
+      }
+      case ManageIntentType.DeleteBooks: {
+        const urls = intent.bookUrls ?? [];
+        if (urls.length > 0) { void this.deleteBooksByUrl(urls, intent.deleteOriginal === true); }
+        break;
+      }
+      case ManageIntentType.MoveBooksToGroup: {
+        const urls = intent.bookUrls ?? [];
+        const gid = intent.groupId ?? 0;
+        if (urls.length > 0) { void this.moveBooksToGroupByUrl(urls, gid); }
+        break;
+      }
+      case ManageIntentType.DownloadBooks: {
+        const urls = intent.bookUrls ?? [];
+        const targets = this.books.filter((book: Book) => urls.includes(this.bookKey(book)));
+        if (targets.length > 0) { this.onDownloadSelected(targets); }
+        break;
+      }
+      case ManageIntentType.StartDownloadForVisibleBooks:
+        this.onDownloadAll(this.visibleBooks());
+        break;
+      case ManageIntentType.StopDownload:
+        ChapterDownloadQueue.stop();
+        this.refreshDownloadStates();
+        break;
+      case ManageIntentType.ToggleBookDownload: {
+        const book = intent.book;
+        if (book !== undefined) { this.toggleBookDownload(book); }
+        break;
+      }
+      case ManageIntentType.OpenBookInfoPreview: {
+        const book = intent.book;
+        if (book !== undefined) { this.onOpenBookInfo(book); }
+        break;
+      }
+      case ManageIntentType.BatchChangeBookSource: {
+        const urls = intent.bookUrls ?? [];
+        const targets = this.books.filter((book: Book) => urls.includes(this.bookKey(book)));
+        if (targets.length > 0) {
+          // D-10：上游换源进行中会弹出「批量换源」进度框（:867-901），本地换源交给
+          // Index 的 BatchChangeSourceSheet 向导，但状态框仍按上游三态呈现。
+          this.uiState = this.nextState({ isChangingSource: true, changeSourceError: '', changeSourceProgress: '' });
+          this.showChangeSourceStatus = true;
+          this.onBatchChangeSource(targets);
+        }
+        break;
+      }
+      case ManageIntentType.DismissChangeSourceStatus:
+        this.uiState = this.nextState({ isChangingSource: false, changeSourceError: '', changeSourceProgress: '' });
+        break;
+      case ManageIntentType.DismissBatchChangePreview:
+        this.uiState = this.nextState({ batchChangePreviewItems: [] });
+        break;
+      default:
+        break;
+    }
+    this.consumeEffects();
+  }
+
+  /** A-1：上游 `Initialize(groupId)` —— 装分组、书单、书源、导出配置、删除默认值。 */
+  private handleInitialize(): void {
+    const groupSort = this.currentGroupSort();
+    const sources: BookSource[] = BookSourceRepository.getAll();
+    this.uiState = this.nextState({
+      groupId: this.currentGroupId(),
+      groupName: this.currentGroupName.length > 0 ? this.currentGroupName : null,
+      groupList: this.groups,
+      books: this.books,
+      bookSort: groupSort,
+      bookSortOrder: 0,
+      deleteBookOriginal: this.uiState.deleteBookOriginal,
+      exportConfig: this.exportSettings,
+      bookSources: sources,
+      selectedBookUrls: this.selectedBookKeys.size > 0 ? this.selectedUrlsFromKeys() : [],
+      selectedBooks: this.selectedBooks()
+    });
+  }
+
+  /** 上游 `ChangeGroup(groupId)`：切分组。本地按分组名切换（本地 Book 无 group 位掩码）。 */
+  private handleChangeGroup(groupId: number): void {
+    if (groupId <= 0) {
+      this.currentGroupName = '';
+    } else {
+      const group = this.groups.find((item: BookGroup) => item.groupId === groupId);
+      this.currentGroupName = group !== undefined ? group.groupName : '';
+    }
+    this.uiState = this.nextState({
+      groupId: groupId,
+      groupName: this.currentGroupName.length > 0 ? this.currentGroupName : null,
+      bookSort: this.currentGroupSort()
+    });
+  }
+
+  /** 整体换新对象，ArkUI 才会认为 @State 变了。 */
+  private nextState(patch: Partial<BookshelfManageUiState>): BookshelfManageUiState {
+    return {
+      groupId: patch.groupId !== undefined ? patch.groupId : this.uiState.groupId,
+      groupName: patch.groupName !== undefined ? patch.groupName : this.uiState.groupName,
+      groupList: patch.groupList !== undefined ? patch.groupList : this.uiState.groupList,
+      books: patch.books !== undefined ? patch.books : this.uiState.books,
+      selectedBookUrls: patch.selectedBookUrls !== undefined ? patch.selectedBookUrls : this.uiState.selectedBookUrls,
+      selectedBooks: patch.selectedBooks !== undefined ? patch.selectedBooks : this.uiState.selectedBooks,
+      bookSort: patch.bookSort !== undefined ? patch.bookSort : this.uiState.bookSort,
+      bookSortOrder: patch.bookSortOrder !== undefined ? patch.bookSortOrder : this.uiState.bookSortOrder,
+      isDownloadRunning: patch.isDownloadRunning !== undefined ? patch.isDownloadRunning : this.uiState.isDownloadRunning,
+      isChangingSource: patch.isChangingSource !== undefined ? patch.isChangingSource : this.uiState.isChangingSource,
+      changeSourceProgress: patch.changeSourceProgress !== undefined ? patch.changeSourceProgress : this.uiState.changeSourceProgress,
+      changeSourceMessage: patch.changeSourceMessage !== undefined ? patch.changeSourceMessage : this.uiState.changeSourceMessage,
+      changeSourceError: patch.changeSourceError !== undefined ? patch.changeSourceError : this.uiState.changeSourceError,
+      batchChangePreviewItems: patch.batchChangePreviewItems !== undefined ? patch.batchChangePreviewItems : this.uiState.batchChangePreviewItems,
+      batchChangeOptions: patch.batchChangeOptions !== undefined ? patch.batchChangeOptions : this.uiState.batchChangeOptions,
+      cacheVersion: patch.cacheVersion !== undefined ? patch.cacheVersion : this.uiState.cacheVersion,
+      deleteBookOriginal: patch.deleteBookOriginal !== undefined ? patch.deleteBookOriginal : this.uiState.deleteBookOriginal,
+      exportConfig: patch.exportConfig !== undefined ? patch.exportConfig : this.uiState.exportConfig,
+      bookSources: patch.bookSources !== undefined ? patch.bookSources : this.uiState.bookSources
+    };
+  }
+
+  /**
+   * A-6（上游 :187-191）：3 类 Effect 的消费端。
+   * 上游走 Channel 一次性发出，Screen 在 LaunchedEffect 里消费；这里 dispatch 末尾统一消费。
+   */
+  private consumeEffects(): void {
+    const effects = this.pendingEffects;
+    this.pendingEffects = [];
+    effects.forEach((effect: ManageEffect) => {
+      if (effect.type === ManageEffectType.ShowMessage) {
+        this.onUnavailableAction(effect.message);
+      } else if (effect.type === ManageEffectType.OpenBookInfo) {
+        const book = this.books.find((item: Book) => this.bookKey(item) === effect.bookUrl);
+        if (book !== undefined) { this.onOpenBookInfo(book); }
+      }
+    });
+  }
+
+  /** 发一个 Effect，dispatch 末尾统一消费。 */
+  private emitEffect(effect: ManageEffect): void {
+    this.pendingEffects.push(effect);
+  }
+
+  /** A-8（上游 `cacheVersion: Long`）：缓存变化就 +1，驱动列表重算「已缓存 N/M 章」。 */
+  private bumpCacheVersion(): void {
+    this.uiState = this.nextState({ cacheVersion: this.uiState.cacheVersion + 1 });
+  }
+
+  /** 当前分组的排序方式（本地分组设置就带 bookSort；无分组时取 -1 默认）。 */
+  private currentGroupSort(): number {
+    const name = this.currentGroupName;
+    if (name.length === 0) { return -1; }
+    const group = this.groups.find((item: BookGroup) => item.groupName === name);
+    return group !== undefined ? group.bookSort : -1;
+  }
+
+  /** 当前分组 id（本地按名字反查；无分组时 -1）。 */
+  private currentGroupId(): number {
+    const name = this.currentGroupName;
+    if (name.length === 0) { return -1; }
+    const group = this.groups.find((item: BookGroup) => item.groupName === name);
+    return group !== undefined ? group.groupId : -1;
+  }
+
+  /** 选中键 → url 列表。 */
+  private selectedUrlsFromKeys(): string[] {
+    return this.books
+      .filter((book: Book) => this.selectedBookKeys.has(this.rowKey(book)))
+      .map((book: Book) => this.bookKey(book));
+  }
+
+  /** 按 url 切选中（上游 ToggleBookSelection 收 bookUrl）。 */
+  private toggleSelectionByUrl(bookUrl: string): void {
+    const book = this.books.find((item: Book) => this.bookKey(item) === bookUrl);
+    if (book !== undefined) { this.toggleBookSelection(book); }
+  }
+
+  /** 上游 SelectVisibleBooks：只选当前可见的。 */
+  private handleSelectVisible(urls: string[]): void {
+    const next = new Set<string>(this.selectedBookKeys);
+    this.books.forEach((book: Book) => {
+      if (urls.includes(this.bookKey(book))) { next.add(this.rowKey(book)); }
+    });
+    this.selectedBookKeys = next;
+    this.selectionMode = next.size > 0;
+    void this.resolveSelectedBooks();
+  }
+
+  /** 上游 InvertVisibleBooks：`(selected - visible) + (visible - selected)`（:76-79）。 */
+  private handleInvertVisible(urls: string[]): void {
+    const next = new Set<string>(this.selectedBookKeys);
+    this.books.forEach((book: Book) => {
+      if (!urls.includes(this.bookKey(book))) { return; }
+      const key = this.rowKey(book);
+      if (next.has(key)) { next.delete(key); } else { next.add(key); }
+    });
+    this.selectedBookKeys = next;
+    if (next.size === 0) { this.selectionMode = false; }
+    void this.resolveSelectedBooks();
+  }
+
+  /** A-5 / C-11：手动排序（上游 MoveBookOrder(fromIndex, toIndex)）。 */
+  private async handleMoveBookOrder(fromIndex: number, toIndex: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const visible = this.visibleBooks();
+    if (fromIndex >= visible.length || toIndex >= visible.length) { return; }
+    const ordered = visible.slice();
+    const moved = ordered.splice(fromIndex, 1)[0];
+    if (moved === undefined) { return; }
+    ordered.splice(toIndex, 0, moved);
+    try {
+      await BookRepository.saveBookOrder(context, ordered, this.uiState.bookSortOrder > 0);
+      await this.onLibraryChanged();
+    } catch (error) {
+      this.emitEffect({
+        type: ManageEffectType.ShowMessage, bookUrl: '', message: '调整排序失败',
+        name: '', author: ''
+      });
+    }
+  }
+
+  /** 上游 DeleteBooks(bookUrls, deleteOriginal)。 */
+  private async deleteBooksByUrl(urls: string[], deleteOriginal: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const targets = this.books.filter((book: Book) => urls.includes(this.bookKey(book)));
+    if (targets.length === 0) { return; }
+    try {
+      await BookRepository.deleteBooks(context, targets, deleteOriginal);
+      await this.onLibraryChanged();
+      this.clearSelection();
+      this.emitEffect({
+        type: ManageEffectType.ShowMessage, bookUrl: '', message: `已删除 ${targets.length} 本书`,
+        name: '', author: ''
+      });
+    } catch (error) {
+      this.emitEffect({
+        type: ManageEffectType.ShowMessage, bookUrl: '', message: '删除失败，请重试',
+        name: '', author: ''
+      });
+    }
+  }
+
+  /** 上游 MoveBooksToGroup(bookUrls, groupId)。 */
+  private async moveBooksToGroupByUrl(urls: string[], groupId: number): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const group = this.groups.find((item: BookGroup) => item.groupId === groupId);
+    const groupName = group !== undefined ? group.groupName : '';
+    const targets = this.books.filter((book: Book) => urls.includes(this.bookKey(book)));
+    if (targets.length === 0) { return; }
+    try {
+      await BookRepository.setBooksGroup(context, targets.map((book: Book) => this.bookKey(book)), groupName);
+      await this.onLibraryChanged();
+      this.clearSelection();
+      this.emitEffect({
+        type: ManageEffectType.ShowMessage, bookUrl: '',
+        message: groupName.length > 0 ? `已移入「${groupName}」` : '已移出分组',
+        name: '', author: ''
+      });
+    } catch (error) {
+      this.emitEffect({
+        type: ManageEffectType.ShowMessage, bookUrl: '', message: '修改分组失败',
+        name: '', author: ''
+      });
+    }
+  }
+
+  /** 当前可见（过滤后）的书。 */
+  private visibleBooks(): Book[] {
+    return this.filteredBooks();
+  }
+
+  /**
+   * C-11：上游 `canReorderBooks = state.bookSort == 3 && !isSearchMode && selectedBookUrls.isEmpty()`
+   * （BookshelfManageScreen.kt:443）。只有「手动排序」分组、非搜索态、非选择态时才允许拖动。
+   */
+  private canReorderBooks(): boolean {
+    return this.currentGroupSort() === 3 && !this.isSearchMode && this.selectedBookKeys.size === 0;
+  }
+
+  /**
+   * C-11：ArkUI `List.onItemDrop` 的 `insertIndex` 是「插到原数组第几项之前」，
+   * 上游 reorderable 的 `toIndex` 是「移除后应落的最终下标」，这里做一次换算后
+   * 复用 `handleMoveBookOrder`（移除 + 插入），避免两套排序逻辑。
+   */
+  private dropReorder(fromIndex: number, insertIndex: number): void {
+    const total = this.filteredBooks().length;
+    if (fromIndex < 0 || fromIndex >= total || insertIndex < 0 || insertIndex > total) { return; }
+    if (insertIndex === fromIndex || insertIndex === fromIndex + 1) { return; }
+    const toIndex = insertIndex > fromIndex ? insertIndex - 1 : insertIndex;
+    if (toIndex === fromIndex) { return; }
+    void this.handleMoveBookOrder(fromIndex, toIndex);
+  }
+
+  // ---------------------------------------------------------------- C 区：行渲染辅助
+
+  /**
+   * C-6：上游 `BookshelfManageScreen.kt:637-647`
+   * `TextCard(if(book.isLocal) local_book else download_count(cacheCount, book.totalChapterNum))`。
+   * 本地 Book 没有 totalChapterNum（只有 chapterCount?: string），用 chapterCount 兜底。
+   */
+  private totalChapterNumOf(book: Book): number {
+    const total = Number(book.chapterCount ?? '0');
+    return Number.isFinite(total) && total > 0 ? Math.floor(total) : 0;
+  }
+
+  /**
+   * C-6：已缓存章节数。上游 `viewModel.getCacheCount(bookUrl) ?: 0`，
+   * 随 `renderVersion`（= cacheVersion）重算。
+   */
+  private cacheCountOf(book: Book): number {
+    // 读一次 cacheVersion，让 @State 依赖成立、版本变化时重算。
+    const version = this.uiState.cacheVersion;
+    if (version < 0) { return 0; }
+    return BookRepository.cachedChapterTitles(book).length;
+  }
+
+  /**
+   * C-13：上游 `:547-548/754-761` 的失败文案行：
+   * `downloadFailureText = getDownloadFailureMessage(bookUrl)?.let { stringResource(R.string.cache_download_failed, it) }`
+   * →「缓存失败：%1$s」。
+   */
+  private downloadFailureTextOf(book: Book): string {
+    const snapshot = ChapterDownloadQueue.snapshot(this.bookKey(book));
+    if (snapshot.failed <= 0) { return ''; }
+    return `缓存失败：${snapshot.failed} 章未下载成功`;
+  }
+
+  /**
+   * C-15：上游 `:218-230` 的 `groupNameResolver`。
+   *
+   * 上游按 `book.group` 位掩码与 `groupList` 现算：`book.group <= 0L` 或掩码命中为空 →「未分组」，
+   * 否则把命中的组名用「、」拼起来。
+   * 本地 `Book` 没有 `group` 位掩码字段（只有 `groupNames: string[]`），无法逐位对齐；
+   * 这里按 groupNames 现算并做同一套兜底：**过滤掉已不存在的分组名**
+   * （等价于上游「掩码命中为空」），兜底文案对齐上游「未分组」。
+   */
+  private groupNameResolver(book: Book): string {
+    const names = book.groupNames ?? [];
+    if (names.length === 0) { return MANAGE_NO_GROUP_TEXT; }
+    const alive = names.filter((name: string) =>
+      this.groups.some((group: BookGroup) => group.groupName === name));
+    return alive.length > 0 ? alive.join('、') : MANAGE_NO_GROUP_TEXT;
+  }
+
+  /** C-4：上游 `book.getRealAuthor()` —— 剥「作者：」「著」前缀，不补兜底文案。 */
+  private realAuthorOf(book: Book): string {
+    return realAuthorOf(book.author);
   }
 
   /**
@@ -291,9 +822,14 @@ export struct BookshelfManagePage {
       if (!matchesGroup) {
         matchesGroup = (book.groupNames ?? []).includes(this.currentGroupName);
       }
+      // B-3：上游 `filteredBooks` 比 **4 个字段**
+      // —— name / getRealAuthor() / originName / groupNameResolver(book)
+      // （BookshelfManageScreen.kt:231-243，均 `contains(key, true)` 忽略大小写）。
       const matchesSearch = keyword.length === 0 ||
         book.title.toLowerCase().includes(keyword) ||
-        book.author.toLowerCase().includes(keyword);
+        this.realAuthorOf(book).toLowerCase().includes(keyword) ||
+        (book.originName ?? '').toLowerCase().includes(keyword) ||
+        this.groupNameResolver(book).toLowerCase().includes(keyword);
       return matchesGroup && matchesSearch;
     });
   }
@@ -308,6 +844,7 @@ export struct BookshelfManagePage {
     if (next.has(key)) { next.delete(key); } else { next.add(key); }
     this.selectedBookKeys = next;
     if (next.size === 0) { this.selectionMode = false; }
+    void this.resolveSelectedBooks();
   }
 
   /** 全选只作用当前列表可见的书，不是全库（上游 SelectVisibleBooks 同义）。 */
@@ -333,8 +870,55 @@ export struct BookshelfManagePage {
     this.rowMenuKey = '';
   }
 
+  /**
+   * H-2：选中书籍的实体列表。
+   *
+   * 上游（`BookshelfManageScreenViewModel.kt:382-405 resolveSelectedBooks`）从数据库按
+   * `getBooksByUrls` 回查实体，并把查不到 url 从选中集合里剔除——因为书可能在本页之外
+   * 被删（详情页删除、换源回滚），分组不影响存在性，所以跨分组选中不会被清掉。
+   *
+   * 本地 `this.books` 是 Index 传入的全量书架，用它回查即可覆盖跨分组；
+   * 但仅靠内存列表在「页面停留期间别处删了书」时会留脏，所以这里优先用
+   * `uiState.selectedBooks`（由 `resolveSelectedBooks()` 查库填充）。
+   */
   private selectedBooks(): Book[] {
-    return this.books.filter((book: Book) => this.isSelected(book));
+    const urls = this.selectedUrlsFromKeys();
+    if (urls.length === 0) { return []; }
+    if (this.uiState.selectedBooks.length > 0) { return this.uiState.selectedBooks; }
+    const urlSet = new Set<string>(urls);
+    return this.books.filter((book: Book) => urlSet.has(this.bookKey(book)));
+  }
+
+  /**
+   * H-2：按 url 查库回填 `uiState.selectedBooks`，并剔除已不存在的书。
+   * 对齐上游 `resolveSelectedBooks()`（:387-405）：先查实体，再把
+   * `selectedBookUrls` 与「查得到的 url 集合」求交，避免选中集合留下已删的书。
+   */
+  private async resolveSelectedBooks(): Promise<void> {
+    const urls = this.selectedUrlsFromKeys();
+    if (urls.length === 0) {
+      this.uiState = this.nextState({ selectedBooks: [] });
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    try {
+      const books = await BookRepository.getBooksByUrls(context, urls);
+      const existing = new Set<string>(books.map((book: Book) => this.bookKey(book)));
+      const nextKeys = new Set<string>();
+      this.selectedBookKeys.forEach((key: string) => {
+        const hit = books.find((book: Book) => this.rowKey(book) === key);
+        if (hit !== undefined) { nextKeys.add(key); }
+      });
+      this.selectedBookKeys = nextKeys;
+      this.uiState = this.nextState({
+        selectedBookUrls: Array.from(existing),
+        selectedBooks: books
+      });
+      if (nextKeys.size === 0) { this.selectionMode = false; }
+    } catch (error) {
+      console.error(`回查选中书籍失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /** 跨分组多选时把不在当前列表的本数写出来（上游 selectionTitle 同义）。 */
@@ -453,6 +1037,38 @@ export struct BookshelfManagePage {
    * `OpenDocumentTree` —— 选一个目录并记住，之后导出直接写进去，不再弹保存框。
    * 可写探测在 `BookExporter.canWriteInto`（与 `pages/Index.ets:6867-6884` 同法）。
    */
+  /**
+   * D-9：上游选导出目录前先弹 `FilePickerSheet(show, title = export_folder,
+   *   onSelectSysDir = { exportDir.launch(null) })`（BookshelfManageScreen.kt:903-911），
+   * 里面只有一张「系统文件夹选择」卡片（FilePickerSheet.kt:38-44，
+   * `OptionCard(icon = FolderOpen, text = sys_folder_picker)`，卡片 100dp 高、
+   * 圆角 12dp、底色 onSheetContent、图标 32dp primary）。
+   * 本地原来点「导出文件夹」直接起 DocumentViewPicker，缺这一层选择；这里补上。
+   */
+  @Builder
+  private ExportFolderPickerContent() {
+    Column() {
+      Text('导出文件夹').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').margin({ bottom: 16 })
+      Row() {
+        Column() {
+          AppGlyph({ name: 'folder', glyphSize: 32, tint: this.themeColorAccent })
+          Text('系统文件夹选择').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ top: 8 }).maxLines(1)
+        }.width('100%').height(100).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+        .borderRadius(12).backgroundColor(this.themeColorSurfaceSecondary)
+        .onClick(() => {
+          this.showExportFolderPicker = false;
+          void this.chooseExportFolder();
+        })
+        .accessibilityText('系统文件夹选择')
+      }.width('100%')
+      Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+        .width('100%').padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+        .margin({ top: 16 })
+        .onClick(() => this.showExportFolderPicker = false)
+    }.width('100%')
+  }
+
   private async chooseExportFolder(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -674,7 +1290,7 @@ export struct BookshelfManagePage {
     }
     const scopeSpec = this.customScopeInput.trim();
     if (!this.isValidScopeSpec(scopeSpec)) {
-      this.customScopeError = '请输入正确的章节范围';
+      this.customScopeError = '请输入正确的范围';
       return;
     }
     this.customScopeError = '';
@@ -690,11 +1306,17 @@ export struct BookshelfManagePage {
       Number.isFinite(size) && size >= 1 ? size : 1);
   }
 
-  /** 每次打开删除框都从「未勾选」起步，不沿用上一次。 */
+  /**
+   * H-3：删除框初值取全局 `deleteBookOriginal`（上游 `BookshelfManageScreen.kt:201`
+   * `var deleteOriginalBookFile by remember { mutableStateOf(state.deleteBookOriginal) }`，
+   * 而 state 初值来自 `LocalConfig.deleteBookOriginal`，`BookshelfManageScreenViewModel.kt:123`）。
+   * 本地落在 `OtherSettingsRepository`（键名照抄上游 `deleteBookOriginal`）。
+   */
   private requestDelete(keys: string[]): void {
     if (keys.length === 0) { return; }
     this.pendingDeleteKeys = keys;
-    this.deleteOriginalFile = false;
+    this.deleteOriginalFile = OtherSettingsRepository.get().deleteBookOriginal;
+    this.uiState = this.nextState({ deleteBookOriginal: this.deleteOriginalFile });
     this.showDeleteConfirm = true;
   }
 
@@ -713,6 +1335,11 @@ export struct BookshelfManagePage {
       // 复用批5 的 deleteBooks：逐本 deleteBook（清章节表与书目）+ 可选清应用内导入副本。
       // 它是窄 DELETE，不会把刚删的书又 upsert 回去，因此这里不需要再 saveImportedBooks。
       await BookRepository.deleteBooks(context, targets, this.deleteOriginalFile);
+      // H-3：用户这次的选择写回全局，下次进删除框按它给初值
+      // （上游 `BookshelfManageScreenViewModel.kt:729 LocalConfig.deleteBookOriginal = deleteOriginal`）。
+      const settings = OtherSettingsRepository.get();
+      settings.deleteBookOriginal = this.deleteOriginalFile;
+      await OtherSettingsRepository.save(context, settings);
       await this.onLibraryChanged();
       this.clearSelection();
       this.onUnavailableAction(`已删除 ${targets.length} 本书`);
@@ -780,12 +1407,14 @@ export struct BookshelfManagePage {
   /**
    * 顶栏「更多」。批2 补两条：下载全部（:455，上游 downloadAll）与日志（:457，上游 AppLogSheet），
    * 都落在本页，不再走占位 toast。
+   * B-5：顺序按上游 `dropDownMenuContent`（:494-518）——下载全部 / 导出全部 / PillDivider / 日志。
    */
   private moreMenuItems(): UiMenuItem[] {
     return [
       { key: 'download_all', title: '下载全部' },
-      { key: 'log', title: '日志' },
-      { key: 'export_all', title: '导出全部' }
+      { key: 'export_all', title: '导出全部' },
+      { key: 'divider', title: '', divider: true },
+      { key: 'log', title: '日志' }
     ];
   }
 
@@ -797,7 +1426,9 @@ export struct BookshelfManagePage {
       onSelect: (key: string) => {
         this.moreMenuVisible = false;
         if (key === 'download_all') {
-          this.onDownloadAll(this.filteredBooks());
+          // D-5：上游先弹「是否确认开始缓存？」二次确认（:995-1012），
+          // 确认后才 StartDownloadForVisibleBooks(state.books, downloadAllChapters=true)。
+          this.showDownloadAllConfirm = true;
         } else if (key === 'log') {
           this.logEntries = AppLog.getAll();
           this.showLogSheet = true;
@@ -808,16 +1439,39 @@ export struct BookshelfManagePage {
     })
   }
 
-  /** 选择模式操作。批2 补「下载」（:466）与「清除缓存」（:469）；批10 补「批量换源」（:564）。 */
+  /**
+   * D-3：选择态操作项。上游是 `fabItems` 8 项（`BookshelfManageScreen.kt:371-441`）：
+   * 全选 / 反选 / 缓存选中 / 批量换源 / 移入分组 / 导出选中 / 清除缓存 / 删除。
+   * 本地原为 6 项，缺「导出选中」与「删除」。
+   */
   private selectionMenuItems(): UiMenuItem[] {
     return [
       { key: 'select_all', title: '全选' },
       { key: 'invert', title: '反选' },
-      { key: 'move_group', title: '移入分组' },
+      { key: 'download_selected', title: '缓存选中' },
       { key: 'batch_change_source', title: '批量换源' },
-      { key: 'download_selected', title: '下载' },
-      { key: 'clear_cache', title: '清除缓存' }
+      { key: 'move_group', title: '移入分组' },
+      { key: 'export_selected', title: '导出选中' },
+      { key: 'clear_cache', title: '清除缓存' },
+      { key: 'delete', title: '删除' }
     ];
+  }
+
+  /**
+   * B-6 / B-7：选择态 FAB 菜单。上游 `fabItems` 8 项，每项都带
+   * `selectedBookUrls.isNotEmpty()` 前置判空（BookshelfManageScreen.kt:371-441）。
+   * 本地选择态必然非空（selectionMode 由选中集驱动），所以这里不再逐项判空。
+   */
+  @Builder
+  private FabMenu() {
+    UiMenuPanel({
+      items: this.selectionMenuItems(),
+      panelWidth: MANAGE_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.fabMenuExpanded = false;
+        this.handleSelectionAction(key);
+      }
+    })
   }
 
   @Builder
@@ -827,22 +1481,35 @@ export struct BookshelfManagePage {
       panelWidth: MANAGE_MENU_WIDTH,
       onSelect: (key: string) => {
         this.selectionMenuVisible = false;
-        if (key === 'select_all') {
-          this.selectAllVisible();
-        } else if (key === 'invert') {
-          this.invertVisibleSelection();
-        } else if (key === 'move_group') {
-          const keys: string[] = this.selectedBooks().map((book: Book) => this.rowKey(book));
-          this.openGroupSelect(keys);
-        } else if (key === 'batch_change_source') {
-          this.onBatchChangeSource(this.selectedBooks());
-        } else if (key === 'download_selected') {
-          this.onDownloadSelected(this.selectedBooks());
-        } else if (key === 'clear_cache') {
-          this.onClearSelectedCache(this.selectedBooks());
-        }
+        this.handleSelectionAction(key);
       }
     })
+  }
+
+  /** 选择态 8 项动作的统一分发（FAB 与旧「操作」菜单共用）。 */
+  private handleSelectionAction(key: string): void {
+    if (key === 'select_all') {
+      this.dispatch(manageIntent(ManageIntentType.SelectVisibleBooks,
+        { visibleBookUrls: this.filteredBooks().map((book: Book) => this.bookKey(book)) }));
+    } else if (key === 'invert') {
+      this.dispatch(manageIntent(ManageIntentType.InvertVisibleBooks,
+        { visibleBookUrls: this.filteredBooks().map((book: Book) => this.bookKey(book)) }));
+    } else if (key === 'move_group') {
+      const keys: string[] = this.selectedBooks().map((book: Book) => this.rowKey(book));
+      this.openGroupSelect(keys);
+    } else if (key === 'batch_change_source') {
+      this.onBatchChangeSource(this.selectedBooks());
+    } else if (key === 'download_selected') {
+      // D-4：上游先弹「是否确认开始缓存？」二次确认（:913-930）。
+      this.showBatchDownloadConfirm = true;
+    } else if (key === 'export_selected') {
+      this.openExportSheet(this.selectedBooks());
+    } else if (key === 'clear_cache') {
+      this.onClearSelectedCache(this.selectedBooks());
+      this.bumpCacheVersion();
+    } else if (key === 'delete') {
+      this.requestDelete(this.selectedBooks().map((book: Book) => this.rowKey(book)));
+    }
   }
 
   // ---------------------------------------------------------------- 书籍行
@@ -852,37 +1519,31 @@ export struct BookshelfManagePage {
     Column() {
       Row() {
         Column() {
-          Text(book.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
+          Text(book.title).fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .onClick(() => this.onOpenBookInfo(book))
-          Text(book.author.length > 0 ? book.author : '作者未知').fontSize(BODY_SMALL)
+            .onClick(() => this.dispatch(manageIntent(ManageIntentType.OpenBookInfoPreview, { book: book, inBookshelf: true })))
+          Text(this.realAuthorOf(book)).fontSize(BODY_SMALL)
             .fontColor(this.themeColorTextSecondary).margin({ top: 2 }).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(`${this.groupLabelOf(book)} · ${this.sourceFileLabelOf(book)}`).fontSize(LABEL_SMALL)
+          Text(`${this.groupNameResolver(book)} | ${this.sourceFileLabelOf(book)}`).fontSize(LABEL_SMALL)
             .fontColor(this.themeColorAccent).margin({ top: 2 }).maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           if (this.exportMsgOf(book).length > 0) {
             Text(this.exportMsgOf(book)).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
               .margin({ top: 2 }).maxLines(1)
           }
+          if (this.downloadFailureTextOf(book).length > 0) {
+            Text(this.downloadFailureTextOf(book)).fontSize(LABEL_SMALL).fontColor('#FF6B6B')
+              .margin({ top: 2 }).maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
         if (BookRepository.isOnlineBook(book)) {
-          // 批2（:459）：在线书右端是下载状态；空闲时点一下开始下，跑起来后点一下停止。
-          Row() {
-            if (this.downloadStateOf(book) === 'done') {
-              AppGlyph({ name: 'profileCheck', glyphSize: 16, tint: '#7BD88F' })
-            } else if (this.isDownloadBusy(book)) {
-              AppGlyph({ name: 'profileClose', glyphSize: 16, tint: this.themeColorAccent })
-            } else {
-              AppGlyph({ name: 'download', glyphSize: 16, tint: this.themeColorAccent })
-            }
-            Text(this.downloadStateLabelOf(book)).fontSize(LABEL_SMALL)
-              .fontColor(this.themeColorTextSecondary).margin({ left: 4 })
-          }
-          .padding({ left: 8, right: 8, top: 3, bottom: 3 }).borderRadius(8)
-          .backgroundColor(this.themeColorSurfaceElevated)
-          .accessibilityText(`${book.title} ${this.downloadStateLabelOf(book)}`)
-          .onClick(() => this.toggleBookDownload(book))
+          Text(`${this.cacheCountOf(book)}/${this.totalChapterNumOf(book)}`).fontSize(LABEL_SMALL)
+            .fontColor(this.themeColorTextSecondary)
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 }).borderRadius(8)
+            .backgroundColor(this.themeColorSurfaceElevated)
+            .accessibilityText(`${book.title} 已缓存 ${this.cacheCountOf(book)} 章，共 ${this.totalChapterNumOf(book)} 章`)
         } else {
           Text('本地书').fontSize(LABEL_SMALL).fontColor('#B9C6FF')
             .padding({ left: 8, right: 8, top: 3, bottom: 3 }).borderRadius(8)
@@ -899,55 +1560,76 @@ export struct BookshelfManagePage {
           }.width(26).height(26).margin({ left: 8 })
         }
       }.width('100%')
-      // 行内按钮：批2 补「下载/停止」（:459），只在在线书上出现。
+      // C-8：按钮组顺序对齐上游 —— 下载/停止 → 导出 → 分组 → 更多，之间加竖分隔线。
       Row() {
-        Text('导出').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).layoutWeight(1).height(30)
-          .textAlign(TextAlign.Center).onClick(() => this.openExportSheet([book]))
         if (BookRepository.isOnlineBook(book)) {
-          Text(this.isDownloadBusy(book) ? '停止' : '下载').fontSize(LABEL_SMALL)
-            .fontColor(this.themeColorAccent).layoutWeight(1).height(30).textAlign(TextAlign.Center)
-            .onClick(() => this.toggleBookDownload(book))
+          this.RowActionButton(this.isDownloadBusy(book) ? '停止' : '下载',
+            () => this.dispatch(manageIntent(ManageIntentType.ToggleBookDownload, { book: book })))
+          Divider().vertical(true).height(16).color('#3A3D48').margin({ left: 4, right: 4 })
         }
-        Text('分组').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).layoutWeight(1).height(30)
-          .textAlign(TextAlign.Center).onClick(() => this.openGroupSelect([this.rowKey(book)]))
-        Text('更多').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).layoutWeight(1).height(30)
-          .textAlign(TextAlign.Center)
-          .onClick(() => this.rowMenuKey = this.rowMenuKey === this.rowKey(book) ? '' : this.rowKey(book))
-      }.width('100%').margin({ top: 6 })
-      // 「更多」展开的小菜单：删除书籍 + 分段导出（换源归批13、清缓存判不接）。
-      // 批2（:471）：分段导出只在单本操作里出现，多选批量导出仍走上面的「导出」。
+        this.RowActionButton('导出', () => this.openExportSheet([book]))
+        Divider().vertical(true).height(16).color('#3A3D48').margin({ left: 4, right: 4 })
+        this.RowActionButton('分组', () => {
+          this.groupSelectBookKeys = [this.rowKey(book)];
+          this.preselectedGroupName = book.groupNames !== undefined && book.groupNames.length > 0 ? book.groupNames[0] : '';
+          this.showGroupSelect = true;
+        })
+        Divider().vertical(true).height(16).color('#3A3D48').margin({ left: 4, right: 4 })
+        this.RowActionButton('更多',
+          () => this.rowMenuKey = this.rowMenuKey === this.rowKey(book) ? '' : this.rowKey(book))
+      }.width('100%').margin({ top: 6 }).alignItems(VerticalAlign.Center)
+      // C-9：上游「更多」菜单 3 项 —— 换源 / 删除书籍 / 删除缓存。
       if (this.rowMenuKey === this.rowKey(book)) {
         Row() {
-          Text('分段导出').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
+          Text('换源').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
             .padding({ left: 12, right: 12, top: 6, bottom: 6 })
             .onClick(() => {
               this.rowMenuKey = '';
-              this.openSegmentedExport(book);
+              // G-1：上游这一项是单本 ChangeSourceSheet（自动搜候选），不是批量向导。
+              this.onOpenChangeSource(book);
             })
           Text('删除书籍').fontSize(BODY_SMALL).fontColor('#FF6B6B').padding({ left: 12, right: 12, top: 6, bottom: 6 })
             .onClick(() => {
               this.rowMenuKey = '';
               this.requestDelete([this.rowKey(book)]);
             })
-          Text('取消').fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
+          Text('删除缓存').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
             .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-            .onClick(() => this.rowMenuKey = '')
+            .onClick(() => {
+              this.rowMenuKey = '';
+              this.onClearSelectedCache([book]);
+              this.bumpCacheVersion();
+            })
         }.width('100%').justifyContent(FlexAlign.End)
       }
     }
-    .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
-    .backgroundColor(this.isSelected(book) ? '#2A2D3A' : this.themeColorSurfacePrimary)
-    // 长按与短按必须互斥：onClick 与 gesture 并存时长按会顺带触发点击，
-    // 表现是刚进选择模式就被又 toggle 一次、选中立刻消失（批7 封面同款坑）。
+    // C-2：上游卡片内边距 vertical 12dp / horizontal 4dp（:591-595）。
+    .width('100%').padding({ left: 4, right: 4, top: 12, bottom: 12 })
+    .borderRadius(MANAGE_CARD_RADIUS)
+    // C-1 / C-10：上游 `GlassCard(containerColor = animatedContainerColor)`，其中
+    // `animatedContainerColor = animateColorAsState(if(isSelected) secondaryContainer
+    // else if(isMiuix) surfaceContainer else surfaceContainerLow, tween(200))`
+    // （BookshelfManageScreen.kt:551-559）。ArkUI 无 miuix 引擎，取非 miuix 分支 surfaceContainerLow。
+    .backgroundColor(this.isSelected(book) ? this.themeColorSecondaryContainer : this.themeColorSurfaceContainerLow)
+    // C-12：上游 onClick 与 onLongClick 都是 toggleBookSelection（:587-588）。
     .gesture(GestureGroup(GestureMode.Exclusive,
       LongPressGesture({ duration: 500 }).onAction(() => {
-        this.selectionMode = true;
-        this.toggleBookSelection(book);
+        this.dispatch(manageIntent(ManageIntentType.ToggleBookSelection, { bookUrl: this.bookKey(book) }));
       }),
       TapGesture({ count: 1 }).onAction(() => {
-        if (this.selectionMode) { this.toggleBookSelection(book); }
+        this.dispatch(manageIntent(ManageIntentType.ToggleBookSelection, { bookUrl: this.bookKey(book) }));
       })
     ))
+    // C-10：选中色 200ms 过渡（上游 animateColorAsState + tween(200, FastOutSlowInEasing)）。
+    .animation({ duration: 200, curve: Curve.FastOutSlowIn })
+  }
+
+  /** C-8：行内动作按钮（上游 SmallTonalButton weight(1f)，文字色 onSurfaceVariant）。 */
+  @Builder
+  private RowActionButton(label: string, onTap: () => void) {
+    Text(label).fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
+      .layoutWeight(1).height(30).textAlign(TextAlign.Center)
+      .onClick(onTap)
   }
 
   // ---------------------------------------------------------------- 三个 sheet
@@ -1021,7 +1703,8 @@ export struct BookshelfManagePage {
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
           .textAlign(TextAlign.End)
       }.width('100%').padding({ top: 10, bottom: 10 })
-        .onClick(() => { void this.chooseExportFolder(); })
+        // D-9：先弹「导出文件夹」选择层（上游 FilePickerSheet），再起系统目录选择器。
+        .onClick(() => { this.showExportFolderPicker = true; })
       Row() {
         Text('导出文件名').fontSize(TITLE_SMALL_EMPHASIZED).fontColor(this.themeColorTextPrimary).layoutWeight(1)
         Text(this.exportSettings.bookExportFileName.length > 0
@@ -1151,7 +1834,7 @@ export struct BookshelfManagePage {
         .width('100%')
       TextInput({
         text: this.showCharsetDialog ? this.exportCharsetDraft : this.exportFileNameDraft,
-        placeholder: this.showCharsetDialog ? 'UTF-8' : '{name} {author}'
+        placeholder: this.showCharsetDialog ? 'UTF-8' : '{name} - {author}'
       })
         .height(44).fontSize(BODY_MEDIUM).width('100%').margin({ top: 16 })
         .onChange((value: string) => {
@@ -1162,7 +1845,9 @@ export struct BookshelfManagePage {
           }
         })
       if (!this.showCharsetDialog) {
-        Text('可用占位符：{name} {author} {group} {source} {remark}；留空则用「书名 作者：作者名」')
+        // F-2：帮助文案按上游 `R.string.export_file_name_template_help`
+        // （`BookshelfManageScreen.kt:215`）措辞对齐。
+        Text('可用变量：{name} 书名、{author} 作者、{group} 分组、{source} 书源、{remark} 备注')
           .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 8 })
       }
       Row() {
@@ -1186,7 +1871,7 @@ export struct BookshelfManagePage {
   @Builder
   private CustomExportDialogContent() {
     Column() {
-      Text('选择要导出的章节')
+      Text('选择待导出章节')
         .fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
         .width('100%')
       Row() {
@@ -1202,6 +1887,7 @@ export struct BookshelfManagePage {
         Text('按章节范围导出').fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
       }.width('100%').margin({ top: 4 })
       if (!this.customExportAllChapter) {
+        // F-7：占位示例按上游 `BookshelfManageScreen.kt:1289` 的 `"1-5,8,10-18"`。
         TextInput({ text: this.customScopeInput, placeholder: '1-5,8,10-18' })
           .height(44).fontSize(BODY_MEDIUM).width('100%').margin({ top: 12 })
           .onChange((value: string) => {
@@ -1222,10 +1908,15 @@ export struct BookshelfManagePage {
         TextInput({ text: this.customFileNameInput, placeholder: '{name} - {author}' })
           .height(44).fontSize(BODY_MEDIUM).width('100%').margin({ top: 4 })
           .onChange((value: string) => { this.customFileNameInput = value; })
-        // 上游：模板为空或不可解析时不显示预览，非空且解析失败时显示 Error（`:1257`/`:1319-1330`）。
+        // F-9：上游 `BookshelfManageScreen.kt:1319-1330` —— 模板能解析时显示
+        // 「解析示例: 文件名」，非空但解析失败时显示 Error。
         if (this.customFileNameInput.trim().length > 0) {
-          Text(`Analyzed: ${this.customExportPreviewName()}`)
-            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
+          if (this.customExportPreviewName().length > 0) {
+            Text(`解析示例：${this.customExportPreviewName()}`)
+              .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).width('100%').margin({ top: 4 })
+          } else {
+            Text('Error').fontSize(LABEL_SMALL).fontColor('#F2B8B5').width('100%').margin({ top: 4 })
+          }
         }
       }
       Row() {
@@ -1247,26 +1938,46 @@ export struct BookshelfManagePage {
       Row() {
         Text(this.showExportSettings ? '导出设置' : '导出').fontSize(TITLE_LARGE)
           .fontWeight(FontWeight.Medium).fontColor('#ECEEF2').layoutWeight(1)
-        Text(this.showExportSettings ? '返回' : '导出设置').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
+        // E-2：上游 startAction 是 `MediumTonalButton(icon = if(showExportSettings) Upload else Settings)`
+        // —— 图标按钮，不是文字按钮。
+        Row() {
+          AppGlyph({
+            name: this.showExportSettings ? 'uploadFile' : 'settings',
+            glyphSize: 18,
+            tint: this.themeColorAccent
+          })
+        }.padding({ left: 10, right: 10, top: 6, bottom: 6 }).borderRadius(18)
+          .backgroundColor(this.themeColorSurfaceElevated)
+          .accessibilityText(this.showExportSettings ? '导出' : '导出设置')
           .onClick(() => this.showExportSettings = !this.showExportSettings)
       }.width('100%')
+      // E-3：上游 `AnimatedContent(targetState=showExportSettings, fadeIn() togetherWith fadeOut())`
+      // —— 两页之间淡入淡出切换，不是瞬切。
       if (this.showExportSettings) {
-        this.ExportSettingsContent()
+        Column() {
+          this.ExportSettingsContent()
+        }.width('100%').transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       } else {
-        Text(`本次导出（${this.exportBooks.length} 本）`).fontSize(LABEL_MEDIUM)
-          .fontColor(this.themeColorTextSecondary).width('100%').margin({ top: 12 })
-        ForEach(this.exportBooks, (book: Book) => {
-          Text(book.title).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').padding({ top: 5, bottom: 5 })
-        }, (book: Book) => this.rowKey(book))
-        Row() {
-          Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
-            .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
-            .onClick(() => this.showExportSheet = false)
-          Text('导出').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
-            .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
-            .margin({ left: 10 }).onClick(async () => { await this.runExport(); })
-        }.width('100%').margin({ top: 20 })
+        Column() {
+          Text(`本次导出（${this.exportBooks.length} 本）`).fontSize(LABEL_MEDIUM)
+            .fontColor(this.themeColorTextSecondary).width('100%').margin({ top: 12 })
+          ForEach(this.exportBooks, (book: Book) => {
+            Text(book.title).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').padding({ top: 5, bottom: 5 })
+          }, (book: Book) => this.rowKey(book))
+          Row() {
+            Text('取消').fontSize(LABEL_LARGE).fontColor('#C5C7D0').textAlign(TextAlign.Center)
+              .layoutWeight(1).padding({ top: 12, bottom: 12 }).backgroundColor('#2A2B33').borderRadius(14)
+              .onClick(() => this.showExportSheet = false)
+            // E-16：上游确认按钮是 `MediumTonalButton(Upload, text=export)` —— 带 Upload 图标。
+            Row() {
+              AppGlyph({ name: 'uploadFile', glyphSize: 16, tint: '#101116' })
+              Text('导出').fontSize(LABEL_LARGE).fontColor('#101116').margin({ left: 6 })
+            }.layoutWeight(1).justifyContent(FlexAlign.Center)
+              .padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
+              .margin({ left: 10 }).onClick(async () => { await this.runExport(); })
+          }.width('100%').margin({ top: 20 })
+        }.width('100%').transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
     }.width('100%')
   }
@@ -1333,6 +2044,16 @@ export struct BookshelfManagePage {
     Column() {
       if (this.showDeleteConfirm) {
         this.DeleteConfirmContent()
+      } else if (this.showBatchDownloadConfirm) {
+        this.BatchDownloadConfirmContent()
+      } else if (this.showDownloadAllConfirm) {
+        this.DownloadAllConfirmContent()
+      } else if (this.showChangeSourceStatus) {
+        // D-10：批量换源进度/错误框（上游是 AppAlertDialog，不是 sheet，见 ChangeSourceStatusDialog 注释）。
+        this.ChangeSourceStatusContent()
+      } else if (this.showExportFolderPicker) {
+        // D-9：导出文件夹选择中间层（上游 FilePickerSheet）。
+        this.ExportFolderPickerContent()
       } else if (this.showExportSheet) {
         this.ExportSheetContent()
       } else if (this.showSegmentedExport) {
@@ -1343,6 +2064,102 @@ export struct BookshelfManagePage {
         this.LogSheetContent()
       }
     }.width('100%').padding({ left: 20, right: 20, top: 8, bottom: 24 })
+  }
+
+  /**
+   * D-10：批量换源进行中 / 失败提示框。
+   * 上游 `AppAlertDialog(show = isChangingSource || changeSourceError != null,
+   *   title = change_source_batch, confirmText = if(isChangingSource) null else ok)`
+   * （BookshelfManageScreen.kt:867-901），正文三态：错误 → error 色文案；
+   * 进度 → changeSourceProgress；都没有 → 「准备中」，进行中时附环形进度。
+   */
+  @Builder
+  private ChangeSourceStatusContent() {
+    Column() {
+      Text('批量换源').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').margin({ bottom: 12 })
+      if (this.uiState.isChangingSource) {
+        Row() {
+          LoadingProgress().width(22).height(22).color(this.themeColorAccent)
+          Text(this.uiState.changeSourceProgress.length > 0 ? this.uiState.changeSourceProgress : '准备中')
+            .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary)
+            .layoutWeight(1).margin({ left: 12 })
+        }.width('100%').margin({ bottom: 20 })
+      } else {
+        Text(this.uiState.changeSourceError.length > 0 ? this.uiState.changeSourceError : '准备中')
+          .fontSize(BODY_MEDIUM)
+          .fontColor(this.uiState.changeSourceError.length > 0 ? '#FF6B6B' : this.themeColorTextSecondary)
+          .width('100%').margin({ bottom: 20 })
+      }
+      // 上游进行中时 confirmText = null（不给确认按钮），只有结束/失败才可关闭。
+      if (!this.uiState.isChangingSource) {
+        Text('确认').fontSize(LABEL_LARGE).fontColor('#101116').textAlign(TextAlign.Center)
+          .width('100%').padding({ top: 12, bottom: 12 }).backgroundColor('#B9C6FF').borderRadius(14)
+          .onClick(() => {
+            this.showChangeSourceStatus = false;
+            this.dispatch(manageIntent(ManageIntentType.DismissChangeSourceStatus));
+          })
+      }
+    }.width('100%')
+  }
+
+  /**
+   * D-4：批量缓存确认框。上游 `BookshelfManageScreen.kt:913-930`
+   * `AppAlertDialog(showBatchDownloadConfirmDialog, title=draw, text=sure_cache_book,
+   *   onConfirm → DownloadBooks(selectedBookUrls, downloadAllChapters=false))`
+   * 文案：title「提醒」/ text「是否确认开始缓存？」/ 确认「确认」/ 取消「取消」。
+   */
+  @Builder
+  private BatchDownloadConfirmContent() {
+    Column() {
+      Text('提醒').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').margin({ bottom: 12 })
+      Text(`是否确认开始缓存？共 ${this.selectedBooks().length} 本。`)
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
+        .margin({ bottom: 20 })
+      Row() {
+        Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .backgroundColor(this.themeColorSurfaceElevated).fontColor(this.themeColorTextPrimary)
+          .onClick(() => this.showBatchDownloadConfirm = false)
+        Button('确认').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .margin({ left: 12 }).backgroundColor(this.themeColorAccent).fontColor('#1A1B21')
+          .onClick(() => {
+            this.showBatchDownloadConfirm = false;
+            this.dispatch(manageIntent(ManageIntentType.DownloadBooks, {
+              bookUrls: this.selectedBooks().map((book: Book) => this.bookKey(book)),
+              downloadAllChapters: false
+            }));
+          })
+      }.width('100%')
+    }.width('100%')
+  }
+
+  /**
+   * D-5：下载全部确认框。上游 `:995-1012`
+   * `AppAlertDialog(showDownloadAllConfirmDialog, title=draw, text=sure_cache_book,
+   *   onConfirm → StartDownloadForVisibleBooks(state.books, downloadAllChapters=true))`
+   */
+  @Builder
+  private DownloadAllConfirmContent() {
+    Column() {
+      Text('提醒').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+        .width('100%').margin({ bottom: 12 })
+      Text(`是否确认开始缓存？共 ${this.filteredBooks().length} 本，将下载全部章节。`)
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
+        .margin({ bottom: 20 })
+      Row() {
+        Button('取消').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .backgroundColor(this.themeColorSurfaceElevated).fontColor(this.themeColorTextPrimary)
+          .onClick(() => this.showDownloadAllConfirm = false)
+        Button('确认').type(ButtonType.Normal).layoutWeight(1).height(40).borderRadius(20)
+          .margin({ left: 12 }).backgroundColor(this.themeColorAccent).fontColor('#1A1B21')
+          .onClick(() => {
+            this.showDownloadAllConfirm = false;
+            this.dispatch(manageIntent(ManageIntentType.StartDownloadForVisibleBooks,
+              { downloadAllChapters: true }));
+          })
+      }.width('100%')
+    }.width('100%')
   }
 
   /**
@@ -1423,49 +2240,94 @@ export struct BookshelfManagePage {
       }.width('100%').padding({ left: 12, right: 12, top: 8 + this.appTopInset, bottom: 8 })
       if (this.isSearchMode) {
         Row() {
-          TextInput({ text: this.searchKey, placeholder: '筛选书名/作者' })
+          TextInput({ text: this.searchKey, placeholder: '筛选书名/作者/书源/分组' })
             .layoutWeight(1).height(40).fontSize(TITLE_SMALL)
             .onChange((value: string) => this.searchKey = value)
           Text('清除').fontSize(BODY_SMALL).fontColor(this.themeColorAccent)
             .onClick(() => this.searchKey = '')
         }.width('100%').padding({ left: 16, right: 16 })
       }
-      Scroll(this.listScroller) {
-        Column() {
-          ForEach(this.filteredBooks(), (book: Book) => {
-            this.BookRow(book)
+      // C-11：手动排序分组下用 List 承载，才能拿到 ArkUI 的拖拽回调
+      // （上游 `ReorderableItem(enabled = canReorderBooks)` + `longPressDraggableHandle`，:563-586）。
+      // 非手动排序时保持普通 Scroll（List 的拖拽态会改变滚动惯性）。
+      if (this.canReorderBooks()) {
+        List({ space: MANAGE_ROW_GAP }) {
+          ForEach(this.filteredBooks(), (book: Book, index: number) => {
+            ListItem() {
+              this.BookRow(book)
+            }
           }, (book: Book) => this.rowKey(book))
-          if (this.filteredBooks().length === 0) {
-            Text('没有符合条件的书籍').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-              .width('100%').textAlign(TextAlign.Center).margin({ top: 60 })
-          }
-        }.width('100%')
-      }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
+        }
+        .width('100%').layoutWeight(1).scrollBar(BarState.Off)
+        .editMode(true)
+        .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
+          this.draggingIndex = itemIndex;
+          this.dragPreviewTitle = this.filteredBooks()[itemIndex] !== undefined
+            ? this.filteredBooks()[itemIndex].title : '';
+        })
+        .onItemDrop((_event: ItemDragInfo, itemIndex: number, insertIndex: number, isSuccess: boolean) => {
+          this.draggingIndex = -1;
+          this.dragPreviewTitle = '';
+          if (!isSuccess) { return; }
+          this.dropReorder(itemIndex, insertIndex);
+        })
+        .onItemDragMove((_event: ItemDragInfo, itemIndex: number, insertIndex: number) => {
+          this.draggingIndex = itemIndex;
+        })
+        .onItemDragLeave((_event: ItemDragInfo, itemIndex: number) => {
+          this.draggingIndex = itemIndex;
+        })
+      } else {
+        Scroll(this.listScroller) {
+          Column({ space: MANAGE_ROW_GAP }) {
+            ForEach(this.filteredBooks(), (book: Book) => {
+              this.BookRow(book)
+            }, (book: Book) => this.rowKey(book))
+            if (this.filteredBooks().length === 0) {
+              Text('没有符合条件的书籍').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+                .width('100%').textAlign(TextAlign.Center).margin({ top: 60 })
+            }
+          }.width('100%')
+        }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }).layoutWeight(1).scrollBar(BarState.Off)
+      }
       if (this.selectionMode) {
+        // B-6 / B-7 / D-3：选择态右下角 FAB 菜单。
+        // 上游 `AppFloatingActionButtonMenu(Modifier.offset(x = 16.dp, y = 16.dp),
+        // expanded = fabMenuExpanded, items = fabItems)`（BookshelfManageScreen.kt:371-441 / :520）。
+        // ArkUI 无同名组件，用「圆钮 + bindPopup 菜单」等价实现，位移取 offset(16,16)。
         Row() {
           Text(this.selectionTitle()).fontSize(BODY_SMALL).fontColor('#DCDDE4').layoutWeight(1)
-          Text('操作').fontSize(BODY_SMALL).fontColor('#C4D1FF')
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 }).borderRadius(8)
-            .backgroundColor(this.themeColorSurfaceElevated)
-            .onClick(() => { this.selectionMenuVisible = !this.selectionMenuVisible; })
-            .bindPopup(this.selectionMenuVisible, {
-              builder: this.SelectionMenu,
-              placement: Placement.BottomRight,
-              popupColor: '#00000000',
-              enableArrow: false,
-              autoCancel: true,
-              width: MANAGE_MENU_WIDTH,
-              onStateChange: (event: PopupStateChangeParam) => { this.selectionMenuVisible = event.isVisible; }
-            })
           Text('完成').fontSize(BODY_SMALL).fontColor('#C4D1FF')
             .padding({ left: 10, right: 10, top: 5, bottom: 5 }).borderRadius(8)
             .backgroundColor(this.themeColorSurfaceElevated)
             .onClick(() => this.clearSelection())
         }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
+        Stack({ alignContent: Alignment.BottomEnd }) {
+          Column()
+            .width(56).height(56).borderRadius(16)
+            .backgroundColor(this.themeColorAccent)
+            .margin({ right: 16, bottom: 16 })
+            .justifyContent(FlexAlign.Center)
+            .onClick(() => { this.fabMenuExpanded = !this.fabMenuExpanded; })
+            .accessibilityText('批量操作')
+            .bindPopup(this.fabMenuExpanded, {
+              builder: this.FabMenu,
+              placement: Placement.TopRight,
+              popupColor: '#00000000',
+              enableArrow: false,
+              autoCancel: true,
+              width: MANAGE_MENU_WIDTH,
+              onStateChange: (event: PopupStateChangeParam) => { this.fabMenuExpanded = event.isVisible; }
+            })
+          AppGlyph({ name: 'more', glyphSize: 24, tint: '#101116' })
+            .width(56).height(56).margin({ right: 16, bottom: 16 })
+            .hitTestBehavior(HitTestMode.Transparent)
+        }.width('100%').layoutWeight(1)
       }
     }.width('100%').height('100%').backgroundColor(this.themeColorSurfacePrimary)
       .bindSheet(this.showDeleteConfirm || this.showExportSheet || this.showGroupSelect || this.showLogSheet ||
-        this.showSegmentedExport,
+        this.showSegmentedExport || this.showBatchDownloadConfirm || this.showDownloadAllConfirm ||
+        this.showChangeSourceStatus || this.showExportFolderPicker,
         this.ManageSheet(), {
           height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
           onDisappear: () => {
@@ -1474,6 +2336,10 @@ export struct BookshelfManagePage {
             this.showGroupSelect = false;
             this.showLogSheet = false;
             this.showSegmentedExport = false;
+            this.showBatchDownloadConfirm = false;
+            this.showDownloadAllConfirm = false;
+            this.showChangeSourceStatus = false;
+            this.showExportFolderPicker = false;
           }
         })
   }

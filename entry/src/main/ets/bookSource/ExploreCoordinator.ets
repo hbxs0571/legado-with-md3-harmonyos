@@ -42,9 +42,14 @@ export class ExploreCoordinator {
     }
   }
 
-  /** 解析某源的发现分类（四种 exploreUrl 写法统一成菜单）。 */
-  static parseMenus(source: BookSource): ExploreMenu[] {
-    return ExploreMenuParser.parse(source.exploreUrl).menus;
+  /**
+   * 解析某源的发现分类（四种 exploreUrl 写法统一成菜单）。
+   * 【整体 @js: 求值】整体 @js:/<js> 的 exploreUrl 走受控运行时（支持 java.ajax /
+   * source.getVariable），必须异步；纯文本规则不需要脚本运行时。对齐上游 exploreKinds()。
+   */
+  static async parseMenus(source: BookSource): Promise<ExploreMenu[]> {
+    const config = await ExploreMenuParser.parseWithSource(source);
+    return config.menus;
   }
 
   /** 抓某分类第 page 页的书列表；失败返回 error 非空的结果（不抛异常）。 */

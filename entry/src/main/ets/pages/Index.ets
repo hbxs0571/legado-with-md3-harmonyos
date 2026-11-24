@@ -6,7 +6,8 @@ import { BookGroup, BookGroupDraft } from '../model/BookGroup';
 import { HomePage } from './HomePage';
 import { BookshelfPage } from './BookshelfPage';
 import { DiscoverPage } from './DiscoverPage';
-import { ExploreShowPage } from './ExploreShowPage';
+import { ExploreShowRouteScreen } from './ExploreShowPage';
+import { ConflictBookSummary } from '../components/booksource/BookshelfConflictSheet';
 import { SubscriptionPage } from './SubscriptionPage';
 import { SubscriptionFavoritesPage, SubscriptionRulesPage, SubscriptionSourceManagePage } from './SubscriptionSubPages';
 import { ProfilePage } from './ProfilePage';
@@ -80,6 +81,7 @@ import { OpenSourceLicensePage } from './OpenSourceLicensePage';
 import { FileManagerPage } from './FileManagerPage';
 import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { BookRepository } from '../data/BookRepository';
+import { BookSourceCallback, CALLBACK_EVENT_DEL_BOOK_SHELF } from '../bookSource/BookSourceCallback';
 import { CreatedLocalBook, TocRefreshResult } from '../data/BookRepository';
 // 批3（r359）：自动刷新目录的队列与单本用例（照上游 BookshelfViewModel.upAllBookToc 一系）。
 import { TocRefreshQueue } from '../data/TocRefreshQueue';
@@ -299,6 +301,8 @@ struct Index {
   @State exploreShowSourceUrl: string = '';
   @State exploreShowUrl: string = '';
   @State exploreShowReturnRoute: AppRoute = AppRoute.BOOK_INFO;
+  /** 探索结果页点书时带过来的共享封面键（上游 `onBookClick(book, sharedCoverKey)`）。 */
+  @State pendingSharedCoverKey: string = '';
   /** :224 阅读器全文搜索初值（与书架搜索 searchPageQuery 分开，避免串页）。 */
   @State readerSearchQuery: string = '';
   @State searchPageGroup: string = '全部书籍';
@@ -831,6 +835,12 @@ struct Index {
    * 初始值为 true：进程从冷启动进来时书架必然是空的。
    */
   @State bookshelfLoading: boolean = true;
+  /**
+   * 书架「回到顶部」请求计数（上游 MainScreen.kt:246-249 bookshelfScrollToTopRequest）。
+   * 底栏重复点「书架」时自增，BookshelfPage 用 @Watch 接住并滚到顶部。
+   * 用计数而不是布尔量：连点两次也要各触发一次滚动。
+   */
+  @State bookshelfScrollToTopRequest: number = 0;
   /** 导航标签模式；上游 `AppShellSettings.kt:19 labelVisibilityMode`。 */
   @State themeLabelVisibilityMode: string = LABEL_VISIBILITY_DEFAULT;
   /**
@@ -2140,28 +2150,6 @@ struct Index {
       this.showUnavailableAction(saved ? `已导出 ${rules.length} 条规则` : '未选择保存位置');
     } catch (_) {
       this.showUnavailableAction('替换规则导出失败');
-    }
-  }
-
-  /**
-   * 把一本本地书导出成 .epub。
-   * 只在书籍详情页的「更多」菜单里出现（且只对本地书）。
-   *
-   * 与书架管理页的「导出」共用同一份导出设置与同一个导出目录（`BookExporter.loadTarget`）：
-   * 上游只有 `ExportBookService` 一个执行层（`service/ExportBookService.kt`），三处调用都读
-   * `currentExportSettings` 与 `exportBookPath`，不存在「详情页用默认设置」这种分叉。
-   */
-  private async exportBookAsEpub(book: Book): Promise<void> {
-    const context = this.getUIContext().getHostContext();
-    if (context === undefined) {
-      return;
-    }
-    try {
-      const target = await BookExporter.loadTarget(context);
-      const message = await BookExporter.exportOne(context, book, target);
-      this.showUnavailableAction(message === '已导出' ? `已导出《${book.title}》` : message);
-    } catch (error) {
-      this.showUnavailableAction(error instanceof Error ? `导出失败：${error.message}` : '导出失败');
     }
   }
 
@@ -8574,6 +8562,75 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+
+  /**
+   * H2-7：网页书下载完的文件导入书架。
+   *
+   * 上游 `BookInfoViewModel.kt:1501-1510 handleWebFileSelection` 的 `isSupported` 分支：
+   * 先 `importOrDownloadWebFile<Book>`（本地已下载到 cacheDir，这里直接走单文件导入），
+   * 再按 `openAfterImport` 决定是否 `openReader(book)`。
+   */
+  private async importWebFile(uri: string, openAfterImport: boolean): Promise<void> {
+    const imported = await this.importOneLocalBook(uri);
+    if (imported === undefined) {
+      return;
+    }
+    if (openAfterImport) {
+      this.openBook(imported);
+      return;
+    }
+    await this.reloadBooksAfterImport();
+    this.route = AppRoute.BOOKSHELF;
+    this.showUnavailableAction('已导入 1 本书');
+  }
+
+  /**
+   * H2-8：压缩包按条目导入。
+   *
+   * 上游 `handleWebFileSelection` 的 `isSupportDecompress` 分支：
+   * 单条目走 `importArchiveBook(uri, fileName)`，多条目在面板里逐条选；
+   * 本地两条都汇到这里——`entryNames` 为空表示整包导入（包内是图片时走漫画链路）。
+   */
+  private async importWebArchiveEntries(archiveUri: string, entryNames: string[],
+    openAfterImport: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地存储');
+      return;
+    }
+    let imported: Book | undefined = undefined;
+    try {
+      const result = entryNames.length === 0
+        ? await ArchiveImporter.importFromUri(context, archiveUri)
+        : await ArchiveImporter.importFromUriEntries(context, archiveUri, entryNames);
+      if (result.failedCount > 0 && result.books.length === 0) {
+        this.showUnavailableAction('导入失败：压缩包内没有可导入的书');
+        return;
+      }
+      for (const oneCreated of result.books) {
+        if (oneCreated === undefined) { continue; }
+        const persisted = await this.persistCreatedBook(oneCreated, archiveUri);
+        if (persisted !== undefined && imported === undefined) {
+          imported = persisted;
+        }
+      }
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? `导入失败：${error.message}` : '导入失败：压缩包无法读取');
+      return;
+    }
+    if (imported === undefined) {
+      this.showUnavailableAction('没有导入任何书籍');
+      return;
+    }
+    if (openAfterImport) {
+      this.openBook(imported);
+      return;
+    }
+    await this.reloadBooksAfterImport();
+    this.route = AppRoute.BOOKSHELF;
+    this.showUnavailableAction('已导入 1 本书');
+  }
+
   /** 导入单个已选定的 uri：解析成 CreatedLocalBook 后交给 persistCreatedBook 落库。 */
   private async importOneLocalBook(uri: string): Promise<Book | undefined> {
     const context = this.getUIContext().getHostContext();
@@ -8975,6 +9032,83 @@ private canWriteInto(dir: string): boolean {
     const merged: MergedBook = { book: item, origins: [item.origin], originCount: 1 };
     this.openOnlineBookInfo(merged);
   }
+
+  /**
+   * 探索结果页带共享元素键跳详情（上游 `onBookClick(book, sharedCoverKey)`）。
+   *
+   * 上游把 `sharedCoverKey` 一路传给共享元素转场；本地详情页的共享键由
+   * `bookCoverSharedElementKey(bookUrl, scope)` 现算，探索页已经按同一函数算好，
+   * 这里记下来供 `BookCover.geometryTransition` 用（存在页面状态里，随路由切换消费）。
+   */
+  private openRelatedBookInfoWithSharedKey(item: SearchBookItem, sharedCoverKey: string): void {
+    this.pendingSharedCoverKey = sharedCoverKey;
+    this.openRelatedBookInfo(item);
+  }
+
+  /**
+   * 探索结果页「加入书架」（上游 `BookshelfConflictController.addToShelf`，:46-58）。
+   *
+   * 上游：`addToBookshelfUseCase.execute(searchBook)` 返回 `Added` 就 toast，
+   * 返回 `Conflict` 就把冲突交给页面弹面板。本地复用详情页那条链路：
+   * 先用 `shelfConflictsWith` 算候选（空白归一 + 作者兼容 + 已下架不算），
+   * 无候选就直接落库并返回空数组，有候选就返回给页面弹 `BookshelfConflictSheet`。
+   */
+  private async addExploreBookToShelf(item: SearchBookItem): Promise<ConflictBookSummary[]> {
+    const candidate: Book = this.onlineBookFromSearch(
+      { book: item, origins: [item.origin], originCount: 1 }, true);
+    const conflicts = this.shelfConflictsWith(candidate);
+    if (conflicts.length > 0) {
+      return conflicts.map((book: Book) => ConflictBookSummary.fromBook(book));
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      throw new Error('当前上下文不可用，无法保存书架');
+    }
+    const nextBook = BookRepository.copyBook(candidate);
+    nextBook.notShelf = false;
+    nextBook.order = Math.min(0, ...this.books.map((book: Book) => book.order ?? 0)) - 1;
+    await BookRepository.saveImportedBooks(context, [nextBook]
+      .filter((book: Book) => BookRepository.isPersistableBook(book)));
+    this.books = [...this.books, nextBook];
+    this.notShelfBooks = this.notShelfBooks.filter((book: Book) => !BookRepository.isSameBook(book, nextBook));
+    return [];
+  }
+
+  /**
+   * 探索结果页的冲突处置（上游 `BookshelfConflictController.resolve`，:73-121）。
+   *
+   * 上游 `coexist` 留两本只搬元信息、`migrate` 删旧书搬进度；本地这两条链路
+   * （`resolveShelfConflictCoexist` / `resolveShelfConflictMigrate`）原本以
+   * `selectedBook` 为「待加入的那本」，这里临时换上去、跑完再还原，避免复制两份逻辑。
+   * 返回空串表示成功，非空是给页面 toast 的错误文案。
+   */
+  private async resolveExploreShelfConflict(existingBookUrl: string, incomingBookUrl: string, mode: string,
+    _options: ChangeSourceMigrationOptions): Promise<string> {
+    const existing = this.findShelfBookByKey(existingBookUrl);
+    if (existing === undefined) {
+      return mode === 'coexist' ? '原书已不在书架，无法共存' : '原书已不在书架，无法迁移';
+    }
+    const incoming = this.notShelfBooks.find((book: Book) => (book.contentPath ?? '') === incomingBookUrl)
+      ?? this.books.find((book: Book) => (book.contentPath ?? '') === incomingBookUrl);
+    if (incoming === undefined) {
+      return '待加入的书已不在本地，请重新搜索';
+    }
+    const previousSelected = this.selectedBook;
+    this.selectedBook = incoming;
+    try {
+      if (mode === 'coexist') {
+        this.resolveShelfConflictCoexist(existingBookUrl);
+      } else {
+        await this.resolveShelfConflictMigrate(existingBookUrl);
+      }
+    } catch (error) {
+      return (error as Error).message;
+    } finally {
+      this.selectedBook = previousSelected;
+    }
+    return '';
+  }
+
 
   /**
    * A23：详情页关联书籍横幅的「更多」。
@@ -9914,6 +10048,22 @@ private canWriteInto(dir: string): boolean {
   }
 
   /** 全量应用标签匹配规则（:241）：规则表 load 一次，算出被改动的书落库并刷新书架。 */
+  /**
+   * G-6/G-7：详情页删除面板「查看该副本」——把详情页切到该副本。
+   * 对齐上游 `BookInfoIntent.OpenShelfDuplicate`。
+   */
+  private openShelfDuplicate(bookKey: string): void {
+    const target = this.books.find((item: Book) => {
+      const key = item.contentPath ?? item.androidOriginalPath ?? item.id;
+      return key === bookKey;
+    });
+    if (target === undefined) {
+      this.showUnavailableAction('找不到该副本');
+      return;
+    }
+    this.selectedBook = target;
+  }
+
   private async applyTagGroupRules(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
@@ -9948,6 +10098,27 @@ private canWriteInto(dir: string): boolean {
       this.books = reloaded
         .filter((book: Book) => BookRepository.isPersistableBook(book))
         // 批8（:1153）：未上架（notShelf 位）的书不进书架，重载后同样按位过滤。
+        .filter((book: Book) => book.notShelf !== true);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '移动分组失败');
+    }
+  }
+
+  /**
+   * 把若干本书设成**多个**分组（H-5：上游 GroupSelectSheet 多选，掩码加减）。
+   * 与 setBooksGroupByKeys 的差别只在分组名是数组：空数组 = 移回未分组。
+   */
+  private async setBooksGroupsByKeys(bookKeys: string[], groupNames: string[]): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.showUnavailableAction('无法访问本地书架');
+      return;
+    }
+    try {
+      await BookRepository.setBooksGroups(context, bookKeys, groupNames);
+      const reloaded = await BookRepository.loadImportedBooks(context);
+      this.books = reloaded
+        .filter((book: Book) => BookRepository.isPersistableBook(book))
         .filter((book: Book) => book.notShelf !== true);
     } catch (error) {
       this.showUnavailableAction(error instanceof Error ? error.message : '移动分组失败');
@@ -10128,6 +10299,18 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /** 选一张分组封面但先不落库（新建分组时的草稿态，对应上游 coverPath）。 */
+  private async chooseBookshelfGroupCoverDraft(): Promise<string> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return ''; }
+    try {
+      return await BookGroupRepository.chooseCoverDraft(context);
+    } catch (error) {
+      this.showUnavailableAction(error instanceof Error ? error.message : '选择分组封面失败');
+      return '';
+    }
+  }
+
   /** 清除分组封面。 */
   private async clearBookshelfGroupCover(groupId: number): Promise<void> {
     const context = this.getUIContext().getHostContext();
@@ -10217,6 +10400,18 @@ private canWriteInto(dir: string): boolean {
     }
   }
 
+  /**
+   * H2-1：换封面面板选中的地址写回书籍并落库。
+   * 上游 `BookInfoViewModel.updateCover(coverUrl)` 只写 `customCoverUrl`；本地对应字段是
+   * `coverUri`（地址，可为 http 直链或 `use_default_cover` 哨兵），`customCoverUri` 是
+   * 「用户本地选的图片路径」，这里一并清空。
+   */
+  private async applyBookCoverUrl(coverUrl: string): Promise<void> {
+    const oldCoverPath = this.selectedBook.customCoverUri;
+    const updatedBook = BookRepository.applyCoverUrl(this.selectedBook, coverUrl);
+    await this.persistCoverUpdate(updatedBook, oldCoverPath);
+  }
+
   private async chooseBookCover(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -10258,6 +10453,9 @@ private canWriteInto(dir: string): boolean {
     const remainingBooks = this.books.filter((item: Book) => item.id !== book.id);
     const booksToSave = remainingBooks.filter((item: Book) => BookRepository.isPersistableBook(item));
     try {
+      // 上游 BookInfoViewModel.kt:1490-1499 deleteBook：删书前先让书源跑一次 delBookShelf 回调。
+      // 回调内部按「源地址为空 / 查不到源」短路，本地书与无源书自然跳过。
+      BookSourceCallback.callBackBook(CALLBACK_EVENT_DEL_BOOK_SHELF, book.origin ?? '', book);
       // saveImportedBooks 只做 upsert，不会清掉缺席的书：照上游显式删章节行与 books 行。
       await BookRepository.deleteBook(context, book);
       await BookRepository.saveImportedBooks(context, booksToSave);
@@ -11710,6 +11908,12 @@ private canWriteInto(dir: string): boolean {
     }
   }
   private selectTab(index: number): void {
+    // 上游 MainScreen.kt:251-263 handleMainDestinationClick：已经在书架页时再点「书架」
+    // 不切换页面，而是把书架滚回顶部（requestBookshelfScrollToTop 后直接 return）。
+    if (index === 1 && this.selectedTab === 1 && this.route === AppRoute.BOOKSHELF) {
+      this.bookshelfScrollToTopRequest++;
+      return;
+    }
     this.selectedTab = index;
     if (index === 0) { this.route = AppRoute.HOME; }
     else if (index === 1) { this.route = AppRoute.BOOKSHELF; }
@@ -11880,6 +12084,8 @@ private canWriteInto(dir: string): boolean {
           refreshingBookIds: this.refreshingBookIds,
           // :368（批6，r360）：加载态驱动标题逐字淡入。
           bookshelfLoading: this.bookshelfLoading,
+          // A-22：底栏重复点「书架」的回到顶部请求（上游 BookshelfScreen.kt:469-482）
+          scrollToTopRequest: this.bookshelfScrollToTopRequest,
           onSaveLayout: (settings: BookshelfLayoutSettings) => this.saveBookshelfLayout(settings),
           onAddGroup: (name: string) => this.addBookshelfGroup(name),
           onRenameGroup: (id: number, name: string) => this.renameBookshelfGroup(id, name),
@@ -11888,6 +12094,7 @@ private canWriteInto(dir: string): boolean {
           onAddGroupDraft: (draft: BookGroupDraft) => this.addBookshelfGroupDraft(draft),
           onUpdateGroup: (id: number, draft: BookGroupDraft) => this.updateBookshelfGroup(id, draft),
           onChooseGroupCover: (id: number) => this.chooseBookshelfGroupCover(id),
+          onChooseGroupCoverDraft: () => this.chooseBookshelfGroupCoverDraft(),
           onClearGroupCover: (id: number) => this.clearBookshelfGroupCover(id),
           onMoveGroup: (fromId: number, toId: number) => this.moveBookshelfGroup(fromId, toId),
           // 书架卡片把共享元素键一起传出来（上游 BookshelfScreen.kt:1778 → MainNavGraph.kt:976）。
@@ -11901,6 +12108,8 @@ private canWriteInto(dir: string): boolean {
           onPullRefresh: (groupName: string) => { this.refreshBookshelfFromPull(groupName); },
           onApplyTagGroupRules: () => this.applyTagGroupRules(),
           onSetBooksGroup: (bookKeys: string[], groupName: string) => this.setBooksGroupByKeys(bookKeys, groupName),
+          onSetBooksGroupsByNames: (bookKeys: string[], groupNames: string[]) =>
+            this.setBooksGroupsByKeys(bookKeys, groupNames),
           onDeleteBooks: (books: Book[], deleteSource: boolean) => this.deleteBooksFromShelf(books, deleteSource),
           onMoveBooks: (ordered: Book[]) => this.moveBooksInShelf(ordered),
           onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => this.setBooksPrivateByKeys(bookKeys, isPrivate),
@@ -11910,6 +12119,9 @@ private canWriteInto(dir: string): boolean {
         DiscoverPage({
           onUnavailableAction: (message: string) => this.showUnavailableAction(message),
           onOpenOnlineBook: (item: MergedBook) => this.onAddOnlineBook(item),
+          // 第七表 H-3：分类 chip 进探索结果页，复用书单页同一条路由。
+          onOpenExploreShow: (title: string, sourceUrl: string, exploreUrl: string) =>
+            this.openRelatedBooksExplore(title, sourceUrl, exploreUrl),
           shelfBooks: this.books,
           exploreFilterState: this.coverSettings.exploreFilterState
         })
@@ -11940,6 +12152,7 @@ private canWriteInto(dir: string): boolean {
           // 批8（:1154）：详情页长按书架卡弹分组选择，落库复用书架页同一条通道。
           onSetBooksGroup: (bookKeys: string[], groupName: string) =>
             this.setBooksGroupByKeys(bookKeys, groupName),
+          onOpenShelfDuplicate: (bookKey: string) => this.openShelfDuplicate(bookKey),
           onResolveShelfConflict: (existingId: string, mode: string) => {
             if (mode === 'coexist') {
               this.resolveShelfConflictCoexist(existingId);
@@ -11973,6 +12186,12 @@ private canWriteInto(dir: string): boolean {
           onToggleCanUpdate: (canUpdate: boolean) => { void this.toggleBookCanUpdate(canUpdate); },
           onToggleSplitLongChapter: () => { void this.toggleSplitLongChapter(); },
           onChooseCover: () => this.chooseBookCover(),
+          onSelectCoverUrl: (coverUrl: string) => { void this.applyBookCoverUrl(coverUrl); },
+          // H2-7/H2-8：网页书文件导入。
+          onImportWebFile: (uri: string, openAfterImport: boolean) =>
+            this.importWebFile(uri, openAfterImport),
+          onImportWebArchiveEntries: (archiveUri: string, entryNames: string[], openAfterImport: boolean) =>
+            this.importWebArchiveEntries(archiveUri, entryNames, openAfterImport),
           // A23：关联书籍。开关本体在外观页，这里只把当前值下发给详情页做兜底判定。
           relatedBooksAuthorFallback: this.bookInfoAuthorSearchFallback,
           // 点关联书籍里的一本 → 走「未上架书目」那条链路（上游 RelatedBookClick → OpenBookInfo）。
@@ -11984,10 +12203,6 @@ private canWriteInto(dir: string): boolean {
             remark: string, customTag: string, groupNames: string[], bookType: BookMediaType, fixedType: boolean) =>
             this.saveBookMetadata(title, author, category, description, remark, customTag, groupNames, bookType, fixedType),
           onOpenEditPage: () => { this.route = AppRoute.BOOK_INFO_EDIT; },
-          // 批10（:565）：详情页溢出菜单「导出为 EPUB」的真实落点，执行层在 data/BookExporter.ets。
-          onExportEpub: () => {
-            if (this.selectedBook !== null) { void this.exportBookAsEpub(this.selectedBook); }
-          },
           onUnavailableAction: (message: string) => this.showUnavailableAction(message)
         })
         .transition(this.routeTransition())
@@ -12790,7 +13005,7 @@ private canWriteInto(dir: string): boolean {
         })
         .transition(this.routeTransition())
         } else if (routeParam.route === AppRoute.EXPLORE_SHOW) {
-        ExploreShowPage({
+        ExploreShowRouteScreen({
           title: this.exploreShowTitle,
           sourceUrl: this.exploreShowSourceUrl,
           exploreUrl: this.exploreShowUrl,
@@ -12799,8 +13014,13 @@ private canWriteInto(dir: string): boolean {
           isNight: this.readerNightMode,
           exploreFilterState: this.coverSettings.exploreFilterState,
           onBack: () => this.route = this.exploreShowReturnRoute,
-          onOpenBook: (item: SearchBookItem) => this.openRelatedBookInfo(item),
-          onUnavailableAction: (message: string) => this.showUnavailableAction(message)
+          onBookClick: (item: SearchBookItem, sharedCoverKey: string) =>
+            this.openRelatedBookInfoWithSharedKey(item, sharedCoverKey),
+          onMessage: (message: string) => this.showUnavailableAction(message),
+          onAddToShelf: (item: SearchBookItem) => this.addExploreBookToShelf(item),
+          onResolveShelfConflict: (existingBookUrl: string, incomingBookUrl: string, mode: string,
+            options: ChangeSourceMigrationOptions) =>
+            this.resolveExploreShelfConflict(existingBookUrl, incomingBookUrl, mode, options)
         })
         .transition(this.routeTransition())
         } else if (routeParam.route === AppRoute.PROFILE_SUBPAGE) {
@@ -12989,7 +13209,10 @@ private canWriteInto(dir: string): boolean {
             onExportSegmented: (book: Book, scopeSpec: string, chaptersPerVolume: number) => {
               this.exportBookSegmented(book, scopeSpec, chaptersPerVolume);
             },
-            onBatchChangeSource: (books: Book[]) => { this.batchChangeSourceBooks = books; }
+            onBatchChangeSource: (books: Book[]) => { this.batchChangeSourceBooks = books; },
+            // G-1：行内「更多 → 换源」走单本 ChangeSourceSheet（自动搜候选），
+            // 与批量向导是两条链（上游 BookshelfManageScreen.kt:770-788 / :790-817）。
+            onOpenChangeSource: (book: Book) => { this.changeSourceBook = book; }
           })
         .transition(this.routeTransition())
         } else if (this.profileSubpage === ProfileRoute.FILE_MANAGER) {

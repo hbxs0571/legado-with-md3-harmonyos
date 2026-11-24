@@ -75,6 +75,12 @@ export struct DiscoverPage {
   @StorageProp('themeItemBackground') themeItemBackground: string = '';
   onUnavailableAction: (message: string) => void = (_message: string) => {};
   onOpenOnlineBook: (item: MergedBook) => void = (_item: MergedBook) => {};
+  /**
+   * 进入某个分类的探索结果页（上游 `onOpenExploreShow(title, sourceUrl, exploreUrl)`）。
+   * 上游 `ExploreScreen.kt:235-237`：分类 chip 点击是「进结果页」，不是就地重抓。
+   */
+  onOpenExploreShow: (title: string, sourceUrl: string, exploreUrl: string) => void =
+    (_title: string, _sourceUrl: string, _exploreUrl: string) => {};
   /** 批10（:1454）：书架在架书，用于四档过滤；未上架（notShelf）书不在此列，与上游 notShelf 不算冲突一致。 */
   @Prop shelfBooks: Book[] = [];
   /** 批10（:1454）：发现页过滤档位 0..3，来自封面设置 explore_filter_state。 */
@@ -115,13 +121,13 @@ export struct DiscoverPage {
     if (picked === undefined && sources.length > 0) { picked = sources[0]; }
     if (picked === undefined) { return; }
     this.selectedSourceUrl = picked.bookSourceUrl;
-    this.onSourceSelected(picked);
+    await this.onSourceSelected(picked);
   }
 
-  /** 选中源：解析分类 chip，清结果。 */
-  private onSourceSelected(source: BookSource): void {
+  /** 选中源：解析分类 chip，清结果。整体 @js: 分类需受控运行时求值，故为异步。 */
+  private async onSourceSelected(source: BookSource): Promise<void> {
     this.selectedSourceUrl = source.bookSourceUrl;
-    this.menus = ExploreCoordinator.parseMenus(source);
+    this.menus = await ExploreCoordinator.parseMenus(source);
     this.selectedMenuUrl = this.menus.length > 0 ? this.menus[0].url : '';
     this.resultBooks = [];
     this.errorMessage = '';
@@ -251,7 +257,7 @@ export struct DiscoverPage {
             .backgroundColor(source.bookSourceUrl === this.selectedSourceUrl ? this.themeColorAccent : this.themeColorSurfaceElevated)
             .borderRadius(16).padding({ left: 12, right: 12, top: 7, bottom: 7 })
             .margin({ right: 8 })
-            .onClick(() => this.onSourceSelected(source))
+            .onClick(() => { void this.onSourceSelected(source); })
         }, (source: BookSource) => source.bookSourceUrl)
       }.padding({ left: 16, right: 16, top: 8, bottom: 8 })
     }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
@@ -270,7 +276,12 @@ export struct DiscoverPage {
             .backgroundColor(menu.url === this.selectedMenuUrl ? this.themeColorAccent : this.themeColorSurfaceElevated)
             .borderRadius(14).padding({ left: 10, right: 10, top: 5, bottom: 5 })
             .margin({ right: 6 })
-            .onClick(() => this.onMenuSelected(menu))
+            .onClick(() => {
+              // 上游 `ExploreScreen.kt:235-237` + `ExploreKindMultiTypeItem.kt:107-113`：
+              // 分类 chip 的点击是进该分类的探索结果页，`kind.type == url` 且 url 非空才响应。
+              if (menu.url.length === 0) { return; }
+              this.onOpenExploreShow(menu.title, this.selectedSourceUrl, menu.url);
+            })
         }, (menu: ExploreMenu, index: number) => menu.url + index.toString())
       }.padding({ left: 16, right: 16, top: 2, bottom: 10 })
     }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)

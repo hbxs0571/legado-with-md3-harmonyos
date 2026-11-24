@@ -1,4 +1,5 @@
 import { common, Want } from '@kit.AbilityKit';
+import { fileUri } from '@kit.CoreFileKit';
 
 /**
  * 外部应用跳转的唯一入口（批3，r359）。
@@ -21,6 +22,28 @@ export class WantLauncher {
    * 用系统浏览器打开 url。返回 true 表示 startAbility 已经交出去（真正起来由系统决定），
    * false 表示没有可用应用或参数不合法。失败不抛给调用方，调用方自己决定提示什么。
    */
+  static async openFile(context: common.UIAbilityContext | undefined, path: string): Promise<boolean> {
+    if (context === undefined) {
+      return false;
+    }
+    const target = path.trim();
+    if (target.length === 0) {
+      return false;
+    }
+    try {
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.default'],
+        uri: fileUri.getUriFromPath(target),
+        type: '*/*'
+      };
+      await context.startAbility(want);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   static async openUrl(context: common.UIAbilityContext | undefined, url: string): Promise<boolean> {
     if (context === undefined) {
       return false;

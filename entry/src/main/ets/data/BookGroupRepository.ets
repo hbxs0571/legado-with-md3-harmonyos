@@ -259,6 +259,37 @@ export class BookGroupRepository {
     return BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);
   }
 
+  /**
+   * 选一张图片复制进私有目录，返回 file:// 路径但不写分组表。
+   *
+   * 上游 `GroupEditSheet.kt:121-140` 的 coverPath 是草稿态：选图后只更新面板里的
+   * coverPath，点保存才随 group 一起落库。本地此前要求「先保存分组再设封面」，
+   * 与上游不一致；这里补一个不落库的入口，文件名用 draft- 前缀便于识别。
+   */
+  static async chooseCoverDraft(context: Context): Promise<string> {
+    const options = new picker.DocumentSelectOptions();
+    options.fileSuffixFilters = ['图片|.png', '图片|.jpg', '图片|.jpeg', '图片|.webp', '图片|.bmp'];
+    options.maxSelectNumber = 1;
+    const uris = await new picker.DocumentViewPicker(context).select(options);
+    const uri = uris[0];
+    if (uri === undefined) { return ''; }
+    const coversDirectory = `${context.filesDir}/group-covers`;
+    BookGroupRepository.ensureDirectory(coversDirectory);
+    const targetPath = `${coversDirectory}/draft-${Date.now()}.img`;
+    const source = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    try {
+      fileIo.copyFileSync(source.fd, targetPath);
+      if (fileIo.statSync(targetPath).size <= 0) { throw new Error('所选封面文件为空'); }
+    } catch (error) {
+      if (fileIo.accessSync(targetPath)) { fileIo.unlinkSync(targetPath); }
+      if (error instanceof Error) { throw error; }
+      throw new Error('保存分组封面失败');
+    } finally {
+      fileIo.closeSync(source);
+    }
+    return `file://${targetPath}`;
+  }
+
   /** 删除封面副本并清空记录，对应上游 GroupResetCoverAction。 */
   static async clearCover(context: Context, groupId: number): Promise<void> {
     const current = BookGroupRepository.groups.find((group: BookGroup) => group.groupId === groupId);

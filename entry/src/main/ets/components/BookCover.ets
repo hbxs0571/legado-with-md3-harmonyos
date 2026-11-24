@@ -3,13 +3,26 @@ import { BookRepository } from '../data/BookRepository';
 import { CoverSettings, DEFAULT_COVER_SETTINGS } from '../data/CoverSettingsRepository';
 import { buildCoverTextLayout } from './CoverTextLayout';
 import { AppGlyph } from './AppGlyph';
-import { CoverAlbumRepository } from '../data/CoverAlbumRepository';
+import { BUILTIN_DEFAULT_COVER, CoverAlbumRepository } from '../data/CoverAlbumRepository';
 import { ImageSeedColorExtractor } from '../data/ImageSeedColorExtractor';
 import { NetworkProbe } from '../lib/NetworkProbe';
 import { LABEL_SMALL } from './typography/TypographyTokens';
 
 /** 无封面文字的绘制上下文；每个 BookCover 各持一份，避免多本共享导致互相覆盖。 */
 const COVER_TEXT_CANVAS_SETTINGS: RenderingContextSettings = new RenderingContextSettings(true);
+
+/**
+ * 锁定态封面的模糊深度。
+ *
+ * 上游 `PrivateLockedContent.kt:54` `val PrivateLockedCoverBlurRadius: Dp = 20.dp`，
+ * 书架卡片锁定态与详情页脱敏态共用这一个值——`:48-53` 的注释说明两端糊得不一样的话，
+ * 共享元素转场飞到一半会看到一次「糊度跳变」。
+ */
+const LOCKED_COVER_BLUR_RADIUS: number = 20;
+/** 上游 `BookItem.kt:703` `animateDpAsState(..., tween(320))`：模糊半径的过渡时长。 */
+const LOCKED_BLUR_DURATION: number = 320;
+/** 上游 `BookItem.kt:706-711` `animateFloatAsState(..., tween(260))`：遮罩淡入时长。 */
+const LOCKED_OVERLAY_DURATION: number = 260;
 
 @Component
 export struct BookCover {
@@ -27,6 +40,13 @@ export struct BookCover {
   /** 更新小红点（:119）。 */
   @Prop showBadgeDot: boolean = false;
   /**
+   * 正在更新目录（上游 BookshelfCover.kt:123-136 的 `isUpdating`）。
+   *
+   * 为真时在封面底部画一条高 3vp 的不确定进度线：水平内边距 4、垂直 6、贴底居中。
+   * 上游调用点传 `isUpdating && !locked`（BookItem.kt:781），锁定态不显示进度。
+   */
+  @Prop isUpdating: boolean = false;
+  /**
    * 封面左下角的小字标签。
    *
    * 对应上游 BookshelfCover.kt:104-121 的 `leftBottomText`：`Alignment.BottomStart` +
@@ -34,17 +54,29 @@ export struct BookCover {
    * （BookItem.kt:794），本地没有「搜索命中书源」这一态，只传书籍类型标签。
    */
   @Prop leftBottomText: string = '';
-  // 角标与左下标签的配色：上游是 cardContainer / onCardContainer（TextCard.kt:43-44 的
-  // surfaceContainer / onSurface）。本地 ThemePaletteColors 没有 cardContainer 这一档，
-  // 按任务书口径降级成 surfaceContainerHigh / onSurface。
-  @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
-  @StorageProp('themeColorTextPrimary') themeColorTextPrimary: string = '#1B1C22';
+  // 角标与左下标签的配色，两处口径不同（上游 TextCard.kt:43-47）：
+  // · 未读角标（BookshelfCover.kt:85-102）不传 backgroundColor/contentColor → 走 TextCard 默认值
+  //   surfaceContainer / onSurface；
+  // · 左下标签（BookshelfCover.kt:104-121）显式传 cardContainer / onCardContainer。
+  // 本地 ThemePalette.ets:1158/1145/1163/1164 四档都写进了 AppStorage，所以按上游原值订阅，不再降级。
+  @StorageProp('themeColorSurfaceContainer') themeColorSurfaceContainer: string = '#F1F2F6';
+  @StorageProp('themeColorOnSurface') themeColorOnSurface: string = '#1B1C22';
+  @StorageProp('themeColorCardContainer') themeColorCardContainer: string = '#F1F2F6';
+  @StorageProp('themeColorOnCardContainer') themeColorOnCardContainer: string = '#3B4A7A';
+  /** 更新进度线的前景色（上游 LinearProgressIndicator 用 M3 primary）。 */
+  @StorageProp('themeColorAccent') themeColorAccent: string = '#3B4A7A';
   /**
    * 私密锁定（:325）：为真时在封面上叠一层「锁 + 已加密」蒙层，遮住封面本身。
    * 判定（单本标记 ∪ 所属私密分组）留在调用方，组件只负责画：
    * 书架、详情页、目录页都在用这个组件，判定逻辑只能有一处。
    */
-  @Prop locked: boolean = false;
+  /**
+   * 私密书锁定态。
+   *
+   * F-6：上游 `BookItem.kt:702-711` 在锁定切换时给封面模糊与遮罩各做一条过渡动画
+   * （模糊 320ms、遮罩 260ms），所以这里用 `@Watch` 监听，在回调里用 `animateTo` 复现。
+   */
+  @Prop @Watch('onLockedChanged') locked: boolean = false;
   /** 书封阴影，对应上游 bookshelfCoverShadow。 */
   @Prop shadowEnabled: boolean = false;
   /**
@@ -78,6 +110,14 @@ export struct BookCover {
    * 所以只有那几处调用点传 true，书架页不传、沿用默认值 false。
    */
   @Prop applyAspectRatio: boolean = false;
+  /**
+   * 是否按详情页口径夹取比例高度。
+   *
+   * 上游 `BookInfoCoverSizing.kt:17-19` 用 72dp 参考宽度把搜索列表的 80~140dp
+   * 上下限等比换算到 112dp 宽（124.44~217.78dp），保证共享元素转场不形变。
+   * 这里同样按当前宽度等比换算，不写死 112，其他宽度的调用点也能用。
+   */
+  @Prop clampAspectHeight: boolean = false;
   /** 无障碍朗读文本（：114）。不传时空串，读屏不播报这张封面。 */
   @Prop a11yText: string = '';
   /**
@@ -95,14 +135,36 @@ export struct BookCover {
   @State imageFailed: boolean = false;
   /** 封面原图宽高比（width / height）；异步读图后回填，0 表示读不到或不需要。 */
   @State coverAspectRatio: number = 0;
+  /** 封面模糊半径：锁定态 20、解锁态 0，切换按 320ms 过渡（F-6）。 */
+  @State lockedBlur: number = 0;
+  /** 锁定遮罩不透明度：锁定态 1、解锁态 0，切换按 260ms 过渡（F-6）。 */
+  @State lockOverlayAlpha: number = 0;
   /** 无封面文字的绘制上下文。 */
   private coverTextContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(COVER_TEXT_CANVAS_SETTINGS);
 
   aboutToAppear(): void {
+    // F-6：首帧直接取终值，避免「本来就锁着」的卡片入屏时多播一次淡入。
+    this.lockedBlur = this.locked ? LOCKED_COVER_BLUR_RADIUS : 0;
+    this.lockOverlayAlpha = this.locked ? 1 : 0;
     this.refreshCoverAspectRatio();
   }
 
   /** coverSettings 变化（例如刚在设置页关掉 A8）或异步恢复完成后重算一次比例。 */
+  /**
+   * F-6：锁定态切换时补两条过渡动画。
+   *
+   * 上游是两个独立的 `animateDpAsState` / `animateFloatAsState`，时长不同（320 / 260），
+   * 所以这里也分两次 `animateTo`，而不是塞进同一个动画块——否则两条会一起被拉成同一时长。
+   */
+  private onLockedChanged(): void {
+    animateTo({ duration: LOCKED_BLUR_DURATION, curve: Curve.EaseInOut }, () => {
+      this.lockedBlur = this.locked ? LOCKED_COVER_BLUR_RADIUS : 0;
+    });
+    animateTo({ duration: LOCKED_OVERLAY_DURATION, curve: Curve.EaseInOut }, () => {
+      this.lockOverlayAlpha = this.locked ? 1 : 0;
+    });
+  }
+
   private onCoverSourceChanged(): void {
     this.refreshCoverAspectRatio();
   }
@@ -131,6 +193,14 @@ export struct BookCover {
    * 相册没有可用图时返回空串、走「书本图标 + 书名」占位；关闭时用书籍自带图。
    */
   private effectiveCoverUri(): string {
+    // H2-1：`coverUri` 存的是上游的 `use_default_cover` 哨兵时（换封面面板选「默认封面」），
+    // 与「设置里勾了使用默认封面」同口径，直接走内置封面图，不去加载这个假地址。
+    if (this.book.coverUri === BUILTIN_DEFAULT_COVER) {
+      const seed = this.book.title.length > 0
+        ? this.book.title
+        : this.book.author.length > 0 ? this.book.author : this.book.contentPath ?? '';
+      return CoverAlbumRepository.defaultCoverPath(this.isNight, seed);
+    }
     if (this.coverSettings.useDefaultCover) {
       // seed 口径照上游：书名优先，其次作者，最后封面路径（三者都空时是空串）。
       const seed = this.book.title.length > 0
@@ -255,6 +325,10 @@ export struct BookCover {
           .height('100%')
           .objectFit(ImageFit.Cover)
           .borderRadius(this.cornerRadius)
+          // F-6：锁定态模糊真实封面（上游 `PrivateLockedContent.kt:165-169`
+          // `Modifier.blur(blurRadius, BlurredEdgeTreatment.Unbounded)` 作用在封面图上），
+          // 半径由 lockedBlur 带动画。
+          .blur(this.lockedBlur)
           .onError(() => this.imageFailed = true)
       }
       if (!this.hasCoverImage()) {
@@ -263,6 +337,8 @@ export struct BookCover {
         Canvas(this.coverTextContext)
           .width('100%')
           .height('100%')
+          // F-6：文字封面也属于「封面图」，锁定态一并模糊。
+          .blur(this.lockedBlur)
           .onReady(() => {
             // 画布尺寸只有 onReady 之后才确定，这时 context.width/height 就是像素值
             this.paintCoverText();
@@ -278,6 +354,7 @@ export struct BookCover {
         // 上游 CoilBookCover.kt:210-218：没有封面图时居中叠一个书本图标，
         // 占封面 35% 大小，色取主题 secondary（本地用固定的浅灰）。
         AppGlyph({ name: 'book', tint: '#8B90A0', glyphSize: this.coverIconSize() })
+          .blur(this.lockedBlur)
       }
       Column() {
         if (this.showChapterBadge || BookRepository.isBodyMissing(this.book)
@@ -327,17 +404,17 @@ export struct BookCover {
         Stack({ alignContent: Alignment.TopEnd }) {
           Row({ space: 4 }) {
             if (this.showBadgeDot) {
-              AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: this.themeColorTextPrimary })
+              AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: this.themeColorOnSurface })
             }
             Text(this.badgeText)
               .fontSize(LABEL_SMALL)
               .fontWeight(FontWeight.Medium)
-              .fontColor(this.themeColorTextPrimary)
+              .fontColor(this.themeColorOnSurface)
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-          .backgroundColor(this.themeColorSurfaceElevated)
+          .backgroundColor(this.themeColorSurfaceContainer)
           .borderRadius(4)
         }
         .width('100%')
@@ -354,11 +431,11 @@ export struct BookCover {
           Text(this.leftBottomText)
             .fontSize(LABEL_SMALL)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.themeColorTextPrimary)
+            .fontColor(this.themeColorOnCardContainer)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-            .backgroundColor(this.themeColorSurfaceElevated)
+            .backgroundColor(this.themeColorCardContainer)
             .borderRadius(4)
         }
         .width('100%')
@@ -366,15 +443,40 @@ export struct BookCover {
         .hitTestBehavior(HitTestMode.Transparent)
         .padding({ bottom: 2, left: 2 })
       }
-      if (this.locked) {
-        // 私密遮罩盖在封面与角标之上（:325）：锁图标 +「已加密」，不是单纯压暗。
-        Column() {
-          AppGlyph({ name: 'lock', glyphSize: 20, tint: '#E6E7EC' })
-          Text('已加密').fontSize(LABEL_SMALL).fontColor('#C4C9D7').margin({ top: 3 })
-        }.width('100%').height('100%')
-        .backgroundColor('#D915161B')
-        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      // 更新目录进度线：上游 BookshelfCover.kt:123-136 是
+      // `AppLinearProgressIndicator(align(BottomCenter).fillMaxWidth().padding(horizontal 4, vertical 6).height(3))`，
+      // 未传 progress 即「不确定态」（AppLinearProgressIndicator.kt:21-30 走无参 LinearProgressIndicator）。
+      // ArkUI 的 Progress 没有 indeterminate 形态，用 `enableScanEffect` 的扫描效果等效：
+      // 固定 value 只决定扫描带的基准位置，视觉上是一条来回扫的 3vp 高细线。
+      if (this.isUpdating) {
+        Row() {
+          Progress({ value: 30, total: 100, type: ProgressType.Linear })
+            .width('100%')
+            .height(3)
+            .color(this.themeColorAccent)
+            .backgroundColor('#1F000000')
+            .style({ strokeWidth: 3, enableScanEffect: true, enableSmoothEffect: true })
+        }
+        .width('100%')
+        .height(15)
+        .padding({ left: 4, right: 4, top: 6, bottom: 6 })
+        .hitTestBehavior(HitTestMode.Transparent)
+        // 贴底居中：外层 Stack 的 alignContent 是 Center，这里单独指定位置。
+        .align(Alignment.Bottom)
       }
+      // 私密遮罩盖在封面与角标之上（:325）：锁图标 +「已加密」，不是单纯压暗。
+      // F-6：上游 `BookItem.kt:706-711` 的 `lockOverlayAlpha` 是常驻渲染 + 透明度动画，
+      // 所以这里不再用 `if (this.locked)` 硬切，而是始终挂载、由 lockOverlayAlpha 控制可见度
+      // （锁定淡入、解锁淡出，都是 260ms）。
+      Column() {
+        AppGlyph({ name: 'lock', glyphSize: 20, tint: '#E6E7EC' })
+        Text('已加密').fontSize(LABEL_SMALL).fontColor('#C4C9D7').margin({ top: 3 })
+      }.width('100%').height('100%')
+      .backgroundColor('#D915161B')
+      .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+      .opacity(this.lockOverlayAlpha)
+      // 完全透明时不参与命中测试，避免解锁后的卡片被这层吃掉点击。
+      .hitTestBehavior(this.lockOverlayAlpha > 0 ? HitTestMode.Default : HitTestMode.None)
     }
     .width(this.coverWidth())
     .height(this.coverHeight())
@@ -416,11 +518,24 @@ export struct BookCover {
     if (this.applyAspectRatio && !this.coverSettings.restrictCoverRatio && this.coverAspectRatio > 0) {
       const width = this.coverWidth();
       if (typeof width === 'number') {
-        return Math.round(width / this.coverAspectRatio);
+        const derived = width / this.coverAspectRatio;
+        if (this.clampAspectHeight) {
+          // 上游 80/72 ~ 140/72 的换算比，按当前宽度等比缩放。
+          return Math.round(Math.max(width * 80 / 72, Math.min(width * 140 / 72, derived)));
+        }
+        return Math.round(derived);
       }
     }
     if (!this.fillWidth) {
-      return this.displayHeight > 0 ? this.displayHeight : this.mini ? 68 : this.compact ? 100 : 128;
+      if (this.displayHeight > 0) {
+        return this.displayHeight;
+      }
+      const fallbackWidth = this.coverWidth();
+      if (this.clampAspectHeight && typeof fallbackWidth === 'number') {
+        // 读不到原图比例时上游用默认 5:7（112dp 宽 → 156.8dp），不再写死 157。
+        return Math.round(fallbackWidth * 7 / 5);
+      }
+      return this.mini ? 68 : this.compact ? 100 : 128;
     }
     return this.maxWidth > 0 ? Math.round(this.maxWidth * 7 / 5) : '100%';
   }

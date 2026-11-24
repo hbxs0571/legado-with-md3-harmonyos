@@ -13,6 +13,8 @@ import {
   ChangeSourceCandidate, ChangeSourceCoordinator, ChangeSourceMigrationOptions, defaultMigrationOptions
 } from '../bookSource/ChangeSourceCoordinator';
 import { BookSourceRepository } from '../data/BookSourceRepository';
+import { AppGlyph } from '../components/AppGlyph';
+import { BookCover } from '../components/BookCover';
 import { BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM } from '../components/typography/TypographyTokens';
 
 /** 预览状态：对齐上游 BatchChangeSourcePreviewStatus（ChangeBookSourceUseCase.kt:65-69）。 */
@@ -30,6 +32,15 @@ export interface BatchChangeSourcePreviewItem {
   status: number;
   /** 命中的候选；未命中为 null。执行阶段直接用它，保证「预览什么就执行什么」。 */
   candidate: ChangeSourceCandidate | null;
+  /**
+   * G-8/G-9/G-11：该书在选中源里的**全部**候选（上游 `item.candidates`）。
+   * 多于 1 个时预览行出现「查看其他源信息」按钮，其它源信息 Sheet 也从这里取。
+   */
+  candidates: ChangeSourceCandidate[];
+  /** G-11：当前选中的候选下标（上游 `selectedCandidateIndex`）。 */
+  selectedCandidateIndex: number;
+  /** 作者，供预览卡第三行 `getRealAuthor() · N章` 用。 */
+  author: string;
 }
 
 /** 批量执行结果。对齐上游 BatchChangeBookSourceResult（ChangeBookSourceUseCase.kt:40-44）。 */
@@ -80,6 +91,12 @@ export struct BatchChangeSourceSheet {
   @State previewDone: number = 0;
   @State running: boolean = false;
   @State message: string = '';
+  /** G-3：源搜索框（上游 `BookshelfManageScreen.kt:1423-1429` `AppTextField(label=screen)`）。 */
+  @State searchKey: string = '';
+  /** G-4：已选源拖拽排序时正在拖的 url（上游 ReorderableSelectionItem）。 */
+  @State draggingUrl: string = '';
+  /** G-11：正在看「其它源信息」的那本（上游 `otherSourcePreviewItem`）。 */
+  @State otherSourceBookUrl: string = '';
   /** 预览/执行的可取消标志：置 true 后循环在每本之前退出，已处理的书不回滚（与上游一致）。 */
   @State cancelled: boolean = false;
 
@@ -122,6 +139,69 @@ export struct BatchChangeSourceSheet {
       if (row !== undefined && row.checked) { urls.push(row.url); }
     }
     return urls;
+  }
+
+  /** G-3：上游按 bookSourceName / bookSourceGroup / bookSourceUrl 三字段 contains 过滤（:1400-1405）。 */
+  private filteredSources(): BatchSourceRow[] {
+    const key = this.searchKey.trim();
+    if (key.length === 0) { return this.sources; }
+    const lower = key.toLowerCase();
+    const rows: BatchSourceRow[] = [];
+    for (let index = 0; index < this.sources.length; index++) {
+      const row = this.sources[index];
+      if (row === undefined) { continue; }
+      if (row.name.toLowerCase().indexOf(lower) >= 0 ||
+        row.group.toLowerCase().indexOf(lower) >= 0 ||
+        row.url.toLowerCase().indexOf(lower) >= 0) {
+        rows.push(row);
+      }
+    }
+    return rows;
+  }
+
+  /** G-4：已选源列表（按已选顺序，可长按拖动排序）。 */
+  private selectedRows(): BatchSourceRow[] {
+    const rows: BatchSourceRow[] = [];
+    for (let index = 0; index < this.sources.length; index++) {
+      const row = this.sources[index];
+      if (row !== undefined && row.checked) { rows.push(row); }
+    }
+    return rows;
+  }
+
+  /**
+   * G-4：把已选源里的 from 位搬到 to 位（上游 `ReorderableSelectionItem` 的
+   * `move(from.index, to.index)`）。整表重排后写回，保证「已选顺序 = 预览/执行顺序」。
+   */
+  private moveSelectedSource(fromUrl: string, toUrl: string): void {
+    if (fromUrl === toUrl) { return; }
+    const selected = this.selectedRows();
+    const fromIndex = selected.findIndex((row: BatchSourceRow) => row.url === fromUrl);
+    const toIndex = selected.findIndex((row: BatchSourceRow) => row.url === toUrl);
+    if (fromIndex < 0 || toIndex < 0) { return; }
+    const moved = selected[fromIndex];
+    if (moved === undefined) { return; }
+    const rest = selected.filter((row: BatchSourceRow) => row.url !== fromUrl);
+    const ordered: BatchSourceRow[] = [];
+    for (let index = 0; index < rest.length; index++) {
+      const row = rest[index];
+      if (row === undefined) { continue; }
+      if (index === toIndex) { ordered.push(moved); }
+      ordered.push(row);
+    }
+    if (ordered.length < rest.length + 1) { ordered.push(moved); }
+    // 未选中的源保持原相对顺序接在后面。
+    const tail = this.sources.filter((row: BatchSourceRow) => !row.checked);
+    const next: BatchSourceRow[] = [];
+    for (let index = 0; index < ordered.length; index++) {
+      const row = ordered[index];
+      if (row !== undefined) { next.push(row); }
+    }
+    for (let index = 0; index < tail.length; index++) {
+      const row = tail[index];
+      if (row !== undefined) { next.push(row); }
+    }
+    this.sources = next;
   }
 
   private toggleSource(url: string, checked: boolean): void {
@@ -178,7 +258,8 @@ export struct BatchChangeSourceSheet {
     if (book.isLocal) {
       return {
         bookUrl: book.contentPath ?? book.id, title: book.title, oldSourceName: oldName,
-        newSourceName: '', chapterCount: 0, status: BATCH_PREVIEW_SKIPPED, candidate: null
+        newSourceName: '', chapterCount: 0, status: BATCH_PREVIEW_SKIPPED, candidate: null,
+        candidates: [], selectedCandidateIndex: 0, author: book.author
       };
     }
     let candidates: ChangeSourceCandidate[] = [];
@@ -189,27 +270,79 @@ export struct BatchChangeSourceSheet {
     } catch (_) {
       candidates = [];
     }
-    let picked: ChangeSourceCandidate | null = null;
+    // G-8/G-9/G-11：只保留「校验通过 + 命中选中源」的候选，全部留下供
+    // 「查看其他源信息」用（上游 `item.candidates` 是候选集合，不是单个）。
+    const picked: ChangeSourceCandidate[] = [];
     for (let index = 0; index < candidates.length; index++) {
       const candidate = candidates[index];
       if (candidate === undefined) { continue; }
       if (!candidate.verified) { continue; }
       if (sourceUrls.indexOf(candidate.sourceUrl) < 0) { continue; }
-      // searchCandidates 已按「校验通过 + 章节数多」排好序，第一条就是最优。
-      picked = candidate;
-      break;
+      picked.push(candidate);
     }
-    if (picked === null) {
+    if (picked.length === 0) {
       return {
         bookUrl: book.contentPath ?? book.id, title: book.title, oldSourceName: oldName,
-        newSourceName: '', chapterCount: 0, status: BATCH_PREVIEW_NOT_FOUND, candidate: null
+        newSourceName: '', chapterCount: 0, status: BATCH_PREVIEW_NOT_FOUND, candidate: null,
+        candidates: [], selectedCandidateIndex: 0, author: book.author
+      };
+    }
+    // searchCandidates 已按「校验通过 + 章节数多」排好序，第一条就是最优。
+    const best = picked[0];
+    if (best === undefined) {
+      return {
+        bookUrl: book.contentPath ?? book.id, title: book.title, oldSourceName: oldName,
+        newSourceName: '', chapterCount: 0, status: BATCH_PREVIEW_NOT_FOUND, candidate: null,
+        candidates: [], selectedCandidateIndex: 0, author: book.author
       };
     }
     return {
       bookUrl: book.contentPath ?? book.id, title: book.title, oldSourceName: oldName,
-      newSourceName: picked.sourceName, chapterCount: picked.chapterCount,
-      status: BATCH_PREVIEW_MATCHED, candidate: picked
+      newSourceName: best.sourceName, chapterCount: best.chapterCount,
+      status: BATCH_PREVIEW_MATCHED, candidate: best,
+      candidates: picked, selectedCandidateIndex: 0, author: book.author
     };
+  }
+
+  /**
+   * G-11：切换某本的选中候选（上游 `SelectPreviewCandidate(oldBookUrl, candidateIndex)`）。
+   * 换候选后同步改 `newSourceName` / `chapterCount` / `candidate`，保证预览与执行一致。
+   */
+  private selectCandidate(bookUrl: string, candidateIndex: number): void {
+    const next: BatchChangeSourcePreviewItem[] = [];
+    for (let index = 0; index < this.preview.length; index++) {
+      const item = this.preview[index];
+      if (item === undefined) { continue; }
+      if (item.bookUrl !== bookUrl) { next.push(item); continue; }
+      const chosen = item.candidates[candidateIndex];
+      if (chosen === undefined) { next.push(item); continue; }
+      next.push({
+        bookUrl: item.bookUrl, title: item.title, oldSourceName: item.oldSourceName,
+        newSourceName: chosen.sourceName, chapterCount: chosen.chapterCount,
+        status: BATCH_PREVIEW_MATCHED, candidate: chosen,
+        candidates: item.candidates, selectedCandidateIndex: candidateIndex, author: item.author
+      });
+    }
+    this.preview = next;
+  }
+
+  /**
+   * G-9：某本改为「不迁移」（上游 `SkipPreviewItem`）。跳过后不再参与执行，
+   * 状态显示「不迁移」，且清掉候选避免被当成可迁移项。
+   */
+  private skipPreviewItem(bookUrl: string): void {
+    const next: BatchChangeSourcePreviewItem[] = [];
+    for (let index = 0; index < this.preview.length; index++) {
+      const item = this.preview[index];
+      if (item === undefined) { continue; }
+      if (item.bookUrl !== bookUrl) { next.push(item); continue; }
+      next.push({
+        bookUrl: item.bookUrl, title: item.title, oldSourceName: item.oldSourceName,
+        newSourceName: '', chapterCount: 0, status: BATCH_PREVIEW_SKIPPED, candidate: null,
+        candidates: item.candidates, selectedCandidateIndex: item.selectedCandidateIndex, author: item.author
+      });
+    }
+    this.preview = next;
   }
 
   /** 第四步（:564）：逐本执行。一本失败不能中断整批——执行在 Index 侧逐本 try/catch。 */
@@ -236,10 +369,11 @@ export struct BatchChangeSourceSheet {
     return count;
   }
 
+  /** G-10：上游 `statusText`（`BookshelfManageScreen.kt:1756-1762`）三态文案。 */
   private statusText(item: BatchChangeSourcePreviewItem): string {
-    if (item.status === BATCH_PREVIEW_SKIPPED) { return '本地书，跳过'; }
-    if (item.status === BATCH_PREVIEW_NOT_FOUND) { return '未找到可用候选源'; }
-    return `${item.oldSourceName.length > 0 ? item.oldSourceName : '原源'} → ${item.newSourceName} · ${item.chapterCount} 章`;
+    if (item.status === BATCH_PREVIEW_SKIPPED) { return '不迁移'; }
+    if (item.status === BATCH_PREVIEW_NOT_FOUND) { return '未找到'; }
+    return '已匹配';
   }
 
   private rowBackground(): string {
@@ -266,22 +400,85 @@ export struct BatchChangeSourceSheet {
         Text('正在读取书源…').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
       }.width('100%').justifyContent(FlexAlign.Center).padding(24)
     } else {
-      Scroll() {
-        Column() {
-          ForEach(this.sources, (item: BatchSourceRow) => {
-            Row() {
-              Column() {
-                Text(item.name).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
-                Text(item.group.length > 0 ? item.group : item.url)
-                  .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 }).maxLines(1)
-              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Toggle({ type: ToggleType.Checkbox, isOn: item.checked })
-                .onChange((value: boolean) => this.toggleSource(item.url, value))
-            }.width('100%').padding(12).backgroundColor(this.rowBackground()).borderRadius(12).margin({ bottom: 8 })
-          }, (item: BatchSourceRow) => item.url)
-        }.width('100%')
-      }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      Column() {
+        // G-3：上游 `AppTextField(value=searchKey, label=screen「筛选」)`（:1423-1429）。
+        TextInput({ text: this.searchKey, placeholder: '筛选书源名称 / 分组 / 地址' })
+          .height(44).fontSize(BODY_SMALL).width('100%')
+          .onChange((value: string) => { this.searchKey = value; })
+        Scroll() {
+          Column() {
+            // G-4：已选源区（上游 :1431-1468，可长按拖动排序，max 280dp）。
+            if (this.selectedRows().length > 0) {
+              Text('已选书源（长按拖动排序）').fontSize(LABEL_MEDIUM)
+                .fontColor(this.themeColorAccent).width('100%').margin({ top: 12, bottom: 8 })
+              // G-4：已选源可长按拖拽排序（上游 `ReorderableSelectionItem` 的
+              // `rememberReorderableLazyListState` + `move(from.index, to.index)`，
+              // `BookshelfManageScreen.kt:1431-1468`）。ArkUI 用 List 的
+              // editMode(true) + onItemDragStart/onItemDrop 承载同一交互。
+              List({ space: 8 }) {
+                ForEach(this.selectedRows(), (row: BatchSourceRow) => {
+                  ListItem() {
+                    this.SourceRow(row, true)
+                  }
+                }, (row: BatchSourceRow) => 'sel-' + row.url)
+              }.width('100%').height(Math.min(280, this.selectedRows().length * 60))
+                .scrollBar(BarState.Off)
+                .editMode(true)
+                .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
+                  const rows = this.selectedRows();
+                  if (itemIndex >= 0 && itemIndex < rows.length) {
+                    const row = rows[itemIndex];
+                    this.draggingUrl = row !== undefined ? row.url : '';
+                  }
+                })
+                .onItemDrop((_event: ItemDragInfo, itemIndex: number, insertIndex: number,
+                  isSuccess: boolean) => {
+                  if (!isSuccess) { this.draggingUrl = ''; return; }
+                  const rows = this.selectedRows();
+                  if (itemIndex < 0 || itemIndex >= rows.length ||
+                    insertIndex < 0 || insertIndex >= rows.length) {
+                    this.draggingUrl = '';
+                    return;
+                  }
+                  const from = rows[itemIndex];
+                  const to = rows[insertIndex];
+                  if (from !== undefined && to !== undefined) {
+                    this.moveSelectedSource(from.url, to.url);
+                  }
+                  this.draggingUrl = '';
+                })
+            }
+            // G-5：可选源列表（上游 :1470-1491，max 560dp + spacedBy(8.dp)）。
+            Text('可选书源').fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
+              .width('100%').margin({ top: 12, bottom: 8 })
+            ForEach(this.filteredSources(), (row: BatchSourceRow) => {
+              if (!row.checked) {
+                this.SourceRow(row, false)
+              }
+            }, (row: BatchSourceRow) => 'avail-' + row.url)
+          }.width('100%')
+        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      }.width('100%').layoutWeight(1)
     }
+  }
+
+  /** 选源行：勾选框 + 名称 + 分组/地址；已选态显示拖拽把手提示（G-4）。 */
+  @Builder
+  private SourceRow(row: BatchSourceRow, selected: boolean) {
+    Row() {
+      Column() {
+        Text(row.name).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
+        Text(row.group.length > 0 ? row.group : row.url)
+          .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 }).maxLines(1)
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      if (selected) {
+        // 上游 ReorderableSelectionItem 的拖拽把手（长按可拖）。
+        AppGlyph({ name: 'unfoldMore', glyphSize: 16, tint: this.themeColorTextTertiary })
+          .margin({ right: 8 })
+      }
+      Toggle({ type: ToggleType.Checkbox, isOn: selected })
+        .onChange((value: boolean) => this.toggleSource(row.url, value))
+    }.width('100%').padding(12).backgroundColor(this.rowBackground()).borderRadius(12).margin({ bottom: 8 })
   }
 
   @Builder
@@ -316,21 +513,151 @@ export struct BatchChangeSourceSheet {
             .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextTertiary)
         }.width('100%').justifyContent(FlexAlign.Center).padding(16)
       }
+      // G-13：上游预览列表 `LazyColumn(heightIn(max=640.dp), spacedBy(10.dp))`
+      // （`BookshelfManageScreen.kt:1549-1553`）。
       Scroll() {
-        Column() {
+        Column({ space: 10 }) {
           ForEach(this.preview, (item: BatchChangeSourcePreviewItem) => {
-            Column() {
-              Text(item.title).fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).maxLines(1)
-              Text(this.statusText(item)).fontSize(LABEL_SMALL)
-                .fontColor(item.status === BATCH_PREVIEW_MATCHED
-                  ? this.themeColorAccent : this.themeColorTextTertiary)
-                .margin({ top: 4 }).maxLines(2)
+            // G-8/G-9：上游 `BatchChangePreviewRow`（:1571-1661）——GlassCard 内
+            // 双书卡（原书籍 / 候选源）+ 5 个动作按钮。
+            Column({ space: 12 }) {
+              Row({ space: 12 }) {
+                this.PreviewBookInfo('原书籍', item.title, item.author,
+                  item.oldSourceName.length > 0 ? item.oldSourceName : '', '', true, 0)
+                this.PreviewBookInfo(
+                  item.status === BATCH_PREVIEW_SKIPPED ? '不迁移'
+                    : (item.status === BATCH_PREVIEW_NOT_FOUND ? '未找到' : item.newSourceName),
+                  item.candidate !== null && item.candidate.book !== null
+                    ? item.candidate.book.name : '', item.author,
+                  item.newSourceName, item.bookUrl, false,
+                  item.status === BATCH_PREVIEW_SKIPPED ? 0 : item.chapterCount)
+              }.width('100%').alignItems(VerticalAlign.Top)
+              // G-9：5 个动作按钮（上游 SmallTonalButton）。
+              Row() {
+                this.PreviewActionButton('搜索', () => { this.message = '手动搜索暂未接入'; })
+                this.PreviewActionButton('不迁移', () => this.skipPreviewItem(item.bookUrl))
+                this.PreviewActionButton('迁移', () => {
+                  if (item.status === BATCH_PREVIEW_MATCHED) { this.runExecute(); }
+                })
+                this.PreviewActionButton('新增', () => { this.message = '新增到书架暂未接入'; })
+                if (item.candidates.length > 1) {
+                  this.PreviewActionButton('查看其他源信息',
+                    () => this.otherSourceBookUrl = item.bookUrl)
+                }
+              }.width('100%').justifyContent(FlexAlign.SpaceBetween)
             }.width('100%').alignItems(HorizontalAlign.Start)
-              .padding(12).backgroundColor(this.rowBackground()).borderRadius(12).margin({ bottom: 8 })
+              .padding(12).backgroundColor(this.rowBackground()).borderRadius(12)
           }, (item: BatchChangeSourcePreviewItem) => item.bookUrl)
         }.width('100%')
       }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      // G-11：其它源信息面板（上游 `OtherSourceOptionsSheet`，:1710-1754）。
+      if (this.otherSourceBookUrl.length > 0) {
+        this.OtherSourcePanel()
+      }
     }.width('100%').layoutWeight(1)
+  }
+
+  /** G-8：上游 `PreviewBookInfo`（:1663-1708）——54dp 封面 + 书名 + 「作者 · N章」。 */
+  @Builder
+  private PreviewBookInfo(title: string, bookName: string, author: string, sourceName: string,
+    bookUrl: string, isOld: boolean, chapterCount: number) {
+    Column({ space: 6 }) {
+      if (bookName.length > 0) {
+        // 上游 `CoilBookCover(... Modifier.width(54.dp))`：宽度定死，高度按封面比例。
+        BookCover({
+          displayWidth: 54,
+          displayHeight: 76,
+          book: this.previewBookFor(bookName, author, bookUrl)
+        })
+      } else {
+        // 上游 book==null 时用 54dp 占位 + error 色标题（:1700-1707）。
+        Column().width(54).height(76).borderRadius(4).backgroundColor(this.rowBackground())
+      }
+      Text(bookName.length > 0 ? bookName : title).fontSize(LABEL_MEDIUM)
+        .fontColor(bookName.length > 0 ? this.themeColorTextPrimary : '#F2B8B5').maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
+      Text(`${author} · ${chapterCount}章`).fontSize(LABEL_SMALL)
+        .fontColor(this.themeColorTextTertiary).maxLines(1)
+    }.layoutWeight(1).alignItems(HorizontalAlign.Center)
+  }
+
+  /**
+   * G-8：预览卡用的临时 Book 对象。上游 `PreviewBookInfo` 直接吃 `Book`，
+   * 本地 `BookCover` 也需要 Book；这里只填封面要用的四字段，不落库。
+   */
+  private previewBookFor(name: string, author: string, bookUrl: string): Book {
+    const book: Book = {
+      id: bookUrl.length > 0 ? bookUrl : name,
+      title: name,
+      author: author,
+      category: '',
+      lastChapter: '',
+      progress: 0,
+      isLocal: false
+    };
+    return book;
+  }
+
+  /** G-9：预览行动作按钮（上游 SmallTonalButton，文字色 onSurfaceVariant）。 */
+  @Builder
+  private PreviewActionButton(label: string, onTap: () => void) {
+    Text(label).fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
+      .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+      .onClick(onTap)
+  }
+
+  /** G-11：其它源信息面板（上游 `OtherSourceOptionsSheet`：候选列表 + 详情按钮）。 */
+  @Builder
+  private OtherSourcePanel() {
+    Column() {
+      Row() {
+        Text('其他源信息').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('关闭').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
+          .onClick(() => this.otherSourceBookUrl = '')
+      }.width('100%').padding({ bottom: 8 })
+      Scroll() {
+        Column({ space: 8 }) {
+          ForEach(this.otherSourceCandidates(), (candidate: ChangeSourceCandidate, index: number) => {
+            Row() {
+              Column() {
+                Text(candidate.sourceName).fontSize(TITLE_MEDIUM)
+                  .fontColor(this.themeColorTextPrimary).maxLines(1)
+                Text(`${candidate.book !== null ? candidate.book.name : ''} · ${candidate.chapterCount}章`)
+                  .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 }).maxLines(1)
+                Text(candidate.book !== null ? candidate.book.author : '')
+                  .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 2 }).maxLines(1)
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Text('详情').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
+                .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                .onClick(() => { this.message = '候选详情暂未接入'; })
+            }.width('100%').padding(12)
+              .backgroundColor(this.otherSourceCandidateSelected(index) ? this.themeColorSurfaceElevated : this.rowBackground())
+              .borderRadius(12)
+              .onClick(() => this.selectCandidate(this.otherSourceBookUrl, index))
+          }, (candidate: ChangeSourceCandidate, index: number) => candidate.sourceUrl + '#' + index)
+        }.width('100%')
+      }.width('100%').height(280).scrollBar(BarState.Off)
+    }.width('100%').padding({ top: 12 })
+  }
+
+  /** G-11：当前「其它源信息」面板对应的候选列表。 */
+  private otherSourceCandidates(): ChangeSourceCandidate[] {
+    for (let index = 0; index < this.preview.length; index++) {
+      const item = this.preview[index];
+      if (item !== undefined && item.bookUrl === this.otherSourceBookUrl) { return item.candidates; }
+    }
+    return [];
+  }
+
+  /** G-11：某候选是否是当前选中项（上游 `index == selectedCandidateIndex`）。 */
+  private otherSourceCandidateSelected(index: number): boolean {
+    for (let i = 0; i < this.preview.length; i++) {
+      const item = this.preview[i];
+      if (item !== undefined && item.bookUrl === this.otherSourceBookUrl) {
+        return item.selectedCandidateIndex === index;
+      }
+    }
+    return false;
   }
 
   @Builder

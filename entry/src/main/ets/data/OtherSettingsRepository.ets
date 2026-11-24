@@ -32,6 +32,12 @@ export interface OtherSettings {
    * `FontSelectGrid.kt:72-83 FontSort` 的名称升序/名称降序/大小升序/大小降序/时间升序/时间降序。
    */
   fontSort: number;
+  /**
+   * 删除书籍时是否一并删除源文件。上游 `help/config/LocalConfig.kt:150-154`
+   * `var deleteBookOriginal: Boolean get() = getBoolean("deleteBookOriginal")`，
+   * 默认 false；书架管理页删除框的勾选框初值取它（`BookshelfManageScreen.kt:201`）。
+   */
+  deleteBookOriginal: boolean;
 }
 
 export const DEFAULT_OTHER_SETTINGS: OtherSettings = {
@@ -40,7 +46,8 @@ export const DEFAULT_OTHER_SETTINGS: OtherSettings = {
   webPort: 1122,
   recordLog: false,
   recordHeapDump: false,
-  fontSort: 0
+  fontSort: 0,
+  deleteBookOriginal: false
 };
 
 export class OtherSettingsRepository {
@@ -51,13 +58,15 @@ export class OtherSettingsRepository {
   private static readonly keyRecordLog: string = 'recordLog';
   private static readonly keyRecordHeapDump: string = 'recordHeapDump';
   private static readonly keyFontSort: string = 'fontSort';
+  private static readonly keyDeleteBookOriginal: string = 'deleteBookOriginal';
   private static cached: OtherSettings = {
     defaultBookTreeUri: '',
     sourceEditMaxLine: 2147483647,
     webPort: 1122,
     recordLog: false,
     recordHeapDump: false,
-    fontSort: 0
+    fontSort: 0,
+    deleteBookOriginal: false
   };
 
   private static publish(settings: OtherSettings): void {
@@ -67,7 +76,8 @@ export class OtherSettingsRepository {
       webPort: settings.webPort,
       recordLog: settings.recordLog,
       recordHeapDump: settings.recordHeapDump,
-      fontSort: settings.fontSort
+      fontSort: settings.fontSort,
+      deleteBookOriginal: settings.deleteBookOriginal
     };
   }
 
@@ -79,7 +89,8 @@ export class OtherSettingsRepository {
       webPort: OtherSettingsRepository.cached.webPort,
       recordLog: OtherSettingsRepository.cached.recordLog,
       recordHeapDump: OtherSettingsRepository.cached.recordHeapDump,
-      fontSort: OtherSettingsRepository.cached.fontSort
+      fontSort: OtherSettingsRepository.cached.fontSort,
+      deleteBookOriginal: OtherSettingsRepository.cached.deleteBookOriginal
     };
   }
 
@@ -91,6 +102,7 @@ export class OtherSettingsRepository {
     let recordLog = DEFAULT_OTHER_SETTINGS.recordLog;
     let recordHeapDump = DEFAULT_OTHER_SETTINGS.recordHeapDump;
     let fontSort = DEFAULT_OTHER_SETTINGS.fontSort;
+    let deleteBookOriginal = DEFAULT_OTHER_SETTINGS.deleteBookOriginal;
     try {
       const store = await preferences.getPreferences(context, OtherSettingsRepository.preferenceName);
       defaultBookTreeUri = store.getSync(OtherSettingsRepository.keyDefaultBookTreeUri, defaultBookTreeUri) as string;
@@ -99,6 +111,8 @@ export class OtherSettingsRepository {
       recordLog = store.getSync(OtherSettingsRepository.keyRecordLog, recordLog) as boolean;
       recordHeapDump = store.getSync(OtherSettingsRepository.keyRecordHeapDump, recordHeapDump) as boolean;
       fontSort = store.getSync(OtherSettingsRepository.keyFontSort, fontSort) as number;
+      deleteBookOriginal =
+        store.getSync(OtherSettingsRepository.keyDeleteBookOriginal, deleteBookOriginal) as boolean;
     } catch (error) {
       console.error(`其它设置读取失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -108,7 +122,8 @@ export class OtherSettingsRepository {
       webPort: webPort,
       recordLog: recordLog,
       recordHeapDump: recordHeapDump,
-      fontSort: normalizeAppFontSort(fontSort)
+      fontSort: normalizeAppFontSort(fontSort),
+      deleteBookOriginal: deleteBookOriginal
     };
     OtherSettingsRepository.publish(settings);
     return settings;
@@ -123,6 +138,7 @@ export class OtherSettingsRepository {
     await store.put(OtherSettingsRepository.keyRecordLog, settings.recordLog);
     await store.put(OtherSettingsRepository.keyRecordHeapDump, settings.recordHeapDump);
     await store.put(OtherSettingsRepository.keyFontSort, normalizeAppFontSort(settings.fontSort));
+    await store.put(OtherSettingsRepository.keyDeleteBookOriginal, settings.deleteBookOriginal);
     await store.flush();
     OtherSettingsRepository.publish(settings);
   }

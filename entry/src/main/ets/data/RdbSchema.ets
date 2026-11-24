@@ -13,8 +13,8 @@ import { relationalStore } from '@kit.ArkData';
  * 列定义带上之后，查询里即使漏写 COLLATE 也会按拼音序。
  */
 export class RdbSchema {
-  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8；朗读批 8 给 httpTTS 补 textParam / speedParam / toneParam 三个本地扩展列后升到 9。v10：知识库批追加 `book_character_profiles` / `book_character_relations` / `book_character_events` / `book_knowledge_entries` / `book_outline_nodes` 五张表与其索引（同批 `keyboardAssists` 表也在这次升级里）。v11：备份功能盘查批追加 `search_keywords` 表与其唯一索引（上游 SearchKeyword.kt 的实体表）。 */
-  static readonly version: number = 11;
+  /** 当前 schema 版本，与 RdbStore.version 比对决定是否建表。ZIP 兼容总账批 3 追加五张 G2 表（dictRules / homepage_modules / homepage_custom_sets / highlight_tag_rules / tag_group_rules）后升到 4；httpTTS 数据层追加 `httpTTS` 与 `read_aloud_voices` 两张表及一个唯一索引后升到 5；老库靠 ensure() 里的 IF NOT EXISTS 补齐；books 表补 format 列后升到 6；第七批（server 类）追加 `servers` 表与排序索引后升到 7；第八批（高亮规则边框）给 highlightRules 补 borderColor / borderWidth / borderRadius 三列后升到 8；朗读批 8 给 httpTTS 补 textParam / speedParam / toneParam 三个本地扩展列后升到 9。v10：知识库批追加 `book_character_profiles` / `book_character_relations` / `book_character_events` / `book_knowledge_entries` / `book_outline_nodes` 五张表与其索引（同批 `keyboardAssists` 表也在这次升级里）。v11：备份功能盘查批追加 `search_keywords` 表与其唯一索引（上游 SearchKeyword.kt 的实体表）。v12：探索页批追加 `searchBooks` 表与其 bookUrl 唯一索引、origin 普通索引（上游 SearchBook.kt 的实体表）。 */
+  static readonly version: number = 12;
 
   /** bookmarks：上游 Bookmark.kt，主键 time，索引 (bookName, bookAuthor)。 */
   static readonly createBookmarks: string =
@@ -90,6 +90,45 @@ export class RdbSchema {
 
   static readonly createSearchKeywordsIndex: string =
     'CREATE UNIQUE INDEX IF NOT EXISTS index_search_keywords_word ON search_keywords (`word`)';
+
+  /**
+   * searchBooks：上游 SearchBook.kt（`@Entity(tableName = "searchBooks")`）。
+   * 主键 bookUrl，bookUrl 唯一索引 + origin 普通索引，origin 外键指向 book_sources.bookSourceUrl。
+   * 探索页每抓一页就把结果落进来（上游 `SaveSearchBooksUseCase`），换源与封面挑选都靠这张表。
+   *
+   * 外键在这里只作声明：relationalStore 默认不开 PRAGMA foreign_keys（同 chapters 表），
+   * 所以 CASCADE 不会真的级联，删源时由书源仓储自己清这张表。
+   */
+  static readonly createSearchBooks: string =
+    'CREATE TABLE IF NOT EXISTS `searchBooks` (' +
+    '`bookUrl` TEXT NOT NULL, ' +
+    "`origin` TEXT NOT NULL DEFAULT '', " +
+    "`originName` TEXT NOT NULL DEFAULT '', " +
+    '`type` INTEGER NOT NULL DEFAULT 8, ' +
+    "`name` TEXT NOT NULL DEFAULT '', " +
+    "`author` TEXT NOT NULL DEFAULT '', " +
+    '`kind` TEXT, ' +
+    '`coverUrl` TEXT, ' +
+    '`intro` TEXT, ' +
+    '`wordCount` TEXT, ' +
+    '`latestChapterTitle` TEXT, ' +
+    "`tocUrl` TEXT NOT NULL DEFAULT '', " +
+    '`time` INTEGER NOT NULL DEFAULT 0, ' +
+    '`variable` TEXT, ' +
+    '`originOrder` INTEGER NOT NULL DEFAULT 0, ' +
+    '`chapterWordCountText` TEXT, ' +
+    '`chapterWordCount` INTEGER NOT NULL DEFAULT -1, ' +
+    '`respondTime` INTEGER NOT NULL DEFAULT -1, ' +
+    'PRIMARY KEY(`bookUrl`), ' +
+    'FOREIGN KEY(`origin`) REFERENCES `book_sources`(`bookSourceUrl`) ' +
+    'ON UPDATE NO ACTION ON DELETE CASCADE' +
+    ')';
+
+  static readonly createSearchBooksIndexBookUrl: string =
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_searchBooks_bookUrl ON `searchBooks` (`bookUrl`)';
+
+  static readonly createSearchBooksIndexOrigin: string =
+    'CREATE INDEX IF NOT EXISTS index_searchBooks_origin ON `searchBooks` (`origin`)';
 
   /**
    * book_groups：上游 BookGroup.kt，主键 groupId，无索引。
@@ -762,7 +801,11 @@ export class RdbSchema {
     RdbSchema.createKeyboardAssists,
     // 备份功能盘查批：search_keywords 表与其唯一索引（v11）；无外键依赖，索引排在表之后
     RdbSchema.createSearchKeywords,
-    RdbSchema.createSearchKeywordsIndex
+    RdbSchema.createSearchKeywordsIndex,
+    // 探索页批：searchBooks 表与两个索引（v12）；外键指向 book_sources，表必须先于索引建出
+    RdbSchema.createSearchBooks,
+    RdbSchema.createSearchBooksIndexBookUrl,
+    RdbSchema.createSearchBooksIndexOrigin
   ];
 
   /**

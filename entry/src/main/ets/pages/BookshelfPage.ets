@@ -15,7 +15,7 @@ import { BookGroupRepository } from '../data/BookGroupRepository';
 import { BookCover } from '../components/BookCover';
 import { bookCoverSharedElementKey, bookshelfSharedCoverSourceId } from '../data/BookCoverSharedElement';
 import { BookGroupCard } from '../components/BookGroupCard';
-import { AppGlyph } from '../components/AppGlyph';
+import { AppGlyph, AppGlyphName } from '../components/AppGlyph';
 import { AppTopBar, TopBarButton } from '../components/TopBar';
 import { UiMenuItem, UiMenuPanel } from '../components/UiMenu';
 import { UiSwitchControl } from '../components/UiSwitchControl';
@@ -23,7 +23,12 @@ import { PullRefreshIndicator } from '../components/PullRefreshIndicator';
 import { normalizeCustomColor } from '../data/CustomThemeColors';
 import { cardRadiusOf } from '../data/ThemeCardStyle';
 import { AppLog, AppLogEntry } from '../lib/AppLog';
-import { BookshelfListTransfer } from '../data/BookshelfListTransfer';
+import { BookshelfListEntry, BookshelfListTransfer } from '../data/BookshelfListTransfer';
+import { AddBookByUrlUseCase } from '../data/AddBookByUrlUseCase';
+// A-29/A-30：书单条目要按启用书源精确搜索补全成在线书（上游 ImportBookshelfUseCase.importByJson）
+import { PreciseSearchCoordinator } from '../bookSource/PreciseSearchCoordinator';
+// A-30 的「上传」支路：对齐上游 uploadRepository.upload（DirectLinkUpload.upLoad）
+import { DirectLinkUpload, DirectLinkUploadStore } from '../lib/DirectLinkUpload';
 import { window } from '@kit.ArkUI';
 import { toTimeAgo } from '../lib/TimeAgo';
 import { LocalBookRestorePlanner } from '../data/LocalBookRestorePlanner';
@@ -32,9 +37,30 @@ import { TagGroupRuleRepository } from '../data/TagGroupRuleRepository';
 import { TagGroupRule } from '../model/TagGroupRule';
 import { pasteboard } from '@kit.BasicServicesKit';
 import {
-  PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, isPrivateBook, requiresPrivateUnlock
+  PRIVATE_UNLOCK_EVERY_TIME, PrivateAccessRepository, PrivateBiometricStatus,
+  isPrivateBook, requiresPrivateUnlock
 } from '../data/PrivateAccessRepository';
-import { BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL } from '../components/typography/TypographyTokens';
+import {
+  BODY_MEDIUM, BODY_SMALL, LABEL_LARGE, LABEL_MEDIUM, LABEL_SMALL, LABEL_SMALL_EMPHASIZED,
+  TITLE_LARGE, TITLE_MEDIUM, TITLE_SMALL
+} from '../components/typography/TypographyTokens';
+// G-4：简介要过上游 HtmlFormatter（列表卡不是直显原始 HTML）。
+import { formatIntroText, formatSummaryText } from '../lib/HtmlFormatter';
+// F-4/F-5：顶栏折叠阈值改走统一令牌（70/24 双向滞回），不再本页硬编码 60。
+import { HEADER_COLLAPSE_THRESHOLD, HEADER_EXPAND_THRESHOLD } from '../components/UiTokens';
+// H-3：拖拽阈值激活 / 跨位 / 松手三处触感，对齐上游 longPressDraggableHandle 的两个回调。
+import { UiHaptics } from '../data/UiHaptics';
+import {
+  AutoGroupApplyResultUi,
+  AutoGroupBookUi,
+  AutoGroupEngine,
+  AutoGroupError,
+  AutoGroupGroupUi,
+  AutoGroupIgnoredBookUi,
+  AutoGroupOptions,
+  AutoGroupPhase,
+  AutoGroupPlan
+} from '../data/AutoGroupEngine';
 
 /**
  * 卡片式菜单的统一宽度，与详情页溢出菜单同口径。
@@ -45,8 +71,17 @@ import { BODY_MEDIUM, BODY_SMALL, HEADLINE_LARGE, LABEL_LARGE, LABEL_MEDIUM, LAB
  */
 const SHELF_MENU_WIDTH: number = 220;
 
-/** 网格左右内边距，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
+/** 网格左右内边距基数，对应上游 BookshelfScreen.kt contentPadding horizontal 8.dp。 */
 const BOOKSHELF_GRID_PADDING: number = 8;
+/**
+ * C-3：书籍网格实际左右内边距 = 8 + 4 = 12。
+ *
+ * 上游不是直接给 8dp，而是 `contentPadding = adaptiveContentPaddingBookshelf(horizontal = 8.dp)`
+ * （BookshelfScreen.kt:1767-1771），该函数内部再叠一层
+ * `horizontal = if (miuix) 6.dp + horizontal else 4.dp + horizontal`（AdaptivePadding.kt:114-121）。
+ * 本项目对齐 M3 引擎，故取 4dp 叠加。
+ */
+const BOOKSHELF_GRID_PADDING_EXTRA: number = 4;
 /** 网格行间距与列间距，对应上游 BookshelfScreen.kt:1770-1772 的 spacedBy(8.dp)。 */
 const BOOKSHELF_GRID_GAP: number = 8;
 
@@ -92,6 +127,34 @@ class BookshelfBookDataSource implements IDataSource {
   }
 }
 
+/**
+ * 简介排版缓存，对齐上游 `BookItem.kt:289-324` 的 `formattedIntroCache`。
+ *
+ * LazyForEach 滚出视口的卡片会销毁、滚回来重建，每次重建都会重新跑一遍 HtmlFormatter 的
+ * 多轮正则；400+ 本书上下滚动足以把主线程打满。这里以「行数设置 + 原始简介」为键全局只排一次版，
+ * 上限 500 条避免无限增长（上游 MAX_ENTRIES 同为 500）。
+ * 网格模式不展示简介、不参与解析——调用点只在列表分支里。
+ */
+class IntroFormatCache {
+  private static readonly MAX_ENTRIES: number = 500;
+  private static readonly STORE: Map<string, string> = new Map<string, string>();
+
+  static getOrFormat(intro: string, maxLines: number): string {
+    if (intro.length === 0) { return ''; }
+    const key = `${maxLines}|${intro}`;
+    const cached = IntroFormatCache.STORE.get(key);
+    if (cached !== undefined) { return cached; }
+    // 上游口径：行数 0（不限）用 formatIntroText 保留段落，限行时压成单行摘要。
+    const formatted = maxLines === 0 ? formatIntroText(intro) : formatSummaryText(intro);
+    if (IntroFormatCache.STORE.size >= IntroFormatCache.MAX_ENTRIES) {
+      const oldest = IntroFormatCache.STORE.keys().next();
+      if (!oldest.done) { IntroFormatCache.STORE.delete(oldest.value); }
+    }
+    IntroFormatCache.STORE.set(key, formatted);
+    return formatted;
+  }
+}
+
 /** 卡片底色十六进制转 ARGB 整数；空串或非法值返回 0（= 跟随主题）。 */
 function bookshelfCardHexToInt(hex: string): number {
   const normalized = normalizeCustomColor(hex);
@@ -117,9 +180,27 @@ export struct BookshelfPage {
   @StorageProp('themeColorAccent') themeColorAccent: string = '#3F5BD9';
   @StorageProp('themeColorSurfacePrimary') themeColorSurfacePrimary: string = '#F5F6F8';
   @StorageProp('themeColorSurfaceTertiary') themeColorSurfaceTertiary: string = '#F0F1F5';
+  @StorageProp('themeColorSurfaceSecondary') themeColorSurfaceSecondary: string = '#E9EBF0';
   @StorageProp('themeColorSurfaceElevated') themeColorSurfaceElevated: string = '#FFFFFF';
   /** 书架卡片底色兜底。上游 `BookItem.kt:186` / `:583` 在用户没设卡片色时用 `cardContainer`。 */
   @StorageProp('themeColorCardContainer') themeColorCardContainer: string = '#FFFFFF';
+  // B-7：列表未读徽标的字色。上游 TextCard 默认 contentColor = onCardContainer
+  // （TextCard.kt:43-44），徽标本身不传配色，所以字色就是 onCardContainer。
+  @StorageProp('themeColorOnCardContainer') themeColorOnCardContainer: string = '#3B4A7A';
+  /**
+   * 卡片选中态底色。上游 `BookItem.kt:99`（网格 Box.background）与 `:186`（列表 NormalCard.containerColor）
+   * 选中时都铺 `secondaryContainer`；本地此前只有勾选圈变色、整格底色不变。
+   */
+  @StorageProp('themeColorSecondaryContainer') themeColorSecondaryContainer: string = '#DCE1FF';
+  /** 列表卡右侧信息列的字色基准。上游 `AppText` 默认 `onSurface` / `onSurfaceVariant`。 */
+  @StorageProp('themeColorOnSurface') themeColorOnSurface: string = '#1B1C22';
+  @StorageProp('themeColorOnSurfaceVariant') themeColorOnSurfaceVariant: string = '#2E3038';
+  /** 分组管理卡片底色：上游 GroupManageSheet.kt:311 GlassCard(containerColor = onSheetContent)。 */
+  @StorageProp('themeColorOnSheetContent') themeColorOnSheetContent: string = '#1F2027';
+  /** 简介「在下方」用的 GlassCard 容器色。上游 `BookItem.kt:931` 传 `cardContainer`。 */
+  @StorageProp('themeColorSurfaceContainerLow') themeColorSurfaceContainerLow: string = '#F7F8FA';
+  /** 上游 AiAutoGroupSheet.kt:381/411/515 用 surfaceContainer 作输入框底色，补这一档订阅。 */
+  @StorageProp('themeColorSurfaceContainer') themeColorSurfaceContainer: string = '#F1F2F6';
   /** 卡片色输入框未设置时的初始色。上游 `BookshelfConfigSheet.kt:677` 用 `surfaceVariant`。 */
   @StorageProp('themeColorSurfaceVariant') themeColorSurfaceVariant: string = '#E1E4D5';
   /**
@@ -174,6 +255,12 @@ export struct BookshelfPage {
    */
   @Prop @Watch('onBookshelfLoadingChanged') bookshelfLoading: boolean = false;
   /**
+   * A-22 回到顶部请求计数（上游 BookshelfScreen.kt:469-482 LaunchedEffect(scrollToTopRequest)）。
+   * 底栏重复点「书架」时 Index 自增，这里滚到首项；文件夹根层与主网格各有一个 Scroller，
+   * 按当前视图选（上游也是 when { isShowingFolderRoot -> folderGridState; else -> groupGridStates }）。
+   */
+  @Prop @Watch('onScrollToTopRequest') scrollToTopRequest: number = 0;
+  /**
    * 标题逐字淡入进度：>= 999 表示已到位（普通整段渲染，且之后不再重淡入）；
    * 0 表示一个字都还没亮。真正的逐字错开在 AppTopBar.titleLine 里按 index*24ms 的延迟实现，
    * 这里只负责在加载开始/结束时把值推到两端。
@@ -184,7 +271,12 @@ export struct BookshelfPage {
   @State sortMenuVisible: boolean = false;
   @State groupFilterVisible: boolean = false;
   @State groupManageMenuVisible: boolean = false;
+  /** 正在拖动的分组 id：用于给被拖起的卡片加抬升阴影（上游 GroupManageSheet.kt:306-308 animateDpAsState(8.dp)）。 */
+  @State draggingGroupId: number = -1;
   @State selectionGroupVisible: boolean = false;
+  /** H-5：编辑态「移动」多选分组 Sheet 的显隐与已勾选组名。 */
+  @State showMoveGroupSheet: boolean = false;
+  @State moveGroupSelectedNames: string[] = [];
   @State layoutMenuVisible: boolean = false;
   @State moreMenuVisible: boolean = false;
   /** 布局面板编辑中的草稿；打开面板时从 layout 复制，确认后整体提交。 */
@@ -197,12 +289,13 @@ export struct BookshelfPage {
   @State draftSort: number = -1;
   @State draftRefresh: boolean = true;
   @State draftPrivate: boolean = false;
+  /** 关闭已有隐私分组时的二次确认（上游 GroupEditSheet.kt:109/210-215 的 showDisablePrivateDialog）。 */
+  @State showDisablePrivateConfirm: boolean = false;
   @State draftCover: string = '';
   @State pendingDeleteGroupId: number = -1;
   @State showSearch: boolean = false;
   @State @Watch('onBookshelfDataDirty') searchQuery: string = '';
   @State collapsedHeader: boolean = false;
-  @State emptyFace: string = '(；′⌒`)';
   /**
    * 网格容器的实测宽度（vp）。
    *
@@ -221,8 +314,21 @@ export struct BookshelfPage {
   @State showLogSheet: boolean = false;
   /** 打开日志面板时抓取的 AppLog 快照，清空后置空数组触发刷新。 */
   @State logEntries: AppLogEntry[] = [];
-  /** 「标签显示内容」三复选是否展开（:209 / :224-226）。 */
-  @State showTagSources: boolean = false;
+  /**
+   * 数值行的展开键：对齐上游 CompactSliderSettingItem 的 `expanded`，
+   * 同一时刻只展开一个滑块，键就是该行的标题。
+   */
+  @State layoutSliderExpandedKey: string = '';
+  /**
+   * 「标签显示内容」对话框开关（D-2 / F-5）。
+   * 对齐上游 BookshelfConfigSheet.kt:659-665 的 `if (showTagContentDialog) BookshelfTagContentDialog(...)`，
+   * 上游是独立对话框，不是行内展开。
+   */
+  @State showTagContentDialog: boolean = false;
+  /** 对话框内的三个复选草稿；确认时才写回 layoutDraft（上游 rememberSaveable 语义）。 */
+  @State tagDialogCustom: boolean = false;
+  @State tagDialogSource: boolean = false;
+  @State tagDialogWordCount: boolean = false;
   /** 标签行取色缓存：总开关关掉时为空数组，卡片侧统一回落主题色（:124）。 */
   @State cachedTagColors: TagColorPair[] = [];
   /** 配色管理页是否展开；与布局/日志/分组面板共用同一个 bindSheet。 */
@@ -240,6 +346,32 @@ export struct BookshelfPage {
   @State draftRulePattern: string = '';
   /** 「粘贴」需先弹 PasteButton 授权层，不能直接读剪贴板（ProfileSubPages.ets:1394）。 */
   @State showRulePasteAuthorization: boolean = false;
+  /** 独立标签规则面板是否打开（C-15：上游 TagGroupRuleEditSheet）。 */
+  @State showTagRuleEdit: boolean = false;
+  /** 正在编辑的规则 id；0 表示新建。 */
+  @State editingTagRuleId: number = 0;
+  /** 规则面板里的分组名与匹配表达式草稿。 */
+  @State tagRuleName: string = '';
+  @State tagRulePattern: string = '';
+  /** 规则面板右上「更多菜单」的展开态。 */
+  @State tagRuleMenuVisible: boolean = false;
+  /** C-14：AI 自动分组面板的开关与整套会话状态（对齐上游 AiAutoGroupUiState）。 */
+  @State showAiAutoGroup: boolean = false;
+  @State aiPhase: AutoGroupPhase = 'LoadingSource';
+  @State aiIncrementalOnly: boolean = true;
+  @State aiIncludeBookIntro: boolean = false;
+  @State aiDeepThinking: boolean = false;
+  @State aiGroupingInstruction: string = '';
+  @State aiGroups: AutoGroupGroupUi[] = [];
+  @State aiIgnoredBooks: AutoGroupIgnoredBookUi[] = [];
+  @State aiApplyResult: AutoGroupApplyResultUi | undefined = undefined;
+  @State aiErrorText: string = '';
+  @State aiRevisionInstruction: string = '';
+  @State aiNewGroupName: string = '';
+  @State aiShowApplyConfirm: boolean = false;
+  @State aiBatchText: string = '';
+  /** 当前展开「移动」菜单的书（bookUrl）；空串表示没有展开。 */
+  @State aiMoveMenuKey: string = '';
   /** 选择模式（:87 / :142-144）。进入后卡片点击改勾选，顶栏换关闭按钮。 */
   @State selectionMode: boolean = false;
   /** 下拉刷新进行中。与单本刷新的 refreshingBookIds 是两件事：这个是整批转圈。 */
@@ -257,6 +389,31 @@ export struct BookshelfPage {
   @State selectedBookKeys: Set<string> = new Set<string>();
   /** 批量删除确认面板（:148 / :149）；与布局/日志/分组面板共用同一个 bindSheet。 */
   @State showBatchDeleteSheet: boolean = false;
+  /**
+   * H-10：批量下载二次确认框。
+   *
+   * 上游 `BookshelfScreen.kt:1526-1538` `AppAlertDialog(showBatchDownloadConfirmDialog, sure_cache_book)`
+   * 是编辑态「下载」动作的前置确认；本地原先 `download_all` 直接入队，缺这一步。
+   */
+  @State showBatchDownloadConfirm: boolean = false;
+  /** H-6：网址导入对话框（对齐上游 BookshelfOverlay.AddUrlDialog）。 */
+  /**
+   * H-4：拖动中的临时列表（上游 `BookshelfScreen.kt:1730` 的 `draggingBooks`）。
+   * 拖动期间可见书读它、不落库；松手（onDrop）才交给 onMoveBooks 保存。
+   * ArkTS 对 `Book[] | null` 的窄化不友好，用「空数组 + dragActive」表达「没有临时列表」。
+   */
+  @State draggingBooks: Book[] = [];
+  @State dragActive: boolean = false;
+  @State showAddUrlDialog: boolean = false;
+  @State addUrlInput: string = '';
+  /**
+   * A-29/A-30：书单导入/导出各自的上游 `FilePickerSheet` 面板
+   * （`ui/widget/components/filePicker/FilePickerSheet.kt:22-78`）。
+   * 上游导入是「选系统文件 + 输入URL」两条路，导出是「选系统文件夹 + 上传 URL」两条路；
+   * 本地原来各只有一条（直接弹系统选择器），这里补齐成 OptionSheet 形态的面板。
+   */
+  @State showImportSheet: boolean = false;
+  @State showExportSheet: boolean = false;
   /** 批量删除时是否同时删掉应用内导入副本（:149）；每次打开面板都从未勾选起步。 */
   @State batchDeleteSource: boolean = false;
   /**
@@ -288,7 +445,8 @@ export struct BookshelfPage {
   private bookshelfWindow: window.Window | undefined = undefined;
   private windowSizeListener: (size: window.Size) => void = (_size: window.Size): void => {};
   private readonly bookshelfScroller: Scroller = new Scroller();
-  private readonly emptyFaces: string[] = ['(；′⌒`)', '(つ﹏⊂)', '(•̀ᴗ•́)و', '(๑•́ ₃ •̀๑)', '(눈‸눈)', '(ಥ﹏ಥ)', '(｡•́︿•̀｡)'];
+  /** 文件夹根层分组网格的滚动控制器（A-22 回到顶部要按视图选 Scroller）。 */
+  private readonly folderScroller: Scroller = new Scroller();
   onOpenBook: (book: Book, sharedCoverKey: string) => void = () => {};
   onOpenBookInfo: (book: Book) => void = () => {};
   onSearch: () => void = () => {};
@@ -310,6 +468,8 @@ export struct BookshelfPage {
     async (_id: number, _draft: BookGroupDraft) => {};
   /** 选择分组封面，返回新的封面路径；用户取消时返回空串。 */
   onChooseGroupCover: (id: number) => Promise<string> = async (_id: number) => '';
+  /** 为「尚未保存」的分组选封面：只复制副本并返回路径，不写分组表（上游 coverPath 草稿态）。 */
+  onChooseGroupCoverDraft: () => Promise<string> = async () => '';
   /** 清除分组封面。 */
   onClearGroupCover: (id: number) => Promise<void> = async (_id: number) => {};
   /** 把分组拖到另一个分组的位置。 */
@@ -330,6 +490,9 @@ export struct BookshelfPage {
     async (_books: Book[], _deleteSource: boolean) => {};
   /** 拖拽重排后把新顺序交给 Index 落库并同步内存（:138）。 */
   onMoveBooks: (ordered: Book[]) => Promise<void> = async (_ordered: Book[]) => {};
+  /** 批量把书设成**多个**分组（H-5：上游 GroupSelectSheet 是多选，掩码加减）。 */
+  onSetBooksGroupsByNames: (bookKeys: string[], groupNames: string[]) => Promise<void> =
+    async (_bookKeys: string[], _groupNames: string[]) => {};
   /** 批量设/取消单本私密标记（:294 / :147）；由 Index 落库后刷新 books。 */
   onSetBooksPrivate: (bookKeys: string[], isPrivate: boolean) => Promise<void> =
     async (_bookKeys: string[], _isPrivate: boolean) => {};
@@ -365,6 +528,19 @@ export struct BookshelfPage {
     // 后两位是私密标记与当前锁定态（:325）：ArkUI 的 ForEach 在 key 不变时直接复用旧节点，
     // 把这两项漏在 key 外面，改「设为私密」或重启后解锁态变化都不会重画锁遮罩。
     return `${book.id}_${book.chapterCount ?? ''}_${book.chapterIndex ?? 0}_${book.chapterProgress ?? 0}_${bookCoverMark(book)}_${BookRepository.isBodyMissing(book) ? 1 : 0}_${book.lastChapter}_${book.description ?? ''}_${book.isPrivate === true ? 1 : 0}_${this.isBookLocked(book) ? 1 : 0}`;
+  }
+
+  /** A-22：底栏重复点「书架」→ 当前视图滚到首项（上游 animateScrollToItem(0)）。 */
+  private onScrollToTopRequest(): void {
+    if (this.scrollToTopRequest <= 0) { return; }
+    const target: Scroller = (this.layout.bookGroupStyle === 2 && this.folderViewGroup.length === 0)
+      ? this.folderScroller
+      : this.bookshelfScroller;
+    try {
+      target.scrollToIndex(0, true);
+    } catch (_error) {
+      // 网格还没挂载（空态 / 私密锁定面板）时 scrollToIndex 会抛，忽略即可。
+    }
   }
 
   aboutToAppear(): void {
@@ -533,6 +709,11 @@ export struct BookshelfPage {
    * 「编辑态一律『书架』」这一支还没接（选择模式已在 :202 就位，标题这一处仍是纯标题口径）。
    */
   private bookshelfTitle(): string {
+    // A-3：对齐上游 BookshelfScreen.kt:1356-1361——加载中标题固定显示 R.string.loading「加载中…」，
+    // 数据到位后才换成真实标题（本地另保留 titleRevealStep 的逐字淡入）。
+    if (this.bookshelfLoading) {
+      return '加载中…';
+    }
     const shelf = '书架';
     const inSearch = this.showSearch;
     const style = this.layout.bookGroupStyle;
@@ -560,22 +741,47 @@ export struct BookshelfPage {
    * 目前只做搜索态一支；返回空串表示不显示。
    */
   private bookshelfSubtitle(): string {
+    // A-4：对齐上游 BookshelfViewModel.kt:676-698 的三分支——编辑态由
+    // bookshelf_selected_count「已选%1$d本」+ bookshelf_total_count「共%1$d本」两段拼成，
+    // 搜索态只给总数，其余不显示。
     if (this.selectionMode) {
-      return `已选 ${this.selectedBookKeys.size} 本 · 本组共 ${this.getVisibleBooks().length} 本`;
+      return `已选${this.selectedBookKeys.size}本 · 共${this.getVisibleBooks().length}本`;
     }
     if (this.showSearch) {
-      return `共 ${this.getVisibleBooks().length} 本`;
+      return `共${this.getVisibleBooks().length}本`;
     }
     return '';
   }
 
-  /** 「标签显示内容」右侧描述：开着的三项用 · 连起来，一项没开显示「无」。 */
+  /**
+   * 「标签显示内容」右侧描述：开着的三项用 · 连起来。
+   * 一项没开时对齐上游 BookshelfConfigSheet.kt:512-513 的 `.ifEmpty { bookshelf_tag_none }`
+   * （zh-rCN「未选择显示内容」），文案用上游术语「用户标签 / 书源分类 / 字数」。
+   */
   private tagSourcesLabel(): string {
     const selected: string[] = [];
-    if (this.layoutDraft.bookshelfShowCustomTags) { selected.push('自定义'); }
-    if (this.layoutDraft.bookshelfShowSourceTags) { selected.push('来源分类'); }
+    if (this.layoutDraft.bookshelfShowCustomTags) { selected.push('用户标签'); }
+    if (this.layoutDraft.bookshelfShowSourceTags) { selected.push('书源分类'); }
     if (this.layoutDraft.bookshelfShowWordCount) { selected.push('字数'); }
-    return selected.length > 0 ? selected.join(' · ') : '无';
+    return selected.length > 0 ? selected.join(' · ') : '未选择显示内容';
+  }
+
+  /** 打开标签内容对话框：草稿取当前设置（上游 rememberSaveable 初始值）。 */
+  private openTagContentDialog(): void {
+    this.tagDialogCustom = this.layoutDraft.bookshelfShowCustomTags;
+    this.tagDialogSource = this.layoutDraft.bookshelfShowSourceTags;
+    this.tagDialogWordCount = this.layoutDraft.bookshelfShowWordCount;
+    this.showTagContentDialog = true;
+  }
+
+  /** 确认：三项一起写回（上游 onConfirm 的 `it.copy(bookshelfShowCustomTags = ..., ...)`）。 */
+  private applyTagContentDialog(): void {
+    this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
+      draft.bookshelfShowCustomTags = this.tagDialogCustom;
+      draft.bookshelfShowSourceTags = this.tagDialogSource;
+      draft.bookshelfShowWordCount = this.tagDialogWordCount;
+    });
+    this.showTagContentDialog = false;
   }
   /** 标签行取色缓存：总开关关掉时传空数组，卡片侧统一回落主题色（:124）。 */
   private refreshCachedTagColors(): void {
@@ -718,14 +924,74 @@ export struct BookshelfPage {
     return tags;
   }
 
-  /** 紧凑(精简详情)模式作者行合成「作者 · N 未读」，未读为 0 只显示作者。 */
+  /**
+   * 作者行：精简模式合成「作者 • N章未读」，未读为 0 只显示作者。
+   *
+   * 文案取上游 `values-zh-rCN/strings.xml` 的 `author_read = %1$s • %2$d章未读`
+   * （`BookItem.kt:865-869` 的 `stringResource(R.string.author_read, book.author, unreadCount)`）；
+   * 改前本地用的是「作者 · N 未读」，分隔符与「章」字都跟上游不一致。
+   */
   private authorLineOf(book: Book): string {
     const author = book.author.length > 0 ? book.author : '作者未知';
     if (this.layout.bookshelfLayoutCompact) {
       const unread = BookRepository.unreadOf(book);
-      return unread > 0 ? `${author} · ${unread} 未读` : author;
+      return unread > 0 ? `${author} • ${unread}章未读` : author;
     }
     return author;
+  }
+
+  /**
+   * 列表卡简介文本：先过 HtmlFormatter，再按「行数设置」走摘要或全文（上游 BookItem.kt:742-749）。
+   *
+   * 空简介返回空串，调用方据此不渲染整块（上游 `showIntro = showIntroText && intro != null`）。
+   */
+  private introTextOf(book: Book): string {
+    return IntroFormatCache.getOrFormat(book.description ?? '', this.layout.bookshelfIntroMaxLines);
+  }
+
+  /** 简介是否真的会显示：详情总门 + 显示简介开关 + 有内容（上游 `:739-749`）。 */
+  private hasIntroOf(book: Book): boolean {
+    return this.showsListDetails() && this.layout.bookshelfShowIntro && this.introTextOf(book).length > 0;
+  }
+
+  /**
+   * 搜索命中书源名：处于搜索态、搜索词非空、且书源名包含搜索词时返回书源名（上游 `BookItem.kt:765-773`）。
+   *
+   * 上游是 `book.originName.contains(searchKey, ignoreCase = true)`，本地书源名在 `book.originName`。
+   */
+  private matchedSourceLabelOf(book: Book): string {
+    const key = this.searchQuery.trim();
+    if (key.length === 0) { return ''; }
+    const origin = book.originName ?? '';
+    if (origin.length === 0) { return ''; }
+    return origin.toLocaleLowerCase().includes(key.toLocaleLowerCase()) ? origin : '';
+  }
+
+  /**
+   * 卡片无障碍文案，对齐上游 `BookItem.kt:814-823` + `:1078-1090` 的 `bookAccessibilityLabel`。
+   *
+   * 上游按「书名、作者、未读数+未读、加载中、当前阅读章、最新章节、命中书源、类型标签」顺序拼接，
+   * 空串跳过、去重、以「, 」连接。锁定态整段换成 `private_hidden_label`（已隐藏），不泄漏书名。
+   */
+  private a11yLabelOf(book: Book): string {
+    if (this.isBookLocked(book)) { return '已隐藏'; }
+    const details: string[] = [];
+    const unread = this.unreadTextOf(book);
+    const parts: string[] = [
+      book.title,
+      book.author,
+      unread.length > 0 ? `${unread} 未读` : '',
+      this.refreshingOf(book) ? '加载中…' : '',
+      book.lastChapter,
+      book.latestChapterTitle ?? '',
+      this.matchedSourceLabelOf(book),
+      this.bookTypeLabel(book)
+    ];
+    for (const part of parts) {
+      const text = part.trim();
+      if (text.length > 0 && details.indexOf(text) < 0) { details.push(text); }
+    }
+    return details.join(', ');
   }
 
   /** 该书是否正在刷新目录（refreshingBookIds 用 contentPath 作主键）。 */
@@ -744,7 +1010,8 @@ export struct BookshelfPage {
       Scroll() {
         Row({ space: 4 }) {
           ForEach(this.displayTagsOf(book), (tag: string, index: number) => {
-            Text(tag).fontSize(LABEL_SMALL).fontColor(this.tagTextColor(index))
+            Text(tag).fontSize(LABEL_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
+              .fontColor(this.tagTextColor(index))
               .padding({ left: 6, right: 6, top: 2, bottom: 2 })
               .backgroundColor(this.tagBgColor(index)).borderRadius(4)
           }, (tag: string) => tag)
@@ -755,6 +1022,9 @@ export struct BookshelfPage {
   }
 
   private getVisibleBooks(): Book[] {
+    // H-4：拖动中一律读临时列表（上游 :1730 `displayBooks = draggingBooks ?: ... ?: books`）。
+    // 拖拽期间若还按 books 重算，落库前的顺序会被筛选+排序覆盖，拖动看起来「弹回去」。
+    if (this.dragActive) { return this.draggingBooks; }
     const selectedGroup = this.activeFilter();
     const query = this.searchQuery.trim().toLocaleLowerCase();
     const filtered = this.books.filter((book: Book) => {
@@ -865,6 +1135,50 @@ export struct BookshelfPage {
     return this.books.filter((book: Book) => this.selectedBookKeys.has(this.bookKey(book)));
   }
 
+  /**
+   * H-5：打开「选择分组」多选 Sheet。
+   * 预勾选口径对齐上游 resolveSelectionGroupMask（BookshelfManageScreen.kt:365-370）：
+   * 所有选中书的分组名排序后完全一致才预勾，否则一个都不勾。
+   */
+  private openMoveGroupSheet(): void {
+    const sets = this.selectedBooks().map((book: Book) => (book.groupNames ?? []).slice().sort());
+    let preset: string[] = [];
+    if (sets.length > 0) {
+      const first = sets[0];
+      const same = sets.every((names: string[]) => names.length === first.length &&
+        names.every((name: string, index: number) => name === first[index]));
+      if (same) { preset = first.slice(); }
+    }
+    this.moveGroupSelectedNames = preset;
+    this.showMoveGroupSheet = true;
+  }
+
+  /** H-5：勾选/取消一个分组（上游 selectedGroupId ± group.groupId 的名字版）。 */
+  private toggleMoveGroupName(groupName: string): void {
+    const index = this.moveGroupSelectedNames.indexOf(groupName);
+    if (index >= 0) {
+      const next = this.moveGroupSelectedNames.slice();
+      next.splice(index, 1);
+      this.moveGroupSelectedNames = next;
+    } else {
+      this.moveGroupSelectedNames = this.moveGroupSelectedNames.concat([groupName]);
+    }
+  }
+
+  /** H-5：确认多选，一次写入多个分组名。 */
+  private async confirmMoveGroups(): Promise<void> {
+    const keys: string[] = [];
+    this.selectedBooks().forEach((book: Book) => { keys.push(this.bookKey(book)); });
+    const names = this.moveGroupSelectedNames.slice();
+    this.showMoveGroupSheet = false;
+    if (keys.length === 0) { return; }
+    await this.onSetBooksGroupsByNames(keys, names);
+    this.onUnavailableAction(names.length === 0
+      ? `已移动 ${keys.length} 本到未分组`
+      : `已移动 ${keys.length} 本到${names.join('、')}`);
+    this.clearSelection();
+  }
+
   /** 把选中的书挪到目标分组（:146）；'本地未分组' 传空串让掩码变成 0。 */
   private async moveSelectedToGroup(groupName: string): Promise<void> {
     const keys: string[] = [];
@@ -901,15 +1215,46 @@ export struct BookshelfPage {
     return sort === 3;
   }
 
-  /** 把第 from 本拖到第 to 本的位置（:138）；内存顺序与落库都交给 Index。 */
-  private async moveBook(from: number, to: number): Promise<void> {
-    const visible = this.getVisibleBooks();
-    if (from < 0 || to < 0 || from >= visible.length || to >= visible.length || from === to) { return; }
-    const reordered: Book[] = visible.slice();
+  /**
+   * H-4：拖拽开始，把当前可见书拍成临时列表（上游 `BookshelfViewModel.kt:1119-1121 startDraggingBooks`）。
+   * 拖动过程中只改这份临时列表，不动 books，也不落库。
+   */
+  private startDragging(): void {
+    if (this.dragActive) { return; }
+    this.draggingBooks = this.getVisibleBooks().slice();
+    this.dragActive = true;
+    this.bookshelfData.setItems(this.draggingBooks);
+  }
+
+  /**
+   * 拖动中把第 from 本挪到第 to 本（上游 `BookshelfViewModel.kt:1123-1130 moveDraggingBook`）：
+   * 只改临时列表并刷新数据源，松手才保存。`from === to` 与越界一律忽略。
+   */
+  private moveDragging(from: number, to: number): void {
+    if (!this.dragActive) { this.startDragging(); }
+    const source = this.draggingBooks;
+    if (from < 0 || to < 0 || from >= source.length || to >= source.length || from === to) { return; }
+    const reordered: Book[] = source.slice();
     const moved = reordered.splice(from, 1)[0];
     if (moved === undefined) { return; }
     reordered.splice(to, 0, moved);
-    await this.onMoveBooks(reordered);
+    this.draggingBooks = reordered;
+    this.bookshelfData.setItems(reordered);
+  }
+
+  /**
+   * 松手结束拖拽（上游 `BookshelfViewModel.kt:1132-1137 finishDraggingBooks`）：
+   * 把临时列表交给 onMoveBooks 落库，然后清空临时态。
+   * 上游是先把顺序交给 `pendingSavedBooks` 再异步保存，本地 Index 的 onMoveBooks 会回填 books，
+   * 清掉 dragActive 之后 getVisibleBooks 立刻读回落库后的 books，观感一致。
+   */
+  private async finishDragging(): Promise<void> {
+    if (!this.dragActive) { return; }
+    const ordered = this.draggingBooks;
+    this.dragActive = false;
+    this.draggingBooks = [];
+    this.bookshelfData.setItems(this.getVisibleBooks());
+    await this.onMoveBooks(ordered);
   }
 
   /** 选择模式工具条里的「移动」菜单：列自定义分组再加「未分组」。 */
@@ -926,10 +1271,17 @@ export struct BookshelfPage {
   }
 
   private selectionGroupItems(): UiMenuItem[] {
+    // E-12：当前所在分组打勾（上游 BookshelfScreen.kt:1258-1296 的 trailingIcon 分支，
+    // currentMenuGroupId == group.groupId 时画 Check）。UiMenuPanel 用 selected 渲染勾与强调色。
+    const current = this.activeFilter();
     return this.getGroupNames()
       .filter((name: string) => name !== '全部')
       .map((groupName: string): UiMenuItem => {
-        return { key: groupName, title: groupName === '本地未分组' ? '未分组' : groupName };
+        return {
+          key: groupName,
+          title: groupName === '本地未分组' ? '未分组' : groupName,
+          selected: groupName === current
+        };
       });
   }
 
@@ -964,8 +1316,122 @@ export struct BookshelfPage {
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
-  /** 当前所有私密分组的 id（:150 / :257）。分组上的 isPrivate 标记早就有，这里只是取出来用。 */
-  private privateGroupIds(): number[] {
+  /**
+   * H-10：批量下载二次确认面板。
+   *
+   * 对齐上游 `BookshelfScreen.kt:1526-1538`：
+   * `AppAlertDialog(showBatchDownloadConfirmDialog, title = R.string.draw, text = R.string.sure_cache_book, ...)`。
+   */
+  /**
+   * H-5：「选择分组」多选面板，对齐上游 GroupSelectSheet（BookInfoSheets.kt:108-190）。
+   * 逐组一行：勾选框 + 组名 + 右侧编辑按钮；底部确认写入多分组掩码。
+   * 上游 startAction 的「新增分组」在这里落成右上「新建」，复用本地分组编辑面板。
+   */
+  @Builder
+  private MoveGroupSheetContent() {
+    Column() {
+      Row() {
+        Text('选择分组').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        Text('新建').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent).padding(6)
+          .onClick(() => { this.showMoveGroupSheet = false; this.openGroupEditor(undefined); })
+      }.width('100%').padding({ left: 16, right: 16, top: 18, bottom: 12 })
+      List({ space: 8 }) {
+        ForEach(this.getGroupNames().filter((name: string) => name !== '全部'), (groupName: string) => {
+          ListItem() {
+            Row({ space: 10 }) {
+              // 上游 leadingContent = AppCheckbox。AppGlyphName 没有「空勾」图标，
+              // 这里自绘：18×18 圆角 4 方块，选中填充强调色并叠白勾，未选中只描边。
+              Stack({ alignContent: Alignment.Center }) {
+                if (this.moveGroupSelectedNames.indexOf(groupName) >= 0) {
+                  AppGlyph({ name: 'profileCheck', glyphSize: 14, tint: '#101116' })
+                }
+              }
+              .width(18).height(18).borderRadius(4)
+              .backgroundColor(this.moveGroupSelectedNames.indexOf(groupName) >= 0
+                ? this.themeColorAccent : Color.Transparent)
+              .border({
+                width: this.moveGroupSelectedNames.indexOf(groupName) >= 0 ? 0 : 1.5,
+                color: this.themeColorTextTertiary
+              })
+              Text(groupName === '本地未分组' ? '未分组' : groupName)
+                .fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              // 上游 trailingAction = SmallPlainButton(Edit) → GroupEditSheet
+              Text('编辑').fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).padding(6)
+                .onClick(() => {
+                  const target = this.groups.find((group: BookGroup) => group.groupName === groupName);
+                  if (target !== undefined) {
+                    this.showMoveGroupSheet = false;
+                    this.openGroupEditor(target);
+                  }
+                })
+            }
+            .width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
+            .borderRadius(12).backgroundColor(this.themeColorSurfaceSecondary)
+            .onClick(() => { this.toggleMoveGroupName(groupName); })
+          }
+        }, (groupName: string) => groupName)
+      }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
+        .padding({ left: 16, right: 16 })
+      Row({ space: 12 }) {
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextSecondary)
+          .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
+          .borderRadius(12).backgroundColor(this.themeColorSurfaceSecondary)
+          .onClick(() => { this.showMoveGroupSheet = false; })
+        Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorSurfacePrimary)
+          .layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
+          .borderRadius(12).backgroundColor(this.themeColorAccent)
+          .onClick(() => { void this.confirmMoveGroups(); })
+      }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 16 })
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  @Builder
+  private BatchDownloadConfirmSheet() {
+    Column() {
+      Text('提醒').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+        .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+    }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
+    Column() {
+      Text(`是否确认开始缓存？共 ${this.selectedBookKeys.size} 本。`)
+        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
+    }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
+    Row() {
+      Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+        .onClick(() => { this.showBatchDownloadConfirm = false; })
+      Blank()
+      Text('确认').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
+        .onClick(() => {
+          this.showBatchDownloadConfirm = false;
+          this.onDownloadBooks(this.selectedBooks());
+        })
+    }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+  }
+
+  /** C-14 的「确认执行分组方案」对话框，对应上游 AppAlertDialog(ai_auto_group_confirm_*)。 */
+  @Builder
+  private AiApplyConfirmSheet() {
+    Column() {
+      Text('确认执行分组方案').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+        .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+    }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
+    Column() {
+      Text(this.aiIncrementalOnly
+        ? `将创建 ${this.aiNewGroupCount()} 个分组，为 ${this.aiAssignedCount()} 本未分组书籍设置分组，跳过 ${this.aiIgnoredBooks.length} 本书。已分组书籍和私密分组保持不变。`
+        : `将创建 ${this.aiNewGroupCount()} 个分组，调整 ${this.aiAssignedCount()} 本书，跳过 ${this.aiIgnoredBooks.length} 本书。现有公开分组归属会被替换，私密分组保持不变。`)
+        .fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextSecondary).width('100%')
+    }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
+    Row() {
+      Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+        .onClick(() => { this.aiShowApplyConfirm = false; })
+      Blank()
+      Text('执行').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
+        .onClick(() => { void this.aiConfirmApply(); })
+    }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+  }
+
+  /** 当前所有私密分组的 id（:150 / :257）。分组上的 isPrivate 标记早就有，这里只是取出来用。 */  private privateGroupIds(): number[] {
     return this.getUserGroups()
       .filter((group: BookGroup) => group.isPrivate === true)
       .map((group: BookGroup) => group.groupId);
@@ -1023,16 +1489,48 @@ export struct BookshelfPage {
   }
 
   /** 弹密码面板；bookKey 为空串表示只解这个分组。 */
+  /** 能否直接弹系统生物验证框（上游 PrivateAccess.kt:70-72
+   *  `canUseBiometricShortcut = biometricEnabled && biometricStatus == Available`）。 */
+  private canUseBiometricShortcut(): boolean {
+    return PrivateAccessRepository.isBiometricEnabled() &&
+      PrivateAccessRepository.detectBiometricStatus() === PrivateBiometricStatus.AVAILABLE;
+  }
+
+  /** 解锁成功后的统一收尾：按解锁有效期授权并清空挂起目标（密码与生物两条路共用）。 */
+  private completeUnlock(): void {
+    if (PrivateAccessRepository.get().unlockScope === PRIVATE_UNLOCK_EVERY_TIME) {
+      PrivateAccessRepository.grant(this.pendingUnlockBookKey, this.pendingUnlockGroupId);
+    } else {
+      PrivateAccessRepository.unlock();
+    }
+    this.showPasswordPanel = false;
+    this.passwordInput = '';
+    this.passwordError = '';
+    this.pendingUnlockGroupId = 0;
+    this.pendingUnlockBookKey = '';
+  }
+
   private requestPrivateUnlock(groupId: number, bookKey: string): void {
     if (!this.privateHasPassword) {
       // 没设过密码时不能假装能验证，直接引导去设置页（上游 private_content_no_password 口径）。
       this.onUnavailableAction('还没有设置本地密码，请到「我的 → 设置 → 隐私设置」设置后再查看');
       return;
     }
+    // H-13：已解锁直接放行（上游 BookshelfViewModel.kt:857）。
+    if (this.privateUnlocked) { return; }
     this.pendingUnlockGroupId = groupId;
     this.pendingUnlockBookKey = bookKey;
     this.passwordInput = '';
     this.passwordError = '';
+    // H-13：能弹系统生物验证框就先弹（上游 :865-869 → Screen:261-282）。
+    // 取消/失败回落密码面板，与上游 onFallback → ShowOverlay(PrivatePassword(target)) 一致。
+    if (this.canUseBiometricShortcut()) {
+      PrivateAccessRepository.authenticateBiometric(
+        () => { this.completeUnlock(); },
+        (_message: string) => { this.showPasswordPanel = true; }
+      );
+      return;
+    }
     this.showPasswordPanel = true;
   }
 
@@ -1046,16 +1544,7 @@ export struct BookshelfPage {
       this.passwordError = '密码错误';
       return;
     }
-    if (PrivateAccessRepository.get().unlockScope === PRIVATE_UNLOCK_EVERY_TIME) {
-      PrivateAccessRepository.grant(this.pendingUnlockBookKey, this.pendingUnlockGroupId);
-    } else {
-      PrivateAccessRepository.unlock();
-    }
-    this.showPasswordPanel = false;
-    this.passwordInput = '';
-    this.passwordError = '';
-    this.pendingUnlockGroupId = 0;
-    this.pendingUnlockBookKey = '';
+    this.completeUnlock();
   }
 
   /** 选择模式里的私密按钮文案：全都没标才是「设为私密」（:147）。 */
@@ -1146,6 +1635,19 @@ export struct BookshelfPage {
     return manage;
   }
 
+  /**
+   * 分组管理卡片的副标题。
+   *
+   * 上游 GroupManageSheet.kt:238-243 的 subtitle 是 `group.getManageName(context).suffix`，
+   * 即「内置名后缀 / 自定义分组为空」。本地分组模型没有内置名体系（本地未分组靠
+   * groupId <= 0 判定），所以：内置组给一句固定说明，自定义组给书数 + 排序 + 私密标记。
+   */
+  private groupManageSubtitleOf(group: BookGroup): string {
+    if (this.isBuiltinGroup(group)) { return '系统内置分组'; }
+    const privateSuffix = group.isPrivate ? ' · 私有' : '';
+    return `${this.countBooksInGroup(group.groupName)} 本 · ${bookSortLabel(group.bookSort)}${privateSuffix}`;
+  }
+
   /** 内置分组不可编辑/删除，只有显隐开关可用（对齐上游 GroupManageSheet 对内置行的处理）。 */
   private isBuiltinGroup(group: BookGroup): boolean {
     return group.groupId <= 0;
@@ -1180,6 +1682,18 @@ export struct BookshelfPage {
   /** 分组卡片在网格里的稳定 key；属性变化后必须换 key，否则 ArkUI 会复用旧节点。 */
   private groupCardKey(group: BookGroup): string {
     return `${group.groupId}_${group.groupName}_${group.show ? 1 : 0}_${group.order}_${group.bookSort}_${group.isPrivate ? 1 : 0}_${group.cover ?? ''}`;
+  }
+
+  /** 切换隐私分组开关：原本是隐私的分组被关闭时，先弹确认（上游 showDisablePrivateDialog）。 */
+  private toggleDraftPrivate(enabled: boolean): void {
+    if (!enabled) {
+      const editing = this.groups.find((group: BookGroup) => group.groupId === this.editingGroupId);
+      if (editing !== undefined && editing.isPrivate === true) {
+        this.showDisablePrivateConfirm = true;
+        return;
+      }
+    }
+    this.draftPrivate = enabled;
   }
 
   /** 打开分组编辑面板，把当前属性与标签匹配规则一并灌进草稿。 */
@@ -1383,9 +1897,11 @@ export struct BookshelfPage {
   }
 
   private groupManageMenuItems(): UiMenuItem[] {
+    // 顺序与文案对齐上游 GroupManageSheet.kt:160-186 的四项（AI 自动分组在 C-14 单独补）。
     return [
       { key: 'new_group', title: '新建分组' },
-      { key: 'add_tag_rule', title: '添加标签匹配规则' },
+      { key: 'ai_auto_group', title: 'AI 自动分组' },
+      { key: 'add_tag_rule', title: '新建标签分组' },
       { key: 'sync_tag_rule', title: '同步标签分组' }
     ];
   }
@@ -1395,19 +1911,838 @@ export struct BookshelfPage {
       this.openGroupEditor(undefined);
       return;
     }
+    if (key === 'ai_auto_group') {
+      this.openAiAutoGroup();
+      return;
+    }
     if (key === 'sync_tag_rule') {
       this.onApplyTagGroupRules();
       return;
     }
-    const candidates = this.getUserGroups();
-    let target: BookGroup | undefined = this.groups.find((group: BookGroup) =>
-      group.groupId > 0 && group.groupName === this.activeFilter());
-    if (target === undefined && candidates.length > 0) { target = candidates[0]; }
-    if (target === undefined) {
-      this.onUnavailableAction('请先新建一个分组，再为它添加标签匹配规则');
+    // C-15：上游 tag_group_add_rule 打开的是独立的 TagGroupRuleEditSheet，
+    // 不是「拿一个已有分组去改」。这里同样开独立面板，新建规则。
+    this.openTagRuleEditor(undefined);
+  }
+
+  /**
+   * C-14：打开 AI 自动分组面板。上游 StartSession 先读书架（LoadingSource），
+   * 再进预检页；本地书架数据已在内存，同样先亮一次 LoadingSource 再转 Preflight，
+   * 保持与上游一致的阶段序列。
+   */
+  private openAiAutoGroup(): void {
+    this.aiPhase = 'LoadingSource';
+    this.aiIncrementalOnly = true;
+    this.aiIncludeBookIntro = false;
+    this.aiDeepThinking = false;
+    this.aiGroupingInstruction = '';
+    this.aiGroups = [];
+    this.aiIgnoredBooks = [];
+    this.aiApplyResult = undefined;
+    this.aiErrorText = '';
+    this.aiRevisionInstruction = '';
+    this.aiNewGroupName = '';
+    this.aiShowApplyConfirm = false;
+    this.aiBatchText = '';
+    this.showAiAutoGroup = true;
+    setTimeout(() => {
+      if (this.aiPhase === 'LoadingSource') { this.aiPhase = 'Preflight'; }
+    }, 60);
+  }
+
+  /** 参与分析的公开分组：私密分组不参与（上游：私密分组保持不变）。 */
+  private aiPublicGroups(): BookGroup[] {
+    return this.getUserGroups().filter((group: BookGroup) => !group.isPrivate);
+  }
+
+  /** 增量模式下的候选书数，用于预检页「将分析 N 本书」。 */
+  private aiCandidateCount(): number {
+    const privateNames: string[] = this.getUserGroups()
+      .filter((group: BookGroup) => group.isPrivate)
+      .map((group: BookGroup) => group.groupName);
+    return this.books.filter((book: Book) => {
+      if (book.notShelf === true || book.isPrivate === true) { return false; }
+      const names: string[] = book.groupNames === undefined ? [] : book.groupNames;
+      if (names.some((name: string) => privateNames.indexOf(name) >= 0)) { return false; }
+      if (this.aiIncrementalOnly && names.length > 0) { return false; }
+      return true;
+    }).length;
+  }
+
+  /** 已有公开分组数与已有分组的书籍数（预检页第二行）。 */
+  private aiExistingGroupedCount(): number {
+    return this.books.filter((book: Book) => {
+      const names: string[] = book.groupNames === undefined ? [] : book.groupNames;
+      return names.length > 0;
+    }).length;
+  }
+
+  /** 执行一次分析，进 Reviewing 或 Error。 */
+  private runAiAnalyze(): void {
+    const options: AutoGroupOptions = {
+      incrementalOnly: this.aiIncrementalOnly,
+      includeBookIntro: this.aiIncludeBookIntro,
+      enableDeepThinking: this.aiDeepThinking,
+      groupingInstruction: this.aiGroupingInstruction
+    };
+    try {
+      const plan: AutoGroupPlan = AutoGroupEngine.analyze({
+        books: this.books,
+        publicGroups: this.aiPublicGroups(),
+        options: options
+      });
+      this.aiGroups = plan.groups;
+      this.aiIgnoredBooks = plan.ignoredBooks;
+      this.aiErrorText = '';
+      this.aiBatchText = '';
+      this.aiPhase = 'Reviewing';
+    } catch (error) {
+      const kind = error instanceof AutoGroupError ? (error as AutoGroupError).kind : 'Unexpected';
+      this.aiErrorText = kind === 'EmptyBookshelf'
+        ? '书架没有可分析的书籍。'
+        : 'AI 自动分组失败。';
+      this.aiPhase = 'Error';
+    }
+  }
+
+  /** 预检页「开始分析」。 */
+  private aiStartAnalyze(): void {
+    if (this.aiCandidateCount() === 0) {
+      this.aiErrorText = this.aiIncrementalOnly
+        ? '没有未分组书籍可分析，可关闭增量分组以分析整个书架。'
+        : '书架没有可分析的书籍。';
+      this.aiPhase = 'Error';
       return;
     }
-    this.openGroupEditor(target);
+    this.aiPhase = 'Analyzing';
+    setTimeout(() => {
+      if (this.aiPhase !== 'Analyzing') { return; }
+      this.runAiAnalyze();
+    }, 80);
+  }
+
+  /** Review 页「重新调整」：把调整要求并进补充要求后重算。 */
+  private aiRevise(): void {
+    const extra = this.aiRevisionInstruction.trim();
+    if (extra.length === 0) {
+      this.onUnavailableAction('请输入调整要求');
+      return;
+    }
+    this.aiGroupingInstruction = this.aiGroupingInstruction.length > 0
+      ? `${this.aiGroupingInstruction}；${extra}`
+      : extra;
+    this.aiRevisionInstruction = '';
+    this.aiPhase = 'Revising';
+    setTimeout(() => {
+      if (this.aiPhase !== 'Revising') { return; }
+      this.runAiAnalyze();
+    }, 80);
+  }
+
+  /** Review 页改分组名；复用标志保持不变。 */
+  private aiRenameGroup(key: string, name: string): void {
+    this.aiGroups = this.aiGroups.map((group: AutoGroupGroupUi): AutoGroupGroupUi => {
+      if (group.key !== key) { return group; }
+      return {
+        key: group.key,
+        name: name,
+        description: group.description,
+        reuseExisting: group.reuseExisting,
+        books: group.books
+      };
+    });
+  }
+
+  /** Review 页删分组：组里的书转入未处理，不丢书。 */
+  private aiRemoveGroup(key: string): void {
+    const target = this.aiGroups.find((group: AutoGroupGroupUi) => group.key === key);
+    if (target === undefined) { return; }
+    const moved: AutoGroupIgnoredBookUi[] = target.books.map((book: AutoGroupBookUi): AutoGroupIgnoredBookUi => {
+      return { bookUrl: book.bookUrl, name: book.name, author: book.author, reason: '已从方案中移除' };
+    });
+    this.aiIgnoredBooks = this.aiIgnoredBooks.concat(moved);
+    this.aiGroups = this.aiGroups.filter((group: AutoGroupGroupUi) => group.key !== key);
+  }
+
+  /** Review 页新增一个空分组。 */
+  private aiAddGroup(): void {
+    const name = this.aiNewGroupName.trim();
+    if (name.length === 0) {
+      this.onUnavailableAction('分组名称不能为空');
+      return;
+    }
+    if (this.aiGroups.some((group: AutoGroupGroupUi) => group.key === name)) {
+      this.onUnavailableAction('分组名称已存在');
+      return;
+    }
+    const reuse = this.aiPublicGroups().some((group: BookGroup) => group.groupName === name);
+    this.aiGroups = this.aiGroups.concat([{
+      key: name,
+      name: name,
+      description: '手动新增的分组',
+      reuseExisting: reuse,
+      books: []
+    }]);
+    this.aiNewGroupName = '';
+  }
+
+  /** Review 页把一本书移到另一组。 */
+  private aiMoveBook(bookUrl: string, targetKey: string): void {
+    let moved: AutoGroupBookUi | undefined = undefined;
+    this.aiGroups = this.aiGroups.map((group: AutoGroupGroupUi): AutoGroupGroupUi => {
+      const hit = group.books.find((book: AutoGroupBookUi) => book.bookUrl === bookUrl);
+      if (hit === undefined) { return group; }
+      moved = hit;
+      return {
+        key: group.key,
+        name: group.name,
+        description: group.description,
+        reuseExisting: group.reuseExisting,
+        books: group.books.filter((book: AutoGroupBookUi) => book.bookUrl !== bookUrl)
+      };
+    });
+    if (moved === undefined) { return; }
+    const target = moved as AutoGroupBookUi;
+    this.aiGroups = this.aiGroups.map((group: AutoGroupGroupUi): AutoGroupGroupUi => {
+      if (group.key !== targetKey) { return group; }
+      return {
+        key: group.key,
+        name: group.name,
+        description: group.description,
+        reuseExisting: group.reuseExisting,
+        books: group.books.concat([target])
+      };
+    });
+  }
+
+  /** Review 页把一本书标成不处理。 */
+  private aiIgnoreBook(bookUrl: string): void {
+    let moved: AutoGroupBookUi | undefined = undefined;
+    this.aiGroups = this.aiGroups.map((group: AutoGroupGroupUi): AutoGroupGroupUi => {
+      const hit = group.books.find((book: AutoGroupBookUi) => book.bookUrl === bookUrl);
+      if (hit === undefined) { return group; }
+      moved = hit;
+      return {
+        key: group.key,
+        name: group.name,
+        description: group.description,
+        reuseExisting: group.reuseExisting,
+        books: group.books.filter((book: AutoGroupBookUi) => book.bookUrl !== bookUrl)
+      };
+    });
+    if (moved === undefined) { return; }
+    const target = moved as AutoGroupBookUi;
+    this.aiIgnoredBooks = this.aiIgnoredBooks.concat([{
+      bookUrl: target.bookUrl,
+      name: target.name,
+      author: target.author,
+      reason: '手动不处理'
+    }]);
+  }
+
+  /** 方案里已分配的书本数。 */
+  private aiAssignedCount(): number {
+    return AutoGroupEngine.assignedBookCount(this.aiGroups);
+  }
+
+  /** 方案里要新建的分组数。 */
+  private aiNewGroupCount(): number {
+    return AutoGroupEngine.newGroupCount(this.aiGroups);
+  }
+
+  /** 确认执行：新建缺失的分组，再按组批量写书的 groupNames。 */
+  private async aiConfirmApply(): Promise<void> {
+    this.aiShowApplyConfirm = false;
+    this.aiPhase = 'Applying';
+    try {
+      const existingNames: string[] = this.getUserGroups().map((group: BookGroup) => group.groupName);
+      let created = 0;
+      let reused = 0;
+      for (let index = 0; index < this.aiGroups.length; index++) {
+        const group = this.aiGroups[index];
+        if (existingNames.indexOf(group.name) >= 0) {
+          reused += 1;
+          continue;
+        }
+        const draft: BookGroupDraft = {
+          groupName: group.name,
+          enableRefresh: true,
+          bookSort: -1,
+          isPrivate: false
+        };
+        await this.onAddGroupDraft(draft);
+        created += 1;
+      }
+      const byId: Map<string, Book> = new Map<string, Book>();
+      this.books.forEach((book: Book) => { byId.set(book.id, book); });
+      let updated = 0;
+      for (let index = 0; index < this.aiGroups.length; index++) {
+        const group = this.aiGroups[index];
+        const keys: string[] = [];
+        group.books.forEach((item: AutoGroupBookUi) => {
+          const book = byId.get(item.bookUrl);
+          if (book !== undefined) { keys.push(this.bookKey(book)); }
+        });
+        if (keys.length === 0) { continue; }
+        if (this.aiIncrementalOnly) {
+          // 增量：追加到已有分组，不清空原有归属。
+          const merged: string[] = [];
+          group.books.forEach((item: AutoGroupBookUi) => {
+            item.currentGroupNames.forEach((name: string) => {
+              if (merged.indexOf(name) < 0) { merged.push(name); }
+            });
+          });
+          if (merged.indexOf(group.name) < 0) { merged.push(group.name); }
+          await this.onSetBooksGroupsByNames(keys, merged);
+        } else {
+          await this.onSetBooksGroupsByNames(keys, [group.name]);
+        }
+        updated += keys.length;
+      }
+      this.aiApplyResult = {
+        createdGroupCount: created,
+        reusedGroupCount: reused,
+        updatedBookCount: updated,
+        ignoredBookCount: this.aiIgnoredBooks.length
+      };
+      this.aiPhase = 'Result';
+      this.onUnavailableAction('AI 自动分组已完成');
+    } catch (error) {
+      this.aiErrorText = 'AI 自动分组失败。';
+      this.aiPhase = 'Error';
+    }
+  }
+
+  /** 结果页「重新分析」回到预检。 */
+  private aiRestart(): void {
+    this.aiGroups = [];
+    this.aiIgnoredBooks = [];
+    this.aiApplyResult = undefined;
+    this.aiErrorText = '';
+    this.aiRevisionInstruction = '';
+    this.aiPhase = 'Preflight';
+  }
+
+  /** 打开独立标签规则面板；rule 为空表示新建（对应上游 editingTagRule = null）。 */
+  private openTagRuleEditor(rule: TagGroupRule | undefined): void {
+    if (rule === undefined) {
+      this.editingTagRuleId = 0;
+      this.tagRuleName = '';
+      this.tagRulePattern = '';
+    } else {
+      this.editingTagRuleId = rule.id;
+      this.tagRuleName = rule.groupName;
+      this.tagRulePattern = rule.pattern;
+    }
+    this.tagRuleMenuVisible = false;
+    this.showTagRuleEdit = true;
+  }
+
+  /** 规则面板「更多菜单」：拷贝规则 / 粘贴规则（上游 TagGroupRuleEditSheet.kt:87-109）。 */
+  private tagRuleMenuItems(): UiMenuItem[] {
+    return [
+      { key: 'copy_rule', title: '拷贝规则' },
+      { key: 'paste_rule', title: '粘贴规则' }
+    ];
+  }
+
+  /** 当前规则草稿拼成实体，形状与上游 GSON.toJson(rule) 一致：{id,pattern,groupName,order}。 */
+  private currentTagRule(): TagGroupRule {
+    return {
+      id: this.editingTagRuleId,
+      pattern: this.tagRulePattern.trim(),
+      groupName: this.tagRuleName.trim(),
+      order: 0
+    };
+  }
+
+  /** 拷贝当前规则到剪贴板（上游 TagGroupRuleViewModel.copyRule）。 */
+  private async copyCurrentTagRule(): Promise<void> {
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, JSON.stringify(this.currentTagRule()));
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.onUnavailableAction('规则已复制');
+    } catch (error) {
+      this.onUnavailableAction('规则复制失败');
+    }
+  }
+
+  /** 粘贴规则：分组名与表达式一并回填（上游 pasteRule 后两者都赋值）。 */
+  private async pasteCurrentTagRule(result: PasteButtonOnClickResult): Promise<void> {
+    if (result !== PasteButtonOnClickResult.SUCCESS) {
+      this.onUnavailableAction('未获得剪贴板授权');
+      return;
+    }
+    try {
+      const data = await pasteboard.getSystemPasteboard().getData();
+      if (data.getRecordCount() === 0) { this.onUnavailableAction('剪贴板没有内容'); return; }
+      const parsed = JSON.parse(data.getRecord(0).toPlainText()) as TagGroupRule;
+      if (typeof parsed.pattern === 'string') { this.tagRulePattern = parsed.pattern; }
+      if (typeof parsed.groupName === 'string') { this.tagRuleName = parsed.groupName; }
+    } catch (error) {
+      this.onUnavailableAction('格式不对');
+    }
+  }
+
+  /**
+   * 保存规则（上游 TagGroupRuleIntent.SaveRule：isNew ? insert : update，随后 autoApplyRules）。
+   * 规则按 groupName 关联分组，所以这里先校验名称，再写表并全量同步。
+   */
+  private async submitTagRule(): Promise<void> {
+    const name = this.tagRuleName.trim();
+    const pattern = this.tagRulePattern.trim();
+    if (name.length === 0) { this.onUnavailableAction('分组名称不能为空'); return; }
+    if (pattern.length === 0) { this.onUnavailableAction('匹配规则不能为空'); return; }
+    try {
+      new RegExp(pattern);
+    } catch (error) {
+      this.onUnavailableAction('正则表达式不合法');
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    const rules = await TagGroupRuleRepository.load(context);
+    const isNew = this.editingTagRuleId <= 0;
+    if (isNew) {
+      // 上游 id: Long = System.currentTimeMillis()，order 取当前条数。
+      rules.push({ id: Date.now(), pattern: pattern, groupName: name, order: rules.length });
+    } else {
+      const index = rules.findIndex((rule: TagGroupRule) => rule.id === this.editingTagRuleId);
+      if (index >= 0) {
+        const existing = rules[index];
+        rules[index] = { id: existing.id, pattern: pattern, groupName: name, order: existing.order };
+      } else {
+        rules.push({ id: this.editingTagRuleId, pattern: pattern, groupName: name, order: rules.length });
+      }
+    }
+    await TagGroupRuleRepository.save(context, rules);
+    this.showTagRuleEdit = false;
+    await this.onApplyTagGroupRules();
+  }
+
+  /**
+   * C-14：AI 自动分组面板。整体结构与上游 `ui/main/bookshelf/autoGroup/AiAutoGroupSheet.kt`
+   * 一一对应：标题「AI 自动分组」，按 phase 切六种内容（预检 / 进度 / 方案 / 结果 / 错误），
+   * Reviewing 时右上角是「确认执行」，Result 时右上角是「关闭」。
+   */
+  @Builder
+  private AiAutoGroupContent() {
+    Column() {
+      Row() {
+        Text('AI 自动分组').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        if (this.aiPhase === 'Reviewing') {
+          Text('确认执行').fontSize(LABEL_LARGE)
+            .fontColor(this.aiAssignedCount() > 0 ? '#B9C8FF' : this.themeColorTextTertiary)
+            .padding(8)
+            .onClick(() => {
+              if (this.aiAssignedCount() > 0) { this.aiShowApplyConfirm = true; }
+            })
+        } else if (this.aiPhase === 'Result') {
+          Text('关闭').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
+            .onClick(() => { this.showAiAutoGroup = false; })
+        }
+      }.width('100%').padding({ left: 12, right: 12, top: 14, bottom: 10 })
+
+      if (this.aiPhase === 'LoadingSource') {
+        this.AiAutoGroupProgress('正在读取书架', false)
+      } else if (this.aiPhase === 'Preflight') {
+        this.AiAutoGroupPreflight()
+      } else if (this.aiPhase === 'Analyzing') {
+        this.AiAutoGroupProgress('正在分析书架', true)
+      } else if (this.aiPhase === 'Revising') {
+        this.AiAutoGroupProgress('正在调整方案', true)
+      } else if (this.aiPhase === 'Applying') {
+        this.AiAutoGroupProgress('正在应用分组', false)
+      } else if (this.aiPhase === 'Reviewing') {
+        this.AiAutoGroupReview()
+      } else if (this.aiPhase === 'Result') {
+        this.AiAutoGroupResult()
+      } else {
+        this.AiAutoGroupError()
+      }
+    }.width('100%').height('100%').backgroundColor('#17181E')
+  }
+
+  /** 进度页，对应上游 AutoGroupProgressContent（最小高 180，转圈 + 文案 + 可选批次 + 可选取消）。 */
+  @Builder
+  private AiAutoGroupProgress(text: string, cancellable: boolean) {
+    Column() {
+      LoadingProgress().width(40).height(40).color(this.themeColorAccent)
+      Text(text).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary).margin({ top: 16 })
+      if (this.aiBatchText.length > 0) {
+        Text(this.aiBatchText).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).margin({ top: 6 })
+      }
+      if (cancellable) {
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary)
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 }).margin({ top: 16 })
+          .borderRadius(12).backgroundColor('#22232A')
+          .onClick(() => {
+            this.aiPhase = 'Preflight';
+            this.onUnavailableAction('已取消');
+          })
+      }
+    }.width('100%').constraintSize({ minHeight: 180 }).justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  /** 预检页，对应上游 AutoGroupPreflightContent。 */
+  @Builder
+  private AiAutoGroupPreflight() {
+    Scroll() {
+      Column({ space: 12 }) {
+        // 概览卡：将分析 N 本 / 说明 / 已有分组摘要。
+        Column({ space: 8 }) {
+          Text(`将分析 ${this.aiCandidateCount()} 本书`).fontSize(TITLE_MEDIUM)
+            .fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).width('100%')
+          Text(this.aiIncrementalOnly
+            ? '仅分析尚未加入公开分组的书籍，并保持现有分组归属不变。私密分组中的书籍不会参与。'
+            : '会按书籍分类、自定义标签与书名关键词生成分组方案，现有公开分组归属会被替换，私密分组保持不变。方案在确认前不会修改书架。')
+            .fontSize(BODY_MEDIUM).fontColor(this.themeColorOnSurfaceVariant).width('100%')
+          Text(`已有 ${this.aiPublicGroups().length} 个用户分组，${this.aiExistingGroupedCount()} 本书已有分组。`)
+            .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant).width('100%')
+        }.width('100%').padding(16).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+        .alignItems(HorizontalAlign.Start)
+
+        // 三个开关，对应上游 SplicedColumnGroup 里的三个 SwitchSettingItem。
+        Column() {
+          this.AiAutoGroupSwitch('增量分组', '仅分析尚未加入公开分组的书籍，并保持现有分组归属不变。',
+            this.aiIncrementalOnly, (value: boolean) => { this.aiIncrementalOnly = value; })
+          Divider().strokeWidth(0.5).color('#2A2B33')
+          this.AiAutoGroupSwitch('参考书籍简介', '开启后会把书籍简介作为分组参考。本地引擎按分类与标签判定，该开关仅记录选择。',
+            this.aiIncludeBookIntro, (value: boolean) => { this.aiIncludeBookIntro = value; })
+          Divider().strokeWidth(0.5).color('#2A2B33')
+          this.AiAutoGroupSwitch('启用深度思考', '可提升分类信息不明确时的分组质量，但会显著增加处理时间。',
+            this.aiDeepThinking, (value: boolean) => { this.aiDeepThinking = value; })
+        }.width('100%').backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+
+        // 补充要求。
+        Column() {
+          Text('补充分组要求').fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).width('100%')
+          TextArea({
+            text: this.aiGroupingInstruction,
+            placeholder: '例如：按题材分组；玄幻和仙侠合并；分组数量控制在 8 个以内'
+          })
+            .width('100%').constraintSize({ minHeight: 72, maxHeight: 120 }).margin({ top: 6 })
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+            .placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeColorOnSheetContent).borderRadius(9).padding(10)
+            .onChange((value: string) => { this.aiGroupingInstruction = value; })
+        }.width('100%').alignItems(HorizontalAlign.Start)
+
+        if (this.aiErrorText.length > 0) {
+          Text(this.aiErrorText).fontSize(BODY_SMALL).fontColor('#D99AA5').width('100%')
+        }
+        if (this.aiIncrementalOnly && this.aiCandidateCount() === 0 && this.aiErrorText.length === 0) {
+          Text('没有未分组书籍可分析，可关闭增量分组以分析整个书架。')
+            .fontSize(BODY_SMALL).fontColor('#B9C8FF').width('100%')
+        }
+
+        Row() {
+          Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+            .onClick(() => { this.showAiAutoGroup = false; })
+          Blank()
+          Text('开始分析').fontSize(LABEL_LARGE)
+            .fontColor(this.aiCandidateCount() > 0 ? '#B9C8FF' : this.themeColorTextTertiary).padding(10)
+            .onClick(() => { if (this.aiCandidateCount() > 0) { this.aiStartAnalyze(); } })
+        }.width('100%').padding({ top: 4, bottom: 16 })
+
+        Blank()
+      }.width('100%').padding({ left: 16, right: 16 })
+    }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
+  }
+
+  /** 预检页的单行开关，样式对齐书架设置面板里的开关行。 */
+  @Builder
+  private AiAutoGroupSwitch(title: string, description: string, checked: boolean,
+    onChange: (value: boolean) => void) {
+    Row() {
+      Column() {
+        Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+        Text(description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      UiSwitchControl({
+        checked: checked,
+        interactive: false,
+        onChange: onChange
+      })
+    }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .onClick(() => onChange(!checked))
+  }
+
+  /** 方案页，对应上游 AutoGroupReviewContent。 */
+  @Builder
+  private AiAutoGroupReview() {
+    Scroll() {
+      Column({ space: 12 }) {
+        // 四指标摘要卡。
+        Row() {
+          this.AiAutoGroupMetric('分组', `${this.aiGroups.length}`)
+          this.AiAutoGroupMetric('新建', `${this.aiNewGroupCount()}`)
+          this.AiAutoGroupMetric('书籍', `${this.aiAssignedCount()}`)
+          this.AiAutoGroupMetric('跳过', `${this.aiIgnoredBooks.length}`)
+        }.width('100%').padding(16).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+        .justifyContent(FlexAlign.SpaceBetween)
+
+        // 调整要求 + 重新调整 / 确认执行。
+        Column({ space: 8 }) {
+          TextArea({ text: this.aiRevisionInstruction, placeholder: '让 AI 调整方案' })
+            .width('100%').constraintSize({ minHeight: 56, maxHeight: 96 })
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+            .placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeColorSurfaceContainer).borderRadius(9).padding(10)
+            .onChange((value: string) => { this.aiRevisionInstruction = value; })
+          Row({ space: 8 }) {
+            Text('重新调整').fontSize(LABEL_LARGE)
+              .fontColor(this.aiRevisionInstruction.trim().length > 0 ? '#B9C8FF' : this.themeColorTextTertiary)
+              .padding({ left: 14, right: 14, top: 8, bottom: 8 }).borderRadius(12).backgroundColor('#22232A')
+              .onClick(() => { if (this.aiRevisionInstruction.trim().length > 0) { this.aiRevise(); } })
+            Text('确认执行').fontSize(LABEL_LARGE)
+              .fontColor(this.aiAssignedCount() > 0 ? '#1A1B21' : this.themeColorTextTertiary)
+              .padding({ left: 14, right: 14, top: 8, bottom: 8 }).borderRadius(12)
+              .backgroundColor(this.aiAssignedCount() > 0 ? '#B9C8FF' : '#22232A')
+              .onClick(() => { if (this.aiAssignedCount() > 0) { this.aiShowApplyConfirm = true; } })
+          }.width('100%')
+        }.width('100%').padding(12).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+        .alignItems(HorizontalAlign.Start)
+
+        // 新增分组输入行。
+        Row({ space: 8 }) {
+          TextInput({ text: this.aiNewGroupName, placeholder: '新增分组' })
+            .layoutWeight(1).height(44).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+            .placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor(this.themeColorOnSheetContent).borderRadius(9)
+            .onChange((value: string) => { this.aiNewGroupName = value; })
+          Row() {
+            AppGlyph({ name: 'add', glyphSize: 18, tint: '#1A1B21' })
+          }.width(44).height(44).borderRadius(12).backgroundColor('#B9C8FF')
+          .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+          .onClick(() => { this.aiAddGroup(); })
+        }.width('100%')
+
+        // 分组卡列表。
+        ForEach(this.aiGroups, (group: AutoGroupGroupUi) => {
+          Column({ space: 8 }) {
+            Row({ space: 8 }) {
+              TextInput({ text: group.name })
+                .layoutWeight(1).height(44).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary)
+                .backgroundColor(this.themeColorSurfaceContainer).borderRadius(9)
+                .onChange((value: string) => { this.aiRenameGroup(group.key, value); })
+              Text(group.reuseExisting ? '复用分组' : '新建分组')
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorOnSurfaceVariant)
+              Row() {
+                AppGlyph({ name: 'delete', glyphSize: 16, tint: this.themeColorTextTertiary })
+              }.width(36).height(36).borderRadius(10).backgroundColor('#22232A')
+              .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+              .onClick(() => { this.aiRemoveGroup(group.key); })
+            }.width('100%')
+            if (group.description.length > 0) {
+              Text(group.description).fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant)
+                .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+            }
+            ForEach(group.books, (book: AutoGroupBookUi) => {
+              Row({ space: 8 }) {
+                Column() {
+                  Text(book.name).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(book.author.length > 0
+                    ? `${book.author}${book.currentGroupNames.length > 0 ? ' · 原分组：' + book.currentGroupNames.join(', ') : ''}`
+                    : (book.currentGroupNames.length > 0 ? `原分组：${book.currentGroupNames.join(', ')}` : ''))
+                    .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant).maxLines(1)
+                    .margin({ top: 2 })
+                  if (book.reason.length > 0) {
+                    Text(book.reason).fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant)
+                      .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 2 })
+                  }
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                // 「移动」下拉：列出除本组外的其它组。
+                Text('移动').fontSize(LABEL_SMALL).fontColor(this.themeColorAccent).padding(6)
+                  .bindMenu(this.aiMoveMenuItems(group.key, book.bookUrl))
+                Row() {
+                  AppGlyph({ name: 'profileClose', glyphSize: 14, tint: this.themeColorTextTertiary })
+                }.width(32).height(32).borderRadius(9).backgroundColor('#22232A')
+                .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+                .onClick(() => { this.aiIgnoreBook(book.bookUrl); })
+              }.width('100%').padding(10).backgroundColor(this.themeColorSurfaceContainer).borderRadius(9)
+            }, (book: AutoGroupBookUi) => `${group.key}_${book.bookUrl}`)
+          }.width('100%').padding(12).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+          .alignItems(HorizontalAlign.Start)
+        }, (group: AutoGroupGroupUi) => group.key)
+
+        // 未处理书单卡。
+        if (this.aiIgnoredBooks.length > 0) {
+          Column({ space: 6 }) {
+            Text(`不处理 ${this.aiIgnoredBooks.length} 本`).fontSize(TITLE_SMALL)
+              .fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).width('100%')
+            ForEach(this.aiIgnoredBooks.slice(0, 12), (book: AutoGroupIgnoredBookUi) => {
+              Text(book.reason.length > 0 ? `${book.name} · ${book.reason}` : book.name)
+                .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant).maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+            }, (book: AutoGroupIgnoredBookUi) => `ignored_${book.bookUrl}`)
+            if (this.aiIgnoredBooks.length > 12) {
+              Text(`还有 ${this.aiIgnoredBooks.length - 12} 本未显示`)
+                .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant).width('100%')
+            }
+          }.width('100%').padding(12).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+          .alignItems(HorizontalAlign.Start)
+        }
+
+        Blank()
+      }.width('100%').padding({ left: 16, right: 16, bottom: 24 })
+    }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
+  }
+
+  /** 摘要卡里的单个指标，对应上游 SummaryMetric。 */
+  @Builder
+  private AiAutoGroupMetric(label: string, value: string) {
+    Column() {
+      Text(value).fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+      Text(label).fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant)
+    }.alignItems(HorizontalAlign.Center)
+  }
+
+  /** 结果页，对应上游 AutoGroupResultContent。 */
+  @Builder
+  private AiAutoGroupResult() {
+    Column({ space: 12 }) {
+      Row({ space: 12 }) {
+        AppGlyph({ name: 'profileCheck', glyphSize: 18, tint: this.themeColorTextPrimary })
+        Text(this.aiApplyResult === undefined ? ''
+          : `已创建 ${this.aiApplyResult.createdGroupCount} 个分组，复用 ${this.aiApplyResult.reusedGroupCount} 个分组，更新 ${this.aiApplyResult.updatedBookCount} 本书，跳过 ${this.aiApplyResult.ignoredBookCount} 本书。`)
+          .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').padding(16).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        Text('重新分析').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+          .onClick(() => { this.aiRestart(); })
+        Blank()
+        Text('完成').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(10)
+          .onClick(() => { this.showAiAutoGroup = false; })
+      }.width('100%').padding({ left: 16, right: 16 })
+      Blank()
+    }.width('100%').padding({ left: 16, right: 16, top: 4 }).layoutWeight(1)
+  }
+
+  /** 错误页，对应上游 AutoGroupErrorContent。 */
+  @Builder
+  private AiAutoGroupError() {
+    Column({ space: 12 }) {
+      Column({ space: 8 }) {
+        Text('自动分组失败').fontSize(TITLE_MEDIUM).fontWeight(FontWeight.Medium)
+          .fontColor(this.themeColorTextPrimary).width('100%')
+        Text(this.aiErrorText.length > 0 ? this.aiErrorText : '未知错误')
+          .fontSize(BODY_MEDIUM).fontColor(this.themeColorOnSurfaceVariant).width('100%')
+      }.width('100%').padding(16).backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+      .alignItems(HorizontalAlign.Start)
+
+      Row() {
+        Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+          .onClick(() => { this.showAiAutoGroup = false; })
+        Blank()
+        Text('重新分析').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(10)
+          .onClick(() => { this.aiRestart(); })
+      }.width('100%').padding({ left: 16, right: 16 })
+      Blank()
+    }.width('100%').padding({ left: 16, right: 16, top: 4 }).layoutWeight(1)
+  }
+
+  /** 「移动」下拉的菜单项：目标组名 + 点击移书（对应上游 RoundDropdownMenuItem「移到 X」）。 */
+  private aiMoveMenuItems(currentKey: string, bookUrl: string): MenuElement[] {
+    const elements: MenuElement[] = [];
+    this.aiGroups.forEach((group: AutoGroupGroupUi) => {
+      if (group.key === currentKey) { return; }
+      elements.push({
+        value: `移到 ${group.name}`,
+        action: () => { this.aiMoveBook(bookUrl, group.key); }
+      });
+    });
+    return elements;
+  }
+
+  /**
+   * 独立标签规则面板，对应上游 `ui/tagGroupRule/TagGroupRuleEditSheet.kt`：
+   * 标题按 isNew 取「新建标签分组 / 编辑分组规则」，左侧关闭、右侧「更多菜单」
+   * （拷贝规则 / 粘贴规则），内容两个输入框，右下角保存。
+   */
+  @Builder
+  private TagRuleEditContent() {
+    Column() {
+      Row() {
+        Text('关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(8)
+          .onClick(() => this.showTagRuleEdit = false)
+        Text(this.editingTagRuleId > 0 ? '编辑分组规则' : '新建标签分组')
+          .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary)
+          .layoutWeight(1).textAlign(TextAlign.Center)
+        Text('更多菜单').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
+          .onClick(() => { this.tagRuleMenuVisible = !this.tagRuleMenuVisible; })
+          .bindPopup(this.tagRuleMenuVisible, {
+            builder: this.TagRuleMoreMenu,
+            placement: Placement.Bottom,
+            popupColor: '#00000000',
+            enableArrow: false,
+            autoCancel: true,
+            width: SHELF_MENU_WIDTH,
+            onStateChange: (event: PopupStateChangeParam) => { this.tagRuleMenuVisible = event.isVisible; }
+          })
+      }.width('100%').padding({ left: 12, right: 12, top: 14, bottom: 10 })
+
+      Scroll() {
+        Column() {
+          Text('分组名称').fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).width('100%')
+          TextInput({ text: this.tagRuleName, placeholder: '分组名称' }).width('100%').height(44).margin({ top: 6 })
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor('#22232A').borderRadius(9)
+            .onChange((value: string) => this.tagRuleName = value)
+
+          Text('匹配规则（匹配书籍标签）').fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
+            .width('100%').margin({ top: 16 })
+          TextArea({ text: this.tagRulePattern, placeholder: '匹配书籍标签的正则表达式' })
+            .width('100%').constraintSize({ minHeight: 96 }).margin({ top: 6 })
+            .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+            .backgroundColor('#22232A').borderRadius(9).padding(10)
+            .onChange((value: string) => this.tagRulePattern = value)
+
+          if (this.showRulePasteAuthorization) {
+            // PasteButton 自身没有 margin 修饰符，间距由外层容器给。
+            Column() {
+              PasteButton({ text: PasteDescription.PASTE, buttonType: ButtonType.Capsule })
+                .onClick(async (_event: ClickEvent, result: PasteButtonOnClickResult) => {
+                  await this.pasteCurrentTagRule(result);
+                  this.showRulePasteAuthorization = false;
+                })
+            }.width('100%').alignItems(HorizontalAlign.Start).margin({ top: 8 })
+          }
+          Blank()
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 120 })
+      }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
+    }.width('100%').height('100%').backgroundColor('#17181E')
+      .overlay(this.TagRuleSaveButton(), { align: Alignment.BottomEnd })
+  }
+
+  /** 规则面板右下角保存键，对应上游 AppFloatingActionButton(icon = Save, align = BottomEnd)。 */
+  @Builder
+  private TagRuleSaveButton() {
+    Row() {
+      AppGlyph({ name: 'profileSave', glyphSize: 20, tint: '#1A1B21' })
+    }
+    .width(52).height(52).borderRadius(16).backgroundColor('#B9C8FF')
+    .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+    .margin({ right: 16, bottom: 24 })
+    .onClick(async () => { await this.submitTagRule(); })
+    .accessibilityText('保存规则')
+  }
+
+  @Builder
+  private TagRuleMoreMenu() {
+    UiMenuPanel({
+      items: this.tagRuleMenuItems(),
+      panelWidth: SHELF_MENU_WIDTH,
+      onSelect: (key: string) => {
+        this.tagRuleMenuVisible = false;
+        if (key === 'copy_rule') { this.copyCurrentTagRule(); return; }
+        this.showRulePasteAuthorization = true;
+      }
+    })
   }
 
   /** 分组管理：自适应网格卡片，对应上游 LazyVerticalGrid(GridCells.Adaptive(160.dp))。 */
@@ -1466,14 +2801,28 @@ export struct BookshelfPage {
                     }
                   })
                 }.width('100%')
-                Text(group.groupName).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .margin({ top: 10 }).width('100%')
-                Text(`${this.countBooksInGroup(group.groupName)} 本 · ${bookSortLabel(group.bookSort)}${group.isPrivate ? ' · 私有' : ''}`)
-                  .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .margin({ top: 4 }).width('100%')
-              }.width('100%').padding(12).backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#0A0A0A' : this.themeColorSurfaceTertiary)).borderRadius(this.groupCardRadius())
+                // B-6/B-7：上游 GroupManageSheet.kt:348-357 —— 标题 titleSmall、最多 2 行，
+                // 紧跟一个 12vp 的编辑图标（点击进编辑由整卡 onClick 承担）。
+                Row() {
+                  Text(group.groupName).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).maxLines(2)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                  AppGlyph({ name: 'edit', glyphSize: 12, tint: this.themeColorTextTertiary }).margin({ left: 2 })
+                }.width('100%').margin({ top: 10 }).alignItems(VerticalAlign.Center)
+                // B-8：上游 :360-366 —— 副标题 bodySmall + onSurfaceVariant + 单行省略。
+                if (this.groupManageSubtitleOf(group).length > 0) {
+                  Text(this.groupManageSubtitleOf(group))
+                    .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant).maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .margin({ top: 4 }).width('100%')
+                }
+              }.width('100%').padding(12)
+                // B-5：上游 :311 GlassCard(cornerRadius = 12.dp, containerColor = onSheetContent)。
+                .backgroundColor(this.themeColorOnSheetContent).borderRadius(this.groupCardRadius())
+                // B-4：上游 :306-308 拖动中 elevation 8.dp + :307 zIndex 1f。
+                .shadow(this.draggingGroupId === group.groupId
+                  ? { radius: 8, color: '#66000000', offsetX: 0, offsetY: 3 }
+                  : { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 })
+                .zIndex(this.draggingGroupId === group.groupId ? 1 : 0)
                 .alignItems(HorizontalAlign.Start)
                 // 内置分组没有可编辑字段（上游对内置行也不给编辑入口），点了不打开编辑面板。
                 .onClick(() => {
@@ -1489,9 +2838,22 @@ export struct BookshelfPage {
               if (from < 0 || to < 0 || from >= managed.length || to >= managed.length) { return; }
               if (this.isBuiltinGroup(managed[from]) || this.isBuiltinGroup(managed[to])) { return; }
               this.onMoveGroup(managed[from].groupId, managed[to].groupId);
+            }, {
+              // B-4：上游 GroupManageSheet.kt:322-327 在 longPressDraggableHandle 的
+              // onDragStarted / onDragStopped 里发 GestureThresholdActivate / GestureEnd 两档震动。
+              onDragStart: (index: number): void => {
+                const managed = this.getManageGroups();
+                this.draggingGroupId = (index >= 0 && index < managed.length) ? managed[index].groupId : -1;
+                UiHaptics.dragThresholdActivate();
+              },
+              onDrop: (_index: number): void => {
+                this.draggingGroupId = -1;
+                UiHaptics.dragEnd();
+              }
             })
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-        .columnsTemplate('1fr 1fr').columnsGap(10).rowsGap(10)
+        // B-2：上游 GroupManageSheet.kt:227-228 horizontalArrangement/verticalArrangement = spacedBy(8.dp)。
+        .columnsTemplate('1fr 1fr').columnsGap(8).rowsGap(8)
         .width('100%').layoutWeight(1).padding({ left: 16, right: 16, bottom: 18 })
         .scrollBar(BarState.Off).editMode(true)
       }
@@ -1499,12 +2861,46 @@ export struct BookshelfPage {
   }
 
   /** 分组编辑面板内容，对应上游 GroupEditSheet。 */
+  /** 关闭隐私分组确认（上游 GroupEditSheet.kt:301-311 AppAlertDialog）。 */
+  @Builder
+  private DisablePrivateConfirm() {
+    Column() {
+      Text('关闭隐私分组').fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .alignSelf(ItemAlign.Start).padding({ left: 18, top: 16, bottom: 8 })
+      Text('关闭后，本组书籍可能在公开书架中显示，是否确认关闭？')
+        .fontSize(BODY_SMALL).fontColor(this.themeColorTextSecondary)
+        .alignSelf(ItemAlign.Start).padding({ left: 18, right: 18 })
+      Row() {
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+          .onClick(() => { this.showDisablePrivateConfirm = false; })
+        Blank()
+        Text('确认关闭').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
+          .onClick(() => {
+            this.draftPrivate = false;
+            this.showDisablePrivateConfirm = false;
+          })
+      }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 16 })
+    }.width('100%').alignItems(HorizontalAlign.Start)
+    .constraintSize({ maxWidth: 320 })
+    .backgroundColor(this.themeColorSurfaceElevated)
+    .borderRadius(12)
+  }
+
   @Builder
   private GroupEditorContent() {
     Column() {
       Row() {
         Text(this.editingGroupId > 0 ? '编辑分组' : '新建分组')
           .fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+        // 上游编辑态的 endAction 是 GroupResetCoverAction（GroupManageSheet.kt:190-199），
+        // 选了封面才出现，点一下清空封面。
+        if (this.draftCover.length > 0) {
+          Text('清除封面').fontSize(LABEL_LARGE).fontColor('#D99AA5').padding(8)
+            .onClick(async () => {
+              if (this.editingGroupId > 0) { await this.onClearGroupCover(this.editingGroupId); }
+              this.draftCover = '';
+            })
+        }
         Text('保存').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(8)
           .onClick(async () => { await this.submitGroupDraft(); })
         Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(8)
@@ -1512,56 +2908,54 @@ export struct BookshelfPage {
       }.width('100%').padding({ left: 18, right: 12, top: 14, bottom: 10 })
       Scroll() {
         Column() {
-          // 封面：点击选图，长按清除，与上游 GroupEditContent 的封面项一致。
+          // C-2：上游 GroupEditSheet.kt:154-176 是
+          // Row(fillMaxWidth(), Alignment.Top, spacedBy(16.dp)){ CoilBookCover(width=96.dp)
+          //   .clickable{ selectImage.launch() }; Column(weight(1f), spacedBy(8.dp)){ 分组名称输入; 排序下拉 } }。
+          // 即封面 96dp 宽、与右侧表单并排，不是上下堆叠。
           Row() {
-            Text('封面').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
             Stack({ alignContent: Alignment.Center }) {
               if (this.draftCover.length > 0) {
-                Image(this.draftCover).width(48).height(48).borderRadius(10).objectFit(ImageFit.Cover)
+                Image(this.draftCover).width('100%').height('100%').borderRadius(4).objectFit(ImageFit.Cover)
               } else {
-                AppGlyph({ name: 'add', glyphSize: 18, tint: this.themeColorTextTertiary })
+                AppGlyph({ name: 'add', glyphSize: 24, tint: this.themeColorTextTertiary })
               }
             }
-            .width(48).height(48).backgroundColor('#22232A').borderRadius(10)
+            .width(96).aspectRatio(5 / 7).backgroundColor('#22232A').borderRadius(4)
             .onClick(async () => {
-              if (this.editingGroupId <= 0) {
-                this.onUnavailableAction('请先保存分组，再设置封面');
-                return;
+              // E-4：上游的 coverPath 是草稿态，新建分组也能先选封面，保存时一起落库。
+              // 已保存的分组走落库接口，未保存的走只复制不写表的草稿接口。
+              if (this.editingGroupId > 0) {
+                const cover = await this.onChooseGroupCover(this.editingGroupId);
+                if (cover.length > 0) { this.draftCover = cover; }
+              } else {
+                const draft = await this.onChooseGroupCoverDraft();
+                if (draft.length > 0) { this.draftCover = draft; }
               }
-              const cover = await this.onChooseGroupCover(this.editingGroupId);
-              if (cover.length > 0) { this.draftCover = cover; }
             })
-            if (this.draftCover.length > 0) {
-              Text('清除').fontSize(BODY_SMALL).fontColor('#D99AA5').padding({ left: 12 })
-                .onClick(async () => {
-                  if (this.editingGroupId > 0) { await this.onClearGroupCover(this.editingGroupId); }
-                  this.draftCover = '';
-                })
-            }
-          }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
-          Row() {
-            Text('分组名称').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).width(88)
-            TextInput({ text: this.draftName, placeholder: '分组名称' }).layoutWeight(1).height(40)
-              .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
-              .backgroundColor('#22232A').borderRadius(9)
-              .onChange((value: string) => this.draftName = value)
-          }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 })
+            Column() {
+              TextInput({ text: this.draftName, placeholder: '分组名称' }).width('100%').height(40)
+                .fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).placeholderColor(this.themeColorTextTertiary)
+                .backgroundColor('#22232A').borderRadius(9)
+                .onChange((value: string) => this.draftName = value)
 
-          Row() {
-            Text('排序方式').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
-            Text(bookSortLabel(this.draftSort)).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
-              .onClick(() => { this.sortMenuVisible = !this.sortMenuVisible; })
-              .bindPopup(this.sortMenuVisible, {
-                builder: this.SortMenu,
-                placement: Placement.Bottom,
-                popupColor: '#00000000',
-                enableArrow: false,
-                autoCancel: true,
-                width: SHELF_MENU_WIDTH,
-                onStateChange: (event: PopupStateChangeParam) => { this.sortMenuVisible = event.isVisible; }
-              })
-          }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
+              Row() {
+                Text('排序').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary).layoutWeight(1)
+                Text(bookSortLabel(this.draftSort)).fontSize(TITLE_SMALL).fontColor(this.themeColorAccent)
+                  .onClick(() => { this.sortMenuVisible = !this.sortMenuVisible; })
+                  .bindPopup(this.sortMenuVisible, {
+                    builder: this.SortMenu,
+                    placement: Placement.Bottom,
+                    popupColor: '#00000000',
+                    enableArrow: false,
+                    autoCancel: true,
+                    width: SHELF_MENU_WIDTH,
+                    onStateChange: (event: PopupStateChangeParam) => { this.sortMenuVisible = event.isVisible; }
+                  })
+              }.width('100%').height(40).padding({ left: 12, right: 12 })
+                .backgroundColor('#22232A').borderRadius(9).margin({ top: 8 })
+            }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 16 })
+          }.width('100%').alignItems(VerticalAlign.Top).padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
           Row() {
             Column() {
@@ -1576,18 +2970,22 @@ export struct BookshelfPage {
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
           .onClick(() => this.draftRefresh = !this.draftRefresh)
 
+          // 隐私分组（GroupEditSheet.kt:202-217）：标题与副标题照上游 private_group /
+          // private_group_desc；关闭一个「原本就是隐私」的分组要先二次确认，
+          // 因为关闭后本组书籍会重新出现在公开书架。
           Row() {
             Column() {
-              Text('私有分组').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-              Text('仅保存兼容标记；当前不限制跨分组显示').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+              Text('设为隐私分组').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+              Text('开启后，本分组内的书籍不会出现在公开书架，进入该分组需要验证。单本标记为私密的书不同：它仍留在书架上，封面与文字会被遮挡，验证后才显示。')
+                .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             UiSwitchControl({
               checked: this.draftPrivate,
               interactive: false,
-              onChange: (enabled: boolean) => this.draftPrivate = enabled
+              onChange: (enabled: boolean) => this.toggleDraftPrivate(enabled)
             })
           }.width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
-          .onClick(() => this.draftPrivate = !this.draftPrivate)
+          .onClick(() => this.toggleDraftPrivate(!this.draftPrivate))
 
           // 标签匹配规则（:249 / :250）：本地不另建独立规则面板，开关与多行输入框
           // 直接放在分组编辑面板里，对应上游 GroupEditSheet.kt:221-238。
@@ -1678,8 +3076,24 @@ export struct BookshelfPage {
   /** 分组面板：管理网格与编辑表单共用一个 sheet，避免同一组件挂两个 bindSheet 只有后者生效。 */
   @Builder
   private GroupManagerSheet() {
-    if (this.showGroupEditor) {
-      this.GroupEditorContent()
+    if (this.showAiAutoGroup) {
+      this.AiAutoGroupContent()
+    } else if (this.showTagRuleEdit) {
+      this.TagRuleEditContent()
+    } else if (this.showGroupEditor) {
+      Stack() {
+        this.GroupEditorContent()
+        // 关闭隐私分组确认：浮在编辑面板之上（上游 GroupEditSheet.kt:301-311 是 AlertDialog）。
+        if (this.showDisablePrivateConfirm) {
+          Column() {
+            this.DisablePrivateConfirm()
+          }
+          .width('100%').height('100%')
+          .backgroundColor('#66000000')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+      }.width('100%').height('100%')
     } else {
       this.GroupManagerGrid()
     }
@@ -1787,12 +3201,27 @@ export struct BookshelfPage {
   }
 
   /**
-   * 批10（:1453/:1456）：LazyForEach 的预加载条数，按「当前列数 × 2 行」算。
-   * 列表模式（1 列）与 5 列网格各取各的半屏；下限 6、上限 12（再大就和首屏抢带宽）。
-   * 等价于上游首屏封面预取器，但走的是 LazyForEach 自己的虚拟化，不另建命令式缓存。
+   * C-2：网格行/列间距。
+   *
+   * 对齐上游 `BookshelfScreen.kt:1002-1003`/`:1772-1773` 的
+   * `spacedBy(if (isGridMode) 8.dp else 0.dp)`——**只有网格模式是 8dp，列表模式为 0**。
+   * 原先两处都无条件写死 8，会让列表行距比上游多 8vp。
+   */
+  private gridGap(): number {
+    return this.activeLayoutMode() === 1 ? BOOKSHELF_GRID_GAP : 0;
+  }
+
+  /**
+   * C-7：LazyForEach 预加载条数，对齐上游 `BookshelfCoverPreloader.kt` 的首屏预取口径。
+   *
+   * 上游（BookshelfCoverPreloader.kt:30/:33/:36）：网格 `MAX_PRELOAD_BOOKS = 24`、列表 `LIST_PRELOAD_BOOKS = 10`、
+   * 估算可见行 `ESTIMATED_VISIBLE_ROWS = 5`，`limit = (columns.coerceAtLeast(1) * 5).coerceIn(1, 24)`（:261），
+   * 列表分支直接取 10。本地走 LazyForEach 自身的虚拟化，不需要命令式解码，
+   * 但**条数上限要与上游同一口径**，否则视口外的封面进队列的时机比上游晚。
    */
   private coverCacheCount(): number {
-    return Math.min(12, Math.max(6, this.bookshelfColumnCount() * 2));
+    if (this.activeLayoutMode() !== 1) { return 10; }
+    return Math.min(24, Math.max(1, this.bookshelfColumnCount() * 5));
   }
 
   /**
@@ -1819,23 +3248,37 @@ export struct BookshelfPage {
   private bookshelfCoverSlotWidth(): number {
     if (this.bookshelfGridWidth <= 0) { return 0; }
     const columns = this.bookshelfColumnCount();
-    const available = this.bookshelfGridWidth - BOOKSHELF_GRID_PADDING * 2
-      - BOOKSHELF_GRID_GAP * (columns - 1);
+    // C-3：可用宽按实际左右内边距（8+4=12）扣，与网格 padding 保持同一口径。
+    const available = this.bookshelfGridWidth - this.gridHorizontalPadding() * 2
+      - this.gridGap() * (columns - 1);
     if (available <= 0) { return 0; }
     return Math.max(0, Math.floor(available / columns) - 8);
   }
 
   /**
-   * 书封宽度上限：格子宽与用户设置取小值。
+   * C-3：网格左右内边距。
    *
-   * 上游 bookshelfGridCoverWidth 默认 120，作用是限制封面不要随格子无限放大；
-   * 格子比它窄时以格子为准，保证「填满格子」与「用户设定」两个约束同时成立。
+   * 对齐上游 `AdaptivePadding.kt:114-121`——M3 引擎下为 `4.dp + 传入的 8.dp = 12dp`。
    */
-  private bookshelfCoverWidthLimit(): number {
-    const slot = this.bookshelfCoverSlotWidth();
+  private gridHorizontalPadding(): number {
+    return BOOKSHELF_GRID_PADDING + BOOKSHELF_GRID_PADDING_EXTRA;
+  }
+
+  /**
+   * 网格封面列的宽度（vp）：直接取设置值 `bookshelfGridCoverWidth`。
+   *
+   * 上游 `BookItem.kt:839` 把 `settings.bookshelfGridCoverWidth` 原样传给
+   * `BookshelfGridItem(coverWidth = ...)`，`:107` 就是 `Column(Modifier.width(coverWidth.dp))`，
+   * **没有**「和格子宽取小」这一步——格子比封面窄时上游允许溢出。
+   * 改前这里用 `Math.min(格子宽, 设置值)` 钳了一道，属于上游没有的约束。
+   *
+   * 设置值缺失（0）时退回格子宽，格子宽也未知时给 84（上游 `coverWidth` 形参默认值）。
+   */
+  private gridCoverColumnWidth(): number {
     const configured = Math.max(0, Math.round(this.layout.bookshelfGridCoverWidth));
-    if (slot <= 0) { return configured; }
-    return configured > 0 ? Math.min(slot, configured) : slot;
+    if (configured > 0) { return configured; }
+    const slot = this.bookshelfCoverSlotWidth();
+    return slot > 0 ? slot : 84;
   }
 
   /** 书封标题字号：上游 labelMedium 13sp、labelSmall 11sp。 */
@@ -1851,6 +3294,30 @@ export struct BookshelfPage {
     const color = this.readerNightMode
       ? this.layout.bookshelfCardColorDark : this.layout.bookshelfCardColor;
     return color === 0 ? this.themeColorCardContainer : bookshelfCardIntToHex(color);
+  }
+
+  /**
+   * 卡片底色：选择态且该书已选时铺 `secondaryContainer`，否则走自定义/主题底色。
+   *
+   * 上游网格 `BookItem.kt:99` 是
+   * `.then(if (isSelected) Modifier.background(secondaryContainer) else Modifier)`；
+   * 列表 `:186` 是 `containerColor = if (isSelected) secondaryContainer else if (cardColor != 0) Color(cardColor) else cardContainer`。
+   * 两个分支选中态取同一档色，所以这里合并成一个判断。
+   */
+  private cardContainerColorOf(book: Book): ResourceColor {
+    if (this.selectionMode && this.isBookSelected(book)) { return this.themeColorSecondaryContainer; }
+    return this.cardBackgroundColor();
+  }
+
+  /**
+   * 卡片圆角：网格固定 4vp、列表 8vp。
+   *
+   * 上游网格是 `BookItem.kt:98` 的 `.clip(RoundedCornerShape(4.dp))`——硬编码，不受
+   * 「覆盖卡片圆角」主题项影响；列表是 `:184` 的 `NormalCard(cornerRadius = 8.dp)`，
+   * 会被 `GlassCard.kt:78-82` 的全局覆盖替换，所以只有列表走 `bookCardRadius()`。
+   */
+  private cardCornerOf(): number {
+    return this.activeLayoutMode() === 0 ? this.bookCardRadius() : 4;
   }
 
   /**
@@ -1967,27 +3434,105 @@ export struct BookshelfPage {
     .onClick(() => onToggle(!isOn))
   }
 
-  /** 数值行：用 -/+ 加减，避免滑块在小屏上难以精确点中。 */
+  /**
+   * 数值行，对齐上游 `CompactSliderSettingItem`（CompactSettingItems.kt:124-230）：
+   * 行内是 `ValueStepper`（±1 步进 + 数值），点标题展开后是 `Slider`（按 valueRange 分档）。
+   *
+   * 上游 `ValueStepper`（ValueStepper.kt:19-73）的 `stepSize` 默认 1f，`coerceIn(valueRange)` 夹取；
+   * 展开的 `Slider` 步长由 `steps` 推出——七处调用都是「档位数 = 区间长度 + 1」，等价于步长 1。
+   * 展开状态由 `layoutSliderExpandedKey` 记录，同一时刻只开一个（上游每行各自 remember，互不影响，
+   * 这里收成一个键，视觉上更接近设置面板的单开手风琴）。
+   */
   @Builder
-  private LayoutStepperRow(
+  private LayoutSliderRow(
     title: string, description: string, value: number,
-    minimum: number, maximum: number, onStep: (delta: number) => void
+    minimum: number, maximum: number, onChange: (value: number) => void
   ) {
-    Row() {
-      Column() {
-        Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
-        if (description.length > 0) {
-          Text(description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
-        }
-      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-      Text('−').fontSize(TITLE_LARGE).fontColor(value > minimum ? this.themeColorAccent : '#4A4C55')
-        .width(36).height(32).textAlign(TextAlign.Center)
-        .onClick(() => { if (value > minimum) { onStep(-1); } })
-      Text(`${value}`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width(34).textAlign(TextAlign.Center)
-      Text('+').fontSize(TITLE_LARGE).fontColor(value < maximum ? this.themeColorAccent : '#4A4C55')
-        .width(36).height(32).textAlign(TextAlign.Center)
-        .onClick(() => { if (value < maximum) { onStep(1); } })
+    Column() {
+      Row() {
+        Column() {
+          Text(title).fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
+          if (description.length > 0) {
+            Text(description).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
+          }
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          .onClick(() => {
+            this.layoutSliderExpandedKey = this.layoutSliderExpandedKey === title ? '' : title;
+          })
+        Text('−').fontSize(TITLE_LARGE).fontColor(value > minimum ? this.themeColorAccent : '#4A4C55')
+          .width(36).height(32).textAlign(TextAlign.Center)
+          .accessibilityText('减小')
+          .onClick(() => { onChange(Math.max(minimum, Math.min(maximum, value - 1))); })
+        Text(`${value}`).fontSize(TITLE_SMALL).fontColor(this.themeColorTextPrimary).width(34).textAlign(TextAlign.Center)
+        Text('+').fontSize(TITLE_LARGE).fontColor(value < maximum ? this.themeColorAccent : '#4A4C55')
+          .width(36).height(32).textAlign(TextAlign.Center)
+          .accessibilityText('增大')
+          .onClick(() => { onChange(Math.max(minimum, Math.min(maximum, value + 1))); })
+      }.width('100%')
+      if (this.layoutSliderExpandedKey === title) {
+        Slider({ value: value, min: minimum, max: maximum, step: 1, style: SliderStyle.OutSet })
+          .width('100%')
+          .selectedColor(this.themeColorAccent)
+          .trackColor(this.themeColorSurfaceTertiary)
+          .showSteps(true)
+          .accessibilityText(title)
+          .onChange((current: number, mode: SliderChangeMode) => {
+            if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click || mode === SliderChangeMode.End) {
+              onChange(Math.max(minimum, Math.min(maximum, Math.round(current))));
+            }
+          })
+      }
     }.width('100%').padding({ left: 16, right: 12, top: 10, bottom: 10 })
+  }
+
+  /**
+   * 标签显示内容对话框，对齐上游 `BookshelfTagContentDialog`（BookshelfConfigSheet.kt:695-742）：
+   * AppAlertDialog + 三个 CheckboxItem（用户标签 / 书源分类 / 字数）+ 确认 / 取消。
+   */
+  @Builder
+  private TagContentDialog() {
+    Column() {
+      Text('标签显示内容').fontSize(TITLE_LARGE).fontWeight(FontWeight.Medium)
+        .fontColor(this.themeColorTextPrimary).width('100%')
+      Column() {
+        this.TagContentCheckRow('用户标签', this.tagDialogCustom,
+          (checked: boolean) => { this.tagDialogCustom = checked; })
+        this.TagContentCheckRow('书源分类', this.tagDialogSource,
+          (checked: boolean) => { this.tagDialogSource = checked; })
+        this.TagContentCheckRow('字数', this.tagDialogWordCount,
+          (checked: boolean) => { this.tagDialogWordCount = checked; })
+      }.width('100%').margin({ top: 10 })
+      Row() {
+        Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+          .onClick(() => { this.showTagContentDialog = false; })
+        Blank()
+        Text('确认').fontSize(LABEL_LARGE).fontColor('#B9C8FF').padding(10)
+          .onClick(() => { this.applyTagContentDialog(); })
+      }.width('100%').margin({ top: 14 })
+    }.width('86%').constraintSize({ maxWidth: 340 }).padding(18)
+      .backgroundColor(this.themeColorSurfaceElevated).borderRadius(12)
+      .alignItems(HorizontalAlign.Start)
+  }
+
+  /** 对话框里的一行复选；整行可点，命中区域比 Checkbox 本体大。 */
+  @Builder
+  private TagContentCheckRow(title: string, checked: boolean, onChange: (value: boolean) => void) {
+    Row({ space: 10 }) {
+      Checkbox().select(checked).onChange((value: boolean) => onChange(value))
+      Text(title).fontSize(LABEL_LARGE).fontColor(this.themeColorTextPrimary).layoutWeight(1)
+    }.width('100%').padding({ top: 6, bottom: 6 })
+      .onClick(() => onChange(!checked))
+  }
+
+  /** 对话框遮罩：盖住整个布局面板，点面板外的区域不关闭（对齐上游 AlertDialog 的模态行为）。 */
+  @Builder
+  private TagContentDialogOverlay() {
+    if (this.showTagContentDialog) {
+      Column() {
+        this.TagContentDialog()
+      }.width('100%').height('100%').backgroundColor('#66000000')
+        .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    }
   }
 
   /** 卡片底色编辑行：预览方块 + hex 输入，复用 CustomThemePage.ColorEditor 的交互口径。 */
@@ -2042,18 +3587,18 @@ export struct BookshelfPage {
             this.LayoutMenuRow('文件夹布局模式·竖屏', '列表 / 网格', BOOKSHELF_FOLDER_LAYOUT_MODE_OPTIONS,
               this.layoutDraft.bookshelfFolderLayoutModePortrait,
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutModePortrait = value; }); })
-            this.LayoutStepperRow('文件夹网格列数·竖屏', '网格模式下分组卡片每行个数',
+            this.LayoutSliderRow('文件夹网格列数·竖屏', '网格模式下分组卡片每行个数',
               this.layoutDraft.bookshelfFolderLayoutGridPortrait, 1, 15,
-              (delta: number) => {
+              (value: number) => {
                 this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                  draft.bookshelfFolderLayoutGridPortrait = Math.max(1, Math.min(15, draft.bookshelfFolderLayoutGridPortrait + delta));
+                  draft.bookshelfFolderLayoutGridPortrait = value;
                 });
               })
-            this.LayoutStepperRow('文件夹列表列数·竖屏', '列表模式下分组卡片每行个数',
+            this.LayoutSliderRow('文件夹列表列数·竖屏', '列表模式下分组卡片每行个数',
               this.layoutDraft.bookshelfFolderLayoutListPortrait, 1, 5,
-              (delta: number) => {
+              (value: number) => {
                 this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                  draft.bookshelfFolderLayoutListPortrait = Math.max(1, Math.min(5, draft.bookshelfFolderLayoutListPortrait + delta));
+                  draft.bookshelfFolderLayoutListPortrait = value;
                 });
               })
 
@@ -2061,18 +3606,18 @@ export struct BookshelfPage {
             this.LayoutMenuRow('文件夹布局模式·横屏', '列表 / 网格', BOOKSHELF_FOLDER_LAYOUT_MODE_OPTIONS,
               this.layoutDraft.bookshelfFolderLayoutModeLandscape,
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfFolderLayoutModeLandscape = value; }); })
-            this.LayoutStepperRow('文件夹网格列数·横屏', '网格模式下分组卡片每行个数',
+            this.LayoutSliderRow('文件夹网格列数·横屏', '网格模式下分组卡片每行个数',
               this.layoutDraft.bookshelfFolderLayoutGridLandscape, 1, 15,
-              (delta: number) => {
+              (value: number) => {
                 this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                  draft.bookshelfFolderLayoutGridLandscape = Math.max(1, Math.min(15, draft.bookshelfFolderLayoutGridLandscape + delta));
+                  draft.bookshelfFolderLayoutGridLandscape = value;
                 });
               })
-            this.LayoutStepperRow('文件夹列表列数·横屏', '列表模式下分组卡片每行个数',
+            this.LayoutSliderRow('文件夹列表列数·横屏', '列表模式下分组卡片每行个数',
               this.layoutDraft.bookshelfFolderLayoutListLandscape, 1, 5,
-              (delta: number) => {
+              (value: number) => {
                 this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                  draft.bookshelfFolderLayoutListLandscape = Math.max(1, Math.min(5, draft.bookshelfFolderLayoutListLandscape + delta));
+                  draft.bookshelfFolderLayoutListLandscape = value;
                 });
               })
 
@@ -2081,11 +3626,11 @@ export struct BookshelfPage {
               this.layoutDraft.bookshelfGroupListStyle,
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGroupListStyle = value; }); })
             if (this.layoutDraft.bookshelfGroupListStyle === 2) {
-              this.LayoutStepperRow('横排封面数量', '分组卡片一行显示的封面数，不足右侧留空',
+              this.LayoutSliderRow('横排封面数量', '分组卡片一行显示的封面数，不足右侧留空',
                 this.layoutDraft.bookshelfGroupCoverCount, 1, 10,
-                (delta: number) => {
+                (value: number) => {
                   this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                    draft.bookshelfGroupCoverCount = Math.max(1, Math.min(10, draft.bookshelfGroupCoverCount + delta));
+                    draft.bookshelfGroupCoverCount = value;
                   });
                 })
             }
@@ -2114,28 +3659,28 @@ export struct BookshelfPage {
               (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGridLayout = value; }); })
           }
           // 列数上限对齐上游 BookshelfConfigSheet.kt:288（valueRange = 1f..15f）与 :412（1f..5f）；
-          // 夹取写在回调里，因为 LayoutStepperRow 的 value<maximum 守卫在连点时会读到旧值。
+          // 夹取已收进 LayoutSliderRow 内部（Math.max/min），这里只做字段写入。
           if (this.activeDraftLayoutMode() === 1) {
-            this.LayoutStepperRow('网格列数', '每行显示的书封数量',
+            this.LayoutSliderRow('网格列数', '每行显示的书封数量',
               this.activeDraftGridColumns(), 1, 15,
-              (delta: number) => {
+              (value: number) => {
                 this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
                   if (this.isLandscape) {
-                    draft.bookshelfLayoutGridLandscape = Math.max(1, Math.min(15, draft.bookshelfLayoutGridLandscape + delta));
+                    draft.bookshelfLayoutGridLandscape = value;
                   } else {
-                    draft.bookshelfLayoutGridPortrait = Math.max(1, Math.min(15, draft.bookshelfLayoutGridPortrait + delta));
+                    draft.bookshelfLayoutGridPortrait = value;
                   }
                 });
               })
           } else {
-            this.LayoutStepperRow('列表列数', '每行显示的书封数量',
+            this.LayoutSliderRow('列表列数', '每行显示的书封数量',
               this.activeDraftListColumns(), 1, 5,
-              (delta: number) => {
+              (value: number) => {
                 this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
                   if (this.isLandscape) {
-                    draft.bookshelfLayoutListLandscape = Math.max(1, Math.min(5, draft.bookshelfLayoutListLandscape + delta));
+                    draft.bookshelfLayoutListLandscape = value;
                   } else {
-                    draft.bookshelfLayoutListPortrait = Math.max(1, Math.min(5, draft.bookshelfLayoutListPortrait + delta));
+                    draft.bookshelfLayoutListPortrait = value;
                   }
                 });
               })
@@ -2168,11 +3713,11 @@ export struct BookshelfPage {
               }
               // 上游 :477 的额外条件是 settings.bookshelfShowIntro；valueRange 0f..10f，0 表示显示全部。
               if (this.layoutDraft.bookshelfShowIntro) {
-                this.LayoutStepperRow('简介行数', `简介最多显示几行，0 表示显示全部（当前${this.introMaxLinesDescription()}）`,
+                this.LayoutSliderRow('简介行数', `简介最多显示几行，0 表示显示全部（当前${this.introMaxLinesDescription()}）`,
                   this.layoutDraft.bookshelfIntroMaxLines, 0, 10,
-                  (delta: number) => {
+                  (value: number) => {
                     this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                      draft.bookshelfIntroMaxLines = Math.max(0, Math.min(10, draft.bookshelfIntroMaxLines + delta));
+                      draft.bookshelfIntroMaxLines = value;
                     });
                   })
               }
@@ -2183,25 +3728,16 @@ export struct BookshelfPage {
             this.layoutDraft.bookshelfShowTag,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowTag = value; }); })
           if (this.layoutDraft.bookshelfShowTag) {
+            // D-2 / F-5：上游是 CompactClickableSettingItem + 独立对话框，
+            // 描述串是「用户标签 · 书源分类 · 字数」，未选择时显示 bookshelf_tag_none。
             Row() {
               Column() {
                 Text('标签显示内容').fontSize(TITLE_SMALL).fontColor(this.themeColorTextSecondary)
                 Text(this.tagSourcesLabel()).fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              AppGlyph({ name: this.showTagSources ? 'profileExpandMore' : 'list', glyphSize: 16 })
+              AppGlyph({ name: 'profileExpandMore', glyphSize: 16 })
             }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 12 })
-              .onClick(() => { this.showTagSources = !this.showTagSources; })
-            if (this.showTagSources) {
-              this.LayoutSwitchRow('字数', '把全书字数作为一个标签',
-                this.layoutDraft.bookshelfShowWordCount,
-                (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowWordCount = value; }); })
-              this.LayoutSwitchRow('来源分类', '把书籍分类作为一个标签',
-                this.layoutDraft.bookshelfShowSourceTags,
-                (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowSourceTags = value; }); })
-              this.LayoutSwitchRow('自定义标签', '把自定义标签逐个显示',
-                this.layoutDraft.bookshelfShowCustomTags,
-                (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfShowCustomTags = value; }); })
-            }
+              .onClick(() => { this.openTagContentDialog(); })
             this.LayoutSwitchRow('自定义标签配色', '开启后按下面的配色给标签行取色',
               this.layoutDraft.enableCustomTagColors,
               (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.enableCustomTagColors = value; }); })
@@ -2235,11 +3771,11 @@ export struct BookshelfPage {
           this.LayoutSwitchRow('显示书籍类型', '在卡片上显示 本地 / EPUB 等类型',
             this.layoutDraft.showTip,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.showTip = value; }); })
-          this.LayoutStepperRow('书名行数', '书封下方标题最多显示几行',
+          this.LayoutSliderRow('书名行数', '书封下方标题最多显示几行',
             this.layoutDraft.bookshelfTitleMaxLines, 1, 5,
-            (delta: number) => {
+            (value: number) => {
               this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                draft.bookshelfTitleMaxLines = Math.max(1, Math.min(5, draft.bookshelfTitleMaxLines + delta));
+                draft.bookshelfTitleMaxLines = value;
               });
             })
           this.LayoutSwitchRow('标题居中', '关闭后书名左对齐', this.layoutDraft.bookshelfTitleCenter,
@@ -2260,12 +3796,14 @@ export struct BookshelfPage {
               this.nightCardColorHex = value;
               this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfCardColorDark = bookshelfCardHexToInt(value); });
             })
-          this.LayoutStepperRow('网格封面宽度', '书封在格子里最宽能到多少，格子更窄时以格子为准',
-            this.layoutDraft.bookshelfGridCoverWidth, 40, 200,
-            (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGridCoverWidth = Math.max(40, Math.min(200, draft.bookshelfGridCoverWidth + delta * 10)); }); })
-          this.LayoutStepperRow('列表封面宽度', '列表模式下书封宽度',
-            this.layoutDraft.bookshelfListCoverWidth, 40, 200,
-            (delta: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfListCoverWidth = Math.max(40, Math.min(200, draft.bookshelfListCoverWidth + delta * 10)); }); })
+          // 取值范围对齐上游 BookshelfConfigSheet.kt:319-327 的 `valueRange = 40f..150f, steps = 110`。
+          this.LayoutSliderRow('网格封面宽度', '书封在格子里最宽能到多少，格子更窄时以格子为准',
+            this.layoutDraft.bookshelfGridCoverWidth, 40, 150,
+            (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfGridCoverWidth = value; }); })
+          // 取值范围对齐上游 BookshelfConfigSheet.kt:202-210 / :399-407 的 `valueRange = 40f..120f, steps = 80`。
+          this.LayoutSliderRow('列表封面宽度', '列表模式下书封宽度',
+            this.layoutDraft.bookshelfListCoverWidth, 40, 120,
+            (value: number) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.bookshelfListCoverWidth = value; }); })
           // 列表模式的「显示简介 / 显示最新章节」已移进「布局」组的详情区（受 showBookIntro 总开关约束），
           // 这里不再重复。
           this.LayoutSwitchRow('书封阴影', '', this.layoutDraft.bookshelfCoverShadow,
@@ -2281,16 +3819,17 @@ export struct BookshelfPage {
           this.LayoutSwitchRow('页签栏菜单按钮', '页签栏右端出现分组下拉按钮',
             this.layoutDraft.showBookshelfTabMenu,
             (value: boolean) => { this.updateLayoutDraft((draft: BookshelfLayoutSettings) => { draft.showBookshelfTabMenu = value; }); })
-          this.LayoutStepperRow('书架更新线程数', '',
+          this.LayoutSliderRow('书架更新线程数', '',
             this.layoutDraft.bookshelfRefreshingLimit, 0, 100,
-            (delta: number) => {
+            (value: number) => {
               this.updateLayoutDraft((draft: BookshelfLayoutSettings) => {
-                draft.bookshelfRefreshingLimit = Math.max(0, Math.min(100, draft.bookshelfRefreshingLimit + delta));
+                draft.bookshelfRefreshingLimit = value;
               });
             })
         }.width('100%').padding({ bottom: 24 })
       }.edgeEffect(EdgeEffect.None).layoutWeight(1).scrollBar(BarState.Off)
     }.width('100%').height('100%').backgroundColor('#17181E')
+      .overlay(this.TagContentDialogOverlay(), { align: Alignment.Center })
   }
 
   /**
@@ -2301,7 +3840,15 @@ export struct BookshelfPage {
    */
   @Builder
   private ShelfSheetContent() {
-    if (this.showPasswordPanel) {
+    if (this.aiShowApplyConfirm) {
+      this.AiApplyConfirmSheet()
+    } else if (this.showMoveGroupSheet) {
+      this.MoveGroupSheetContent()
+    } else if (this.showAddUrlDialog) {
+      this.AddUrlDialogSheet()
+    } else if (this.showBatchDownloadConfirm) {
+      this.BatchDownloadConfirmSheet()
+    } else if (this.showPasswordPanel) {
       this.PasswordSheet()
     } else if (this.showBatchDeleteSheet) {
       this.BatchDeleteSheet()
@@ -2311,6 +3858,10 @@ export struct BookshelfPage {
       this.LayoutSheetContent()
     } else if (this.showLogSheet) {
       this.LogSheetContent()
+    } else if (this.showImportSheet) {
+      this.ImportSheetContent()
+    } else if (this.showExportSheet) {
+      this.ExportSheetContent()
     } else {
       this.GroupManagerSheet()
     }
@@ -2413,35 +3964,135 @@ export struct BookshelfPage {
     try {
       const saved = await BookshelfListTransfer.exportList(context, this.books);
       if (saved) {
+        // 上游 exportToUri 成功固定 toast「导出成功」（BookshelfViewModel.kt:1358）。
         AppLog.put(`书单导出成功，共 ${this.books.length} 本`);
-        this.onUnavailableAction(`已导出 ${this.books.length} 本书到 bookshelf.json`);
+        this.onUnavailableAction('导出成功');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.onUnavailableAction(`书单导出失败：${message}`);
+      // 上游 exportToUri 失败是「导出失败\n${message}」（:1360）。
+      this.onUnavailableAction(`导出失败\n${message}`);
       AppLog.put(`书单导出失败: ${message}`);
     }
   }
 
-  /** 导入书单：选 .json/.txt 解析，新增条目经回调交 Index 落库刷新书架。 */
+  /**
+   * A-30 的「上传」支路：把书单 JSON 传到直链上传服务，成功拿到可分享 URL。
+   *
+   * 上游 `BookshelfViewModel.kt:1364-1381 uploadBookshelf`：
+   * `uploadRepository.upload(fileName = "bookshelf.json", file = json, contentType = "application/json")`
+   * → 成功把 URL 塞 `pendingUploadUrlFlow`，`BookshelfScreen.kt:357-370` 弹 snackbar
+   * 「上传成功: $url」并带「复制链接」action；失败「上传失败: ...」。
+   * 本地上传实现是 `lib/DirectLinkUpload.ets`（对齐上游 `DirectLinkUpload.upLoad`），
+   * 规则由用户在「其它设置 → 直链上传」里配置。
+   */
+  private async uploadBookList(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    if (this.books.length === 0) {
+      // 上游 exportBookshelf 空列表抛 NoStackTraceException("书籍不能为空")。
+      this.onUnavailableAction('书籍不能为空');
+      return;
+    }
+    const json = BookshelfListTransfer.toJson(this.books);
+    this.busyText = '上传中…';
+    try {
+      const rule = await DirectLinkUploadStore.loadRule(context);
+      const url = await DirectLinkUpload.upload(context, 'bookshelf.json', json, 'application/json', rule);
+      AppLog.put(`书单上传成功: ${url}`);
+      this.getUIContext().showAlertDialog({
+        title: '上传成功',
+        message: url,
+        autoCancel: true,
+        primaryButton: { value: '关闭', action: () => {} },
+        secondaryButton: {
+          value: '复制链接',
+          action: () => { void this.copyUploadUrl(url); }
+        }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.onUnavailableAction(`上传失败: ${message}`);
+      AppLog.put(`书单上传失败: ${message}`);
+    } finally {
+      this.busyText = '';
+    }
+  }
+
+  /** 上传成功后「复制链接」：对齐上游 snackbar 的 actionLabel（BookshelfScreen.kt:361-368）。 */
+  private async copyUploadUrl(url: string): Promise<void> {
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, url);
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.onUnavailableAction('链接已复制');
+    } catch (error) {
+      this.onUnavailableAction('复制失败');
+    }
+  }
+
+  /**
+   * 导入书单（选系统文件那条路）。
+   *
+   * 对齐上游 `ImportBookshelfUseCase.importByJson`（:66-109）：书单条目只有书名/作者，
+   * 必须用全部启用书源精确搜索补全成在线书才入库，搜不到的提示「没有搜索到<书名><作者>」。
+   * 补全逻辑在 `bookSource/PreciseSearchCoordinator.ets`。
+   *
+   * 上游 `groupId = uiState.groups.getOrNull(uiState.selectedGroupIndex)?.groupId ?: -1L`
+   * 且 `if (groupId > 0) book.group = groupId`——本地分组按名字存（Book.groupNames），
+   * 所以等价做法是把当前筛选分组名写进 groupNames。
+   */
   private async importBookList(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) { return; }
     try {
       const entries = await BookshelfListTransfer.selectAndParse(context);
       if (entries === undefined) { return; }
-      const books = BookshelfListTransfer.toBooks(entries, this.books);
-      if (books.length === 0) {
-        this.onUnavailableAction('书单里没有可导入的新书（可能都已存在）');
-        return;
-      }
-      await this.onImportBookList(books);
-      AppLog.put(`书单导入成功，新增 ${books.length} 本`);
-      this.onUnavailableAction(`已导入 ${books.length} 本书`);
+      await this.applyImportedEntries(entries);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.onUnavailableAction(`书单导入失败：${message}`);
       AppLog.put(`书单导入失败: ${message}`);
+    }
+  }
+
+  /** 把解析出的书单条目补全成在线书并落库；搜不到的逐条提示。 */
+  private async applyImportedEntries(entries: BookshelfListEntry[]): Promise<void> {
+    const searchEntries = BookshelfListTransfer.toSearchEntries(entries);
+    if (searchEntries.length === 0) {
+      this.onUnavailableAction('书单里没有可导入的书目');
+      return;
+    }
+    this.busyText = '导入中...';
+    try {
+      const outcome = await PreciseSearchCoordinator.searchMany(searchEntries, this.books,
+        (done: number, total: number) => {
+          this.busyText = `导入中... (${done}/${total})`;
+        });
+      const filter = this.activeFilter();
+      if (filter !== '全部') {
+        for (let index = 0; index < outcome.books.length; index++) {
+          const book = outcome.books[index];
+          book.groupNames = [filter];
+          book.groupName = filter;
+        }
+      }
+      if (outcome.books.length > 0) {
+        await this.onImportBookList(outcome.books);
+        AppLog.put(`书单导入成功，新增 ${outcome.books.length} 本`);
+        this.onUnavailableAction('成功');
+      }
+      // 上游逐条 toast「没有搜索到<name><author>」；本地没有逐条 toast 队列，聚合成一条，
+      // 条目多时只列前 3 个并带总数，避免提示框被撑爆。
+      if (outcome.missing.length > 0) {
+        const shown = outcome.missing.slice(0, 3).join('、');
+        const more = outcome.missing.length > 3 ? ` 等 ${outcome.missing.length} 本` : '';
+        this.onUnavailableAction(`没有搜索到<${shown}>${more}`);
+      }
+      if (outcome.books.length === 0 && outcome.missing.length === 0) {
+        this.onUnavailableAction('书单里没有可导入的新书（可能都已存在）');
+      }
+    } finally {
+      this.busyText = '';
     }
   }
 
@@ -2471,7 +4122,6 @@ export struct BookshelfPage {
       { key: 'add_url', title: '添加网址', icon: 'link' },
       { key: 'selection_mode', title: '选择模式', icon: 'edit' },
       { key: 'shelf_manage', title: '书架管理', icon: 'bookmark' },
-      { key: 'download_all', title: '下载全部', icon: 'download' },
       { key: 'export_list', title: '导出书单', icon: 'uploadFile' },
       { key: 'import_list', title: '导入书单', icon: 'cloudDownload' },
       { key: 'log', title: '日志', icon: 'profileHistory' }
@@ -2513,7 +4163,9 @@ export struct BookshelfPage {
       return;
     }
     if (key === 'add_url') {
-      this.onUnavailableAction('网址导入尚未迁移');
+      // H-6：上游 BookshelfScreen.kt:1483-1491 走 SourceInputDialog，确认后 AddBookByUrl。
+      this.addUrlInput = '';
+      this.showAddUrlDialog = true;
       return;
     }
     if (key === 'selection_mode') {
@@ -2524,17 +4176,14 @@ export struct BookshelfPage {
       this.onOpenBookshelfManage(this.activeFilter());
       return;
     }
-    if (key === 'download_all') {
-      // 批2（:145）：书架页与书架管理页给的是同一个动作，都落到 Index 的 downloadBooks。
-      this.onDownloadBooks(this.getVisibleBooks());
-      return;
-    }
     if (key === 'export_list') {
-      await this.exportBookList();
+      // 上游 BookshelfScreen.kt:1507-1519：导出书单先弹 FilePickerSheet（选系统文件夹 / 上传 URL 两条路）。
+      this.showExportSheet = true;
       return;
     }
     if (key === 'import_list') {
-      await this.importBookList();
+      // 上游 BookshelfScreen.kt:1493-1505：导入书单先弹 FilePickerSheet（选系统文件 / 输入URL 两条路）。
+      this.showImportSheet = true;
       return;
     }
     if (key === 'log') {
@@ -2543,19 +4192,192 @@ export struct BookshelfPage {
     }
   }
 
+  /**
+   * A-29：导入书单面板，对齐上游 `FilePickerSheet`（`ui/widget/components/filePicker/FilePickerSheet.kt:22-78`）
+   * 在 `BookshelfScreen.kt:1493-1505` 的调用形态：
+   * `title = import_bookshelf`，两条路 `onSelectSysFile`（选系统文件）与
+   * `onManualInput`（跳 `AddUrlDialog`）。上游 `allowExtensions = arrayOf("json", "txt")`。
+   *
+   * 布局对齐上游 `OptionSheet`（`ui/widget/components/modalBottomSheet/OptionSheet.kt:25-87`）：
+   * 每行最多 2 张卡、卡间距 12、卡高 100、圆角 12、底色 onSheetContent，
+   * 卡内 32vp 图标（primary）+ 8vp 间隔 + labelMedium 单行文字。
+   */
+  @Builder
+  private ImportSheetContent() {
+    Column() {
+      Row() {
+        Text('导入书单').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 12 })
+      Row({ space: 12 }) {
+        this.FilePickerOptionCard('profileSave', '系统文件选择器', () => {
+          this.showImportSheet = false;
+          void this.importBookList();
+        })
+        this.FilePickerOptionCard('edit', '输入URL', () => {
+          // 上游 onManualInput 是 `onIntent(ShowOverlay(BookshelfOverlay.AddUrlDialog))`，
+          // 复用的就是「添加网址」那个对话框（其确认动作固定是 AddBookByUrl）。
+          this.showImportSheet = false;
+          this.addUrlInput = '';
+          this.showAddUrlDialog = true;
+        })
+      }.width('100%').padding({ left: 18, right: 18 }).alignItems(VerticalAlign.Top)
+      Column().height(24)
+    }.width('100%')
+  }
+
+  /**
+   * A-30：导出书单面板，对齐上游 `FilePickerSheet` 在 `BookshelfScreen.kt:1507-1519` 的调用形态：
+   * `title = export_bookshelf`，两条路 `onSelectSysDir`（选系统文件夹存 bookshelf.json）与
+   * `onUpload`（`BookshelfIntent.UploadBookshelf` → 直链上传拿 URL）。
+   */
+  @Builder
+  private ExportSheetContent() {
+    Column() {
+      Row() {
+        Text('导出书单').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+          .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+      }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 12 })
+      Row({ space: 12 }) {
+        this.FilePickerOptionCard('folder', '系统文件夹选择器', () => {
+          this.showExportSheet = false;
+          void this.exportBookList();
+        })
+        this.FilePickerOptionCard('cloudUpload', '上传 URL', () => {
+          this.showExportSheet = false;
+          void this.uploadBookList();
+        })
+      }.width('100%').padding({ left: 18, right: 18 }).alignItems(VerticalAlign.Top)
+      Column().height(24)
+    }.width('100%')
+  }
+
+  /** 上游 `OptionCard`（`OptionSheet.kt:55-87`）的等价卡片：weight 1 + 高 100 + 圆角 12 + onSheetContent 底。 */
+  @Builder
+  private FilePickerOptionCard(icon: AppGlyphName, label: string, action: () => void) {
+    Column({ space: 8 }) {
+      AppGlyph({ name: icon, glyphSize: 32, tint: this.themeColorAccent })
+      Text(label).fontSize(LABEL_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
+    }
+    .layoutWeight(1).height(100).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    .backgroundColor(this.themeColorOnSheetContent).borderRadius(12)
+    .onClick(action)
+  }
+
+  /**
+   * H-6：网址导入对话框，对齐上游 `SourceInputDialog`（ImportComponents.kt:57-105）：
+   * 标题「添加网址」、多行输入框、空输入不提交、确认后走 AddBookByUrlUseCase。
+   */
+  @Builder
+  private AddUrlDialogSheet() {
+    Column() {
+      Text('添加网址').fontSize(TITLE_LARGE).fontWeight(FontWeight.Bold)
+        .fontColor(this.themeColorTextPrimary).layoutWeight(1)
+    }.width('100%').padding({ left: 18, right: 18, top: 14, bottom: 10 })
+    Column() {
+      TextArea({ placeholder: '请输入 URL 或 JSON', text: this.addUrlInput })
+        .fontSize(BODY_MEDIUM).fontColor(this.themeColorTextPrimary)
+        .placeholderColor(this.themeColorTextTertiary)
+        .backgroundColor(this.themeColorSurfaceElevated)
+        .borderRadius(8).width('100%').constraintSize({ minHeight: 96, maxHeight: 200 })
+        .onChange((value: string) => { this.addUrlInput = value; })
+    }.width('100%').padding({ left: 18, right: 18, bottom: 14 }).alignItems(HorizontalAlign.Start)
+    Row() {
+      Text('取消').fontSize(LABEL_LARGE).fontColor(this.themeColorTextTertiary).padding(10)
+        .onClick(() => { this.showAddUrlDialog = false; })
+      Blank()
+      Text('确定').fontSize(LABEL_LARGE).fontColor(this.themeColorAccent).padding(10)
+        .onClick(() => { void this.submitAddUrl(); })
+    }.width('100%').padding({ left: 10, right: 10, bottom: 16 })
+  }
+
+  /**
+   * H-6 提交：空输入直接忽略（上游 `if (text.isNotBlank()) onConfirm(text)`）；
+   * 有输入则跑 AddBookByUrlUseCase 的完整流程，成功后提示并刷新书架。
+   */
+  private async submitAddUrl(): Promise<void> {
+    const raw = this.addUrlInput.trim();
+    if (raw.length === 0) { return; }
+    this.showAddUrlDialog = false;
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) { return; }
+    this.busyText = '添加中…';
+    try {
+      const result = await AddBookByUrlUseCase.execute(context, raw, (count: number) => {
+        this.busyText = `添加中… (${count})`;
+      });
+      if (result.successCount > 0) {
+        this.onUnavailableAction('添加成功');
+        await this.onImportBookList([]);
+      } else {
+        const reason = result.failures.length > 0 ? `：${result.failures[0]}` : '';
+        this.onUnavailableAction(`添加网址失败${reason}`);
+      }
+    } finally {
+      this.busyText = '';
+    }
+  }
+
+  /**
+   * A-7：编辑态顶栏左侧的关闭按钮，对齐上游 `TopBarNavigationButton(Close, cancel_select)`。
+   * 上游文案取 `R.string.cancel_select`（zh-rCN「取消选择」）。
+   */
+  @Builder
+  private SelectionExitIcon() {
+    Row() {
+      AppGlyph({ name: 'profileClose', glyphSize: 20, tint: this.themeColorTextPrimary })
+    }
+    .width(40).height(40).justifyContent(FlexAlign.Center)
+    .borderRadius(20)
+    .accessibilityText('取消选择')
+    .onClick(() => { this.clearSelection(); })
+  }
+
   @Builder bookshelfTopActions() {
     if (this.selectionMode) {
-      // 上游 `BookshelfScreen.kt:611-680` 的选择态顶栏是「全选 / 反选 / 下载 / 移入分组 /
-      // 私有标记 / 删除选中」六个动作（文案分别取 `select_all` `revert_selection`
-      // `action_download` `move_to_group` `private_mark_book`|`private_unmark_book`
-      // `delete_selected`），本地选择态只保留了退出选择这一个按钮，对应上游顶栏左侧的
-      // `onExitEditMode`，文案取 `R.string.close`。
-      TopBarButton({ icon: 'profileClose', showDivider: false, accessibilityLabel: '关闭', onSelect: () => this.clearSelection() })
+      // G-1/G-2/G-4/G-5/G-6：编辑态六个动作在顶栏 actions 槽（上游 BookshelfScreen.kt:609-681
+      // 全部 AnimatedVisibility(visible = isEditMode)）——全选 / 反选 / 下载 / 移入分组 /
+      // 私密标记 / 删除选中。顶栏左侧的退出按钮由 AppTopBar 的 navigationIcon 承担（A-7）。
+      TopBarButton({ icon: 'selectAll', showDivider: false, accessibilityLabel: '全选', onSelect: () => this.selectAllVisible() })
+      TopBarButton({ icon: 'profileRefresh', showDivider: false, accessibilityLabel: '反选', onSelect: () => this.invertVisibleSelection() })
+      // :627-629 空选时点下载不弹框。
+      TopBarButton({
+        icon: 'download', showDivider: false, accessibilityLabel: '下载',
+        disabled: this.selectedBookKeys.size === 0,
+        onSelect: () => { if (this.selectedBookKeys.size > 0) { this.showBatchDownloadConfirm = true; } }
+      })
+      // :638-640 空选时点移组不弹面板。
+      TopBarButton({
+        icon: 'bookmark', showDivider: false, accessibilityLabel: '移入分组',
+        disabled: this.selectedBookKeys.size === 0,
+        onSelect: () => { if (this.selectedBookKeys.size > 0) { this.openMoveGroupSheet(); } }
+      })
+      // :646-669 可见条件「编辑态且已设过本地密码」；文案随目标态切换。
+      if (this.privateHasPassword) {
+        TopBarButton({
+          icon: 'lock', showDivider: false,
+          accessibilityLabel: this.selectionTargetPrivate() ? '设为私密' : '取消私密',
+          disabled: this.selectedBookKeys.size === 0,
+          onSelect: () => { if (this.selectedBookKeys.size > 0) { void this.toggleSelectedPrivate(); } }
+        })
+      }
+      // :674-676 空选时点删除不弹确认框。
+      TopBarButton({
+        icon: 'delete', showDivider: false, accessibilityLabel: '删除选中',
+        disabled: this.selectedBookKeys.size === 0,
+        onSelect: () => {
+          if (this.selectedBookKeys.size > 0) { this.batchDeleteSource = false; this.showBatchDeleteSheet = true; }
+        }
+      })
     } else {
+      // B-1：上游 :1365-1371 同一颗按钮，点按与长按各有一个 contentDescription
+      // （bookshelfSearchActionDirectToSearch 决定谁是「搜索」谁是「筛选」），
+      // 长按的语义标签单独挂在 GestureGroup 上。
       TopBarButton({
         icon: 'search',
         showDivider: false,
-        accessibilityLabel: '搜索',
+        accessibilityLabel: this.layout.bookshelfSearchActionDirectToSearch ? '搜索' : '筛选',
         onSelect: () => {
           if (this.layout.bookshelfSearchActionDirectToSearch) {
             this.onSearch();
@@ -2564,7 +4386,8 @@ export struct BookshelfPage {
             if (!this.showSearch) { this.searchQuery = ''; }
           }
         }
-      }).priorityGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
+      }).accessibilityText(this.layout.bookshelfSearchActionDirectToSearch ? '搜索' : '筛选')
+      .priorityGesture(LongPressGesture({ duration: 500 }).onAction((_event: GestureEvent): void => {
         if (this.layout.bookshelfSearchActionDirectToSearch) {
           this.showSearch = !this.showSearch;
           if (!this.showSearch) { this.searchQuery = ''; }
@@ -2592,6 +4415,10 @@ export struct BookshelfPage {
     Stack({ alignContent: Alignment.Center }) {
     Column() {
       AppTopBar({
+        // A-7：编辑态顶栏左侧给关闭按钮，对齐上游 BookshelfScreen.kt:1348-1354
+        // `if (uiState.isEditMode) TopBarNavigationButton(Close, cancel_select)`。
+        hasNavigation: this.selectionMode,
+        navigationIcon: () => { this.SelectionExitIcon() },
         title: this.bookshelfTitle(),
         // :368（批6，r360）：首屏数据到位前标题逐字淡入，到位后由 999 切回整段渲染。
         titleRevealStep: this.titleRevealStep,
@@ -2603,10 +4430,17 @@ export struct BookshelfPage {
       if (this.showSearch) {
         Row() {
           AppGlyph({ name: 'search', glyphSize: 17 }).margin({ right: 9 })
-          TextInput({ placeholder: '搜索书名或作者…', text: this.searchQuery })
+          TextInput({ placeholder: '筛选书名/作者/书源/分组', text: this.searchQuery })
             .fontSize(TITLE_MEDIUM).fontColor(this.themeColorTextSecondary).placeholderColor(this.themeColorTextTertiary)
             .backgroundColor(Color.Transparent).layoutWeight(1)
+            .enterKeyType(EnterKeyType.Search)
             .onChange((value: string) => this.searchQuery = value)
+            // G-20：上游 BookshelfScreen.kt:602-606 提交后跳全局搜索
+            // （`rawQuery.trim().takeIf{ it.isNotEmpty() }?.let(onNavigateToSearch)`）。
+            .onSubmit((_enterKey: EnterKeyType, _event: SubmitEvent) => {
+              const raw = this.searchQuery.trim();
+              if (raw.length > 0) { this.onSearch(); }
+            })
           if (this.searchQuery.length > 0) {
             AppGlyph({ name: 'profileClose', glyphSize: 14 }).margin({ left: 6 })
               .onClick(() => { this.searchQuery = ''; })
@@ -2685,13 +4519,30 @@ export struct BookshelfPage {
       if (this.selectionMode) {
         // 选择模式工具条（:142-144 / :146 / :148）。
         Row() {
-          Text(`已选 ${this.selectedBookKeys.size} 本`).fontSize(BODY_SMALL)
+          // E-9：底栏最左是关闭图标按钮（上游 BookshelfScreen.kt:1208-1219
+          // TextCard(Close, surfaceContainerHighest, cornerRadius=16) → exitEditMode）。
+          Row() {
+            AppGlyph({ name: 'profileClose', glyphSize: 18, tint: this.themeColorTextPrimary })
+          }
+          .width(32).height(32).borderRadius(16)
+          .backgroundColor(this.themeColorSurfaceElevated)
+          .justifyContent(FlexAlign.Center)
+          .accessibilityText('关闭')
+          .onClick(() => this.clearSelection())
+          // E-10：上游底栏是「已选 N 本 · 共 M 本」双计数
+          // （BookshelfScreen.kt:1221-1236，bookshelf_selected_count + bookshelf_total_count），
+          // 本地原先只有已选数，补上本组总数。
+          Text(`已选 ${this.selectedBookKeys.size} 本 · 共 ${this.getVisibleBooks().length} 本`)
+            .fontSize(BODY_SMALL)
             .fontColor(this.themeColorTextPrimary).layoutWeight(1)
-          Text('全选').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
-            .onClick(() => this.selectAllVisible())
-          Text('反选').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
-            .onClick(() => this.invertVisibleSelection())
-          Text('移动').fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
+          // G-1/G-2/G-4/G-5/G-6：全选/反选/下载/移组/私密/删除已移到顶栏 actions
+          // （上游 BookshelfScreen.kt:609-681），底栏只留关闭 + 双计数 + 组名 chip
+          // （上游 :1199-1255 的 NormalCard 内容）。
+          // E-11：底栏组名 chip（上游 BookshelfScreen.kt:1238-1253
+          // TextCard(summary.groupName, cornerRadius=16) → GroupMenu），点开分组菜单。
+          Text(this.activeFilter()).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary)
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .backgroundColor(this.themeColorSurfaceElevated).borderRadius(16)
             .onClick(() => { this.selectionGroupVisible = !this.selectionGroupVisible; })
             .bindPopup(this.selectionGroupVisible, {
               builder: this.SelectionGroupMenu,
@@ -2702,22 +4553,11 @@ export struct BookshelfPage {
               width: SHELF_MENU_WIDTH,
               onStateChange: (event: PopupStateChangeParam) => { this.selectionGroupVisible = event.isVisible; }
             })
-          // 批量私密标记（:147）：上游的可见条件是「编辑态且已设过本地密码」，
-          // 没密码时不显示，免得留一个点了只能弹「请先设置密码」的按钮。
-          if (this.privateHasPassword) {
-            Text(this.selectionTargetPrivate() ? '设为私密' : '取消私密')
-              .fontSize(BODY_SMALL).fontColor(this.themeColorAccent).padding(6)
-              .onClick(async () => { await this.toggleSelectedPrivate(); })
-          }
-          Text('删除').fontSize(BODY_SMALL).fontColor('#FF6B6B').padding(6)
-            .onClick(() => { this.batchDeleteSource = false; this.showBatchDeleteSheet = true; })
-          Text('完成').fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary).padding(6)
-            .onClick(() => this.clearSelection())
         }.width('100%').padding({ left: 16, right: 12, bottom: 8 })
       }
       if (this.layout.bookGroupStyle === 2 && this.folderViewGroup.length === 0) {
         // 文件夹根层：分组卡片网格，列数按横竖屏各取一套（KI-SL-C2）。
-        Grid() {
+        Grid(this.folderScroller) {
           ForEach(this.getFolderGroups(), (groupName: string) => {
             GridItem() {
               BookGroupCard({
@@ -2731,6 +4571,7 @@ export struct BookshelfPage {
                 showCount: this.layout.showBookCount,
                 // :384 分组卡封面阴影：书架布局开关的直接消费点。
                 coverShadow: this.layout.bookshelfCoverShadow,
+                showDivider: this.layout.bookshelfShowDivider,
                 // 私密分组锁定态（:257）：锁定时不画预览、不显示计数、组名旁加锁图标。
                 locked: this.isGroupLocked(groupName),
                 onOpen: () => { this.openFolderGroup(groupName); },
@@ -2744,9 +4585,9 @@ export struct BookshelfPage {
           }, (groupName: string) => `folder_${groupName}_${this.getFolderPreviewBooks(groupName).length}_${this.layout.bookshelfGroupCoverCount}_${this.layout.bookshelfGroupListStyle}_${this.activeLayoutMode()}`)
         }.edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.folderColumnsTemplate())
-        .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
+        .rowsGap(this.gridGap()).columnsGap(this.gridGap()).width('100%')
         .padding({
-          left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING,
+          left: this.gridHorizontalPadding(), right: this.gridHorizontalPadding(),
           bottom: this.raisedBottomInset()
         })
         .layoutWeight(1).scrollBar(BarState.Off)
@@ -2772,85 +4613,130 @@ export struct BookshelfPage {
                   // 封面宽度只认 bookshelfListCoverWidth；网格封面宽度不参与本分支。
                   Column() {
                     Row() {
-                      BookCover({
+                      // B-2/C-4：上游 `BookItem.kt:200` 是 `Box(Modifier.width(coverWidth.dp))`，
+                      // 里面 `:271-273` 再套 `Box(Modifier.padding(4.dp).fillMaxWidth().aspectRatio(5f/7f))`。
+                      // 所以封面盒宽 = 设置值、总高按 5:7 由盒宽推导，图片本身比盒小 8vp（左右各 4）。
+                      Column() {
+                        BookCover({
                         book: book,
                         compact: true,
                         showChapterBadge: true,
+                        // A-5/C-3：上游 `BookItem.kt:275` 封面 `.clip(RoundedCornerShape(4.dp))`，
+                        // `:274` 阴影也是 `RoundedCornerShape(4.dp)`。ArkUI 的 `.shadow()` 形状
+                        // 跟随组件 borderRadius，所以这里显式给 4，阴影圆角才与上游一致。
+                        cornerRadius: 4,
                         shadowEnabled: this.layout.bookshelfCoverShadow,
-                        fillWidth: false,
-                        displayWidth: this.layout.bookshelfListCoverWidth,
-                        displayHeight: Math.round(this.layout.bookshelfListCoverWidth * 7 / 5),
+                        // 盒内填满：宽度高度都交给外层盒子定，见下方 .width/.aspectRatio/.padding。
+                        fillWidth: true,
+                        maxWidth: 0,
                         coverSettings: this.coverSettings,
                         isNight: this.readerNightMode,
+                        // 更新目录进度线画在封面底部（上游 BookItem.kt:782 的
+                        // `isUpdating = isUpdating && !locked`：锁定态不显示进度）。
+                        isUpdating: this.refreshingOf(book) && !this.isBookLocked(book),
                         // 私密书封面盖一层锁遮罩（:325）。
                         locked: this.isBookLocked(book),
                         // 共享元素源端（上游 BookItem.kt:797 同一位置）。
                         sharedKey: this.sharedCoverKeyOf(book),
-                        a11yText: [book.title, book.author, book.lastChapter]
-                          .filter((value: string) => value.length > 0).join('，')
-                      })
+                        a11yText: this.a11yLabelOf(book)
+                        })
+                      }.width(this.layout.bookshelfListCoverWidth)
+                        .aspectRatio(5 / 7)
+                        .padding(4)
                       Column() {
-                        Row() {
-                          Text(book.title)
+                        // 1) 书名行 + 行末未读徽标（上游 BookItem.kt:210-221）
+                        Row({ space: 0 }) {
+                          Text(this.isBookLocked(book) ? '' : book.title)
                             .fontSize(this.bookshelfTitleFontSize())
                             .fontColor(this.themeColorTextSecondary)
                             .maxLines(this.layout.bookshelfTitleMaxLines)
                             .textOverflow({ overflow: TextOverflow.Ellipsis })
                             .layoutWeight(1)
                             .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
-                          if (this.unreadTextOf(book).length > 0) {
-                            Row() {
-                              Text(this.unreadTextOf(book)).fontSize(LABEL_SMALL).fontColor('#FFFFFFFF')
+                          // B-7：上游 `:853-864` 的 TextCard（iconSize 12、圆角 4、水平内边距 4、垂直 0，
+                          // 底色 cardContainer、字色 onCardContainer），外层 `:220` 再给 top/start 各 4dp。
+                          if (!this.isBookLocked(book) && this.unreadTextOf(book).length > 0) {
+                            Row({ space: 4 }) {
                               if (this.showBadgeDotOf(book)) {
-                                AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: '#FFFFFFFF' })
+                                AppGlyph({ name: 'profileRefresh', glyphSize: 12, tint: this.themeColorOnCardContainer })
                               }
-                            }.padding({ left: 4, right: 4 })
-                              .backgroundColor(this.themeColorAccent).borderRadius(4)
+                              Text(this.unreadTextOf(book))
+                                .fontSize(LABEL_SMALL_EMPHASIZED).fontWeight(FontWeight.Medium)
+                                .fontColor(this.themeColorOnCardContainer)
+                                .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                            }.padding({ left: 4, right: 4, top: 0, bottom: 0 })
+                              .backgroundColor(this.themeColorCardContainer).borderRadius(4)
+                              .margin({ top: 4, left: 4 })
                           }
-                        }.width('100%')
-                        // 简介在右列：需详情总门 + 显示简介开关 + 未开启「简介在下方」三个条件（上游 BookItem.kt:918）。
-                        if (this.showsListDetails() && this.layout.bookshelfShowIntro
-                          && !this.layout.bookshelfListIntroBelowContent) {
-                          Text(book.description ?? '')
-                            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
-                            .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
-                            .width('100%')
-                            .textAlign(TextAlign.Start)
-                            .padding({ top: 4, bottom: 4 })
-                        }
-                        // 章节行显示最新章节名（latestChapterTitle），不是当前阅读章 lastChapter。
-                        if (this.showsListDetails() && this.layout.bookshelfShowLatestChapter
-                          && (book.latestChapterTitle ?? '').length > 0) {
-                          Text(book.latestChapterTitle ?? '')
-                            .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
+                        }.width('100%').alignItems(VerticalAlign.Top)
+                        // 2) 作者行（上游 `:865-869` 的 subTitle，渲染在 `:222-229`，bodySmall 单行）
+                        if (!this.isBookLocked(book)) {
+                          Text(this.authorLineOf(book))
+                            .fontSize(BODY_SMALL).fontColor(this.themeColorTextTertiary)
                             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                            .width('100%')
-                            .textAlign(TextAlign.Start)
+                            .width('100%').textAlign(TextAlign.Start)
                         }
-                        // 最后更新时间：上游仅非本地书显示，本地书恒不显示（本项目书全是本地书）。
-                        if (this.layout.showLastUpdateTime && !book.isLocal
-                          && book.latestChapterTime !== undefined) {
-                          Text(toTimeAgo(book.latestChapterTime)).fontSize(LABEL_SMALL)
-                            .fontColor(this.themeColorTextTertiary).opacity(0.5)
+                        // 3) 当前阅读章（上游 `:870` 的 desc = durChapterTitle，本地字段是 lastChapter），
+                        //    上游 `:230` 只在非精简模式渲染。
+                        if (!this.isBookLocked(book) && !this.layout.bookshelfLayoutCompact
+                          && book.lastChapter.length > 0) {
+                          Text(book.lastChapter)
+                            .fontSize(LABEL_SMALL_EMPHASIZED).fontColor(this.themeColorTextTertiary)
+                            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                            .width('100%').textAlign(TextAlign.Start)
                         }
-                        if (this.bookTypeLabel(book).length > 0) {
-                          Text(this.bookTypeLabel(book)).fontSize(LABEL_SMALL).fontColor(this.themeColorAccent)
+                        // 4) 更新时间 + 最新章节（上游 `:924-940` 的 extra，同一 Row，半透明 onSurface）
+                        if (!this.isBookLocked(book) && this.showsListDetails()
+                          && this.layout.bookshelfShowLatestChapter) {
+                          Row({ space: 4 }) {
+                            if (this.layout.showLastUpdateTime && !book.isLocal
+                              && book.latestChapterTime !== undefined) {
+                              Text(toTimeAgo(book.latestChapterTime))
+                                .fontSize(LABEL_SMALL_EMPHASIZED).fontColor(this.themeColorOnSurface)
+                                .opacity(0.5).margin({ right: 4 })
+                            }
+                            if ((book.latestChapterTitle ?? '').length > 0) {
+                              Text(book.latestChapterTitle ?? '')
+                                .fontSize(LABEL_SMALL_EMPHASIZED).fontColor(this.themeColorOnSurface)
+                                .opacity(0.5).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                                .layoutWeight(1)
+                            }
+                          }.width('100%')
                         }
-                        this.BookTagRow(book)
+                        // 5) 标签行 + 简介（上游 `:912-924` 的 columnContent，整块受 locked 与 showListDetails 控制）
+                        if (!this.isBookLocked(book) && this.showsListDetails()) {
+                          this.BookTagRow(book)
+                          if (this.hasIntroOf(book) && !this.layout.bookshelfListIntroBelowContent) {
+                            Text(this.introTextOf(book))
+                              .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant)
+                              .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
+                              .width('100%').textAlign(TextAlign.Start)
+                              .padding({ top: 4, bottom: 4 })
+                          }
+                        }
                       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-                        .padding({ left: 8, right: 4 })
+                        // B-4：上游 `BookItem.kt:204-209`
+                        // `Column(Modifier.weight(1f).padding(top=4, bottom=4, end=8, start=4), verticalArrangement = Center)`。
+                        .padding({ left: 4, right: 8, top: 4, bottom: 4 })
+                        .justifyContent(FlexAlign.Center)
                     }.width('100%')
                       // 封面垂直居中（上游 BookItem.kt:194 的 bookshelfListCoverCenter）。
                       .alignItems(this.layout.bookshelfListCoverCenter ? VerticalAlign.Center : VerticalAlign.Top)
-                    // 简介铺在卡片底部（上游 BookItem.kt:925 的 bottomContent）。
-                    if (this.showsListDetails() && this.layout.bookshelfShowIntro
+                    // G-5：简介铺在卡片底部（上游 BookItem.kt:927-941 的 bottomContent）——
+                    // 外面是 `GlassCard(Modifier.padding(all = 4.dp), cornerRadius = 4.dp, containerColor = cardContainer)`，
+                    // 里面 `BookItemIntro(Modifier.padding(horizontal = 8.dp))`，BookItemIntro 自带上下 4dp。
+                    if (!this.isBookLocked(book) && this.hasIntroOf(book)
                       && this.layout.bookshelfListIntroBelowContent) {
-                      Text(book.description ?? '')
-                        .fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
-                        .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .width('100%')
-                        .textAlign(TextAlign.Start)
-                        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      Column() {
+                        Text(this.introTextOf(book))
+                          .fontSize(BODY_SMALL).fontColor(this.themeColorOnSurfaceVariant)
+                          .maxLines(this.introMaxLines()).textOverflow({ overflow: TextOverflow.Ellipsis })
+                          .width('100%').textAlign(TextAlign.Start)
+                          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      }.width('100%')
+                        .backgroundColor(this.themeColorCardContainer)
+                        .borderRadius(4)
+                        .margin(4)
                     }
                     // 列表卡片之间的细横线（上游 BookItem.kt:253-260 的 HorizontalDivider，0.5dp、水平留白 16dp）。
                     if (this.layout.bookshelfShowDivider) {
@@ -2859,60 +4745,81 @@ export struct BookshelfPage {
                       }.width('100%').padding({ left: 16, right: 16 })
                     }
                   }.width('100%')
+                    // C-5：列表卡上下各留 4dp（上游 BookItem.kt:178-182
+                    // `NormalCard(modifier.fillMaxWidth().padding(vertical = 4.dp))`）。
+                    .padding({ top: 4, bottom: 4 })
                 } else {
                 Stack({ alignContent: Alignment.Bottom }) {
-                  BookCover({
+                  // A-9/C-4：上游 `BookItem.kt:107` 的 `Column(Modifier.width(coverWidth.dp))`
+                  // 内再套 `:271-273` 的 `Box(padding(4.dp).fillMaxWidth().aspectRatio(5f/7f))`。
+                  Column() {
+                    BookCover({
                     book: book,
                     compact: true,
                     showChapterBadge: false,
-                    badgeText: this.unreadTextOf(book),
-                    showBadgeDot: this.showBadgeDotOf(book),
-                    // 类型标签画在封面左下角（上游 BookItem.kt:794 的 leftBottomText）；
-                    // 上游是 `matchedSourceLabel ?: bookTypeLabel`，本地没有搜索命中书源这一态。
-                    leftBottomText: this.bookTypeLabel(book),
+                    // A-5/C-3：同列表分支，封面圆角与阴影形状都固定 4（上游 BookItem.kt:274-275）。
+                    cornerRadius: 4,
+                    // 上游 BookItem.kt:792 `badgeText = if (locked) null else ...`：
+                    // 锁定态不显示未读角标，否则未读数是真实信息泄漏。
+                    badgeText: this.isBookLocked(book) ? '' : this.unreadTextOf(book),
+                    showBadgeDot: this.isBookLocked(book) ? false : this.showBadgeDotOf(book),
+                    // I-1：左下角标签 = 搜索命中书源名 ?: 类型标签（上游 BookItem.kt:794）；
+                    // 锁定态整块不显示（`:794` 的 `if (locked) null`）。
+                    leftBottomText: this.isBookLocked(book) ? ''
+                      : (this.matchedSourceLabelOf(book).length > 0
+                        ? this.matchedSourceLabelOf(book) : this.bookTypeLabel(book)),
                     shadowEnabled: this.layout.bookshelfCoverShadow,
+                    // 盒内填满：宽高由外层盒子（设置值 × 5:7）决定。
                     fillWidth: true,
-                    maxWidth: this.bookshelfCoverWidthLimit(),
+                    maxWidth: 0,
                     coverSettings: this.coverSettings,
                     isNight: this.readerNightMode,
+                    // 更新目录进度线画在封面底部（上游 BookItem.kt:782 `isUpdating && !locked`）。
+                    isUpdating: this.refreshingOf(book) && !this.isBookLocked(book),
                     // 私密书封面盖一层锁遮罩（:325）。
                     locked: this.isBookLocked(book),
                     // 共享元素源端（上游 BookItem.kt:797 同一位置）。
                     sharedKey: this.sharedCoverKeyOf(book),
-                    a11yText: [book.title, book.author, book.lastChapter]
-                      .filter((value: string) => value.length > 0).join('，')
-                  })
+                    a11yText: this.a11yLabelOf(book)
+                    })
+                  }.width(this.gridCoverColumnWidth())
+                    .aspectRatio(5 / 7)
+                    .padding(4)
                   if (this.layout.bookshelfGridLayout === 1) {
                     // 紧凑样式：书名移进封面内底部，白字配渐变黑底（上游 BookItem.kt:110-133）
-                    Text(book.title).fontSize(this.bookshelfTitleFontSize()).fontColor('#FFFFFFFF')
+                    Text(this.isBookLocked(book) ? '' : book.title)
+                      .fontSize(this.bookshelfTitleFontSize()).fontColor('#FFFFFFFF')
                       .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                       .width('100%')
                       .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
                       .padding({ left: 4, right: 4, top: 14, bottom: 4 })
                       .linearGradient(this.coverTitleGradient())
                   }
-                }.width('100%')
-                if (this.refreshingOf(book)) {
-                  Row() {
-                    LoadingProgress().width(16).height(16).color(this.themeColorAccent)
-                    Text(' 更新中').fontSize(LABEL_SMALL).fontColor(this.themeColorTextTertiary)
-                  }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 2, bottom: 2 })
-                }
+                }.width(this.gridCoverColumnWidth())
                 if (this.layout.bookshelfGridLayout === 0) {
                   // 上游 BookItem.kt:135-146：网格卡（gridStyle 0）只有封面 + 书名两样，
                   // 作者 / 类型标签 / 更新时间 / 标签行都只在列表模式（BookshelfListItem）里出现。
                   // 改前这四行也画在网格卡上，所以本地网格卡比上游多四行。
-                  Text(book.title).fontSize(this.bookshelfTitleFontSize()).fontColor(this.themeColorTextSecondary)
+                  Text(this.isBookLocked(book) ? '' : book.title)
+                    .fontSize(this.bookshelfTitleFontSize()).fontColor(this.themeColorTextSecondary)
                     .maxLines(this.layout.bookshelfTitleMaxLines)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .width('100%')
+                    .width(this.gridCoverColumnWidth())
                     .textAlign(this.layout.bookshelfTitleCenter ? TextAlign.Center : TextAlign.Start)
                     .padding({ left: 4, right: 4, bottom: 4 })
                 }
                 }
               }.width('100%').alignItems(HorizontalAlign.Center)
-                .backgroundColor(this.cardBackgroundColor())
-                .borderRadius(this.bookCardRadius())
+                .backgroundColor(this.cardContainerColorOf(book))
+                .borderRadius(this.cardCornerOf())
+                // H-7/I-5：整卡作为一个无障碍节点，对齐上游 `BookItem.kt:282-287`
+                // `semantics(mergeDescendants = true) { contentDescription = label;
+                // role = Role.Button; if (isSelected) selected = true }`。
+                // group 之后子节点（封面/书名/角标）不再单独聚焦，读屏只念这一整段。
+                .accessibilityGroup(true)
+                .accessibilityRole(AccessibilityRoleType.BUTTON)
+                .accessibilitySelected(this.selectionMode && this.isBookSelected(book))
+                .accessibilityText(this.a11yLabelOf(book))
                 // 按下轻缩：书卡面积大，0.96 只缩 4%，比 LIGHT 默认的 0.9 克制。
                 // 不用 stateStyles 换底色——卡片底色由封面/主题决定，换色会盖掉卡片自身的层次。
                 .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
@@ -2962,19 +4869,36 @@ export struct BookshelfPage {
               }
             }
           }, (book: Book) => this.bookCardKey(book))
+            // H-3/H-4：`DynamicNode.onMove` 的第二个参数是 `ItemDragEventHandler`
+            // （common.d.ts:25770-25799，@since 20；本项目 compatibleSdkVersion 6.0.0(20)），
+            // 提供 onLongPress / onDragStart / onMoveThrough / onDrop 四个回调，
+            // 正好承载上游 `longPressDraggableHandle` 的 onDragStarted / onDragStopped 与
+            // `rememberReorderableLazyGridState` 的跨位 tick。
             .onMove((from: number, to: number) => {
               // 拖拽重排只在「手动」排序下看得见效果（:138）。
-              this.moveBook(from, to);
+              this.moveDragging(from, to);
+            }, {
+              onDragStart: (_index: number): void => {
+                this.startDragging();
+                UiHaptics.dragThresholdActivate();
+              },
+              onMoveThrough: (_from: number, _to: number): void => {
+                UiHaptics.dragTick();
+              },
+              onDrop: (_index: number): void => {
+                UiHaptics.dragEnd();
+                this.finishDragging();
+              }
             })
         }.position({ x: 0, y: 0 })
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .columnsTemplate(this.bookshelfColumnsTemplate())
-        .rowsGap(BOOKSHELF_GRID_GAP).columnsGap(BOOKSHELF_GRID_GAP).width('100%')
+        .rowsGap(this.gridGap()).columnsGap(this.gridGap()).width('100%')
         .padding({
-          left: BOOKSHELF_GRID_PADDING, right: BOOKSHELF_GRID_PADDING,
+          left: this.gridHorizontalPadding(), right: this.gridHorizontalPadding(),
           bottom: this.raisedBottomInset()
         })
-        // 批10（:1453/:1456）：预加载半屏——按当前列数取 2 行（下限 6、上限 12），
+        // C-7：预加载条数按上游 BookshelfCoverPreloader 口径（网格 cols*5 上限 24 / 列表 10），
         // LazyForEach 只建「视口 + cachedCount」的项，视口外这些卡的封面会提前进入加载队列。
         .cachedCount(this.coverCacheCount())
         .scrollBar(this.layout.showBookshelfFastScroller ? BarState.On : BarState.Off)
@@ -2994,8 +4918,12 @@ export struct BookshelfPage {
             }
           })
           .onScroll(() => {
-            // 书架折叠阈值 60，与设置子页的 70 有意不同（未查到当初的定值依据）
-            const shouldCollapse = Math.abs(this.bookshelfScroller.currentOffset().yOffset) > 60;
+            // F-4/F-5：折叠阈值与方向对齐其余 19 页的 UiTokens 口径（收 70 / 展 24），
+            // 双向滞回：超过 70 折叠、回落到 24 以下展开、中间区间保持原状。
+            const yOffset = Math.abs(this.bookshelfScroller.currentOffset().yOffset);
+            const shouldCollapse = yOffset > HEADER_COLLAPSE_THRESHOLD
+              ? true
+              : (yOffset < HEADER_EXPAND_THRESHOLD ? false : this.collapsedHeader);
             if (this.collapsedHeader !== shouldCollapse) {
               // 顶部折叠是位移，用弹簧收尾更自然；弹簧不吃 duration，删掉（写了也不生效）。
               this.getUIContext().animateTo({ curve: curves.springMotion(0.35, 0.86) }, () => {
@@ -3024,14 +4952,12 @@ export struct BookshelfPage {
         })
         .layoutWeight(1)
       } else {
+        // D-2/D-4/D-5：照上游 BookshelfScreen.kt:1670-1696——只有两态（搜索态 / 非搜索态），
+        // 无表情轮换、无「这个分组还没有书籍」第三分支；文案用上游 zh-rCN 原文。
         Column() {
-          Text(this.emptyFace).fontSize(HEADLINE_LARGE).fontColor(this.themeColorTextSecondary).margin({ bottom: 14 })
-            .onClick(() => {
-              const currentIndex = this.emptyFaces.indexOf(this.emptyFace);
-              this.emptyFace = this.emptyFaces[(currentIndex + 1) % this.emptyFaces.length];
-            })
-          Text(this.searchQuery.length > 0 ? '没有匹配的书籍' : this.books.length === 0
-            ? '书架还空着，先去搜索书籍或从发现里添加吧！' : '这个分组还没有书籍')
+          Text(this.searchQuery.length > 0
+            ? '没有书籍，尝试全局搜索'
+            : '书架还空着，先去搜索书籍或从发现里添加吧！')
             .width(220).fontSize(LABEL_SMALL).fontColor(this.themeColorTextSecondary).textAlign(TextAlign.Center).maxLines(2)
           if (this.searchQuery.length > 0) {
             Text('全局搜索').fontSize(LABEL_MEDIUM).fontColor(this.themeColorAccent)
@@ -3040,12 +4966,12 @@ export struct BookshelfPage {
               .borderRadius(18)
               .onClick(() => this.onSearch())
           }
-        }.layoutWeight(1).width('100%').padding({ bottom: 104 }).justifyContent(FlexAlign.Center)
+        }.layoutWeight(1).width('100%').padding({ bottom: 120 }).justifyContent(FlexAlign.Center)
       }
     }.width('100%').height('100%').backgroundColor(this.themeAppBackground.length > 0 ? Color.Transparent : (this.themePureBlack ? '#000000' : this.themeColorSurfacePrimary))
-      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet || this.showPasswordPanel, this.ShelfSheetContent(), {
+      .bindSheet(this.showGroupManager || this.showLayoutSheet || this.showLogSheet || this.showTagColorPage || this.showBatchDeleteSheet || this.showPasswordPanel || this.showBatchDownloadConfirm || this.showMoveGroupSheet || this.showAddUrlDialog || this.showTagRuleEdit || this.showAiAutoGroup || this.showImportSheet || this.showExportSheet, this.ShelfSheetContent(), {
         height: SheetSize.LARGE, dragBar: true, showClose: false, backgroundColor: this.themeColorSurfaceTertiary,
-        onDisappear: () => { this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; this.showPasswordPanel = false; }
+        onDisappear: () => { this.showMoveGroupSheet = false; this.showGroupManager = false; this.showLayoutSheet = false; this.showLogSheet = false; this.showTagColorPage = false; this.showTagColorPicker = false; this.showRulePasteAuthorization = false; this.showBatchDeleteSheet = false; this.showPasswordPanel = false; this.showBatchDownloadConfirm = false; this.showAddUrlDialog = false; this.showTagRuleEdit = false; this.tagRuleMenuVisible = false; this.showRulePasteAuthorization = false; this.showAiAutoGroup = false; this.aiShowApplyConfirm = false; this.aiMoveMenuKey = ''; this.showDisablePrivateConfirm = false; this.showImportSheet = false; this.showExportSheet = false; }
       })
 
       // 全屏加载态（:156）。上游 BookshelfScreen.kt:1575-1602 是一层不可取消的 Dialog，

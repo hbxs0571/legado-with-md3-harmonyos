@@ -20,6 +20,9 @@ export class WebBookService {
   ): Promise<FetchResult> {
     const resolved = SourceHttp.evalTemplate(urlTemplate, keyword, page);
     const au = SourceHttp.newAnalyzer(source);
+    // 【@js: URL 规则求值】探索分类 URL 常是「@js:...」脚本（读 page/key 拼地址），
+    // 引擎 AnalyzeUrl.fetch 会在 parse 前于受控运行时求值；这里把 page/key 传进去（对齐上游 bindings）。
+    au.setUrlContext(keyword, page);
     const resp = await au.fetch(resolved);
     if (!resp.success || resp.statusCode === 0 || !resp.body) {
       const reason = `HTTP ${resp.statusCode} ${resp.error || ''}`.trim();
@@ -126,6 +129,48 @@ export class WebBookService {
     return items;
   }
 
+  /**
+   * 取网页文件的下载直链（对应上游 `BookInfo.kt:171` 的
+   * `analyzeRule.getStringList(infoRule.downloadUrls, isUrl = true)`）。
+   *
+   * 引擎的 `BookInfoRule` 没有 downloadUrls 字段（`Book.ts:429-441`），
+   * 所以这里直接从书源原始 JSON 里读规则串，再交给 AnalyzeRule 求值——
+   * 规则语法（含 `@js:`）与其它字段完全一致，无需改引擎。
+   */
+  private static downloadUrlsOf(source: BookSource, rule: AnalyzeRule, base: string): string[] {
+    const pattern = WebBookService.bookInfoDownloadUrlRule(source);
+    if (pattern.length === 0) { return []; }
+    const urls: string[] = [];
+    try {
+      const values = rule.getStringList(pattern);
+      for (let index = 0; index < values.length; index++) {
+        const one = values[index];
+        if (one === undefined || one.length === 0) { continue; }
+        urls.push(BookUrlResolver.resolve(one, base));
+      }
+    } catch (_) {
+      return [];
+    }
+    return urls;
+  }
+
+  /** 从书源原始 JSON 里取 `ruleBookInfo.downloadUrls` 规则串。 */
+  private static bookInfoDownloadUrlRule(source: BookSource): string {
+    const raw = source.rawSourceJson;
+    if (raw === undefined || raw.length === 0) { return ''; }
+    try {
+      const parsed = JSON.parse(raw) as Record<string, Object>;
+      const ruleBookInfo = parsed['ruleBookInfo'];
+      if (ruleBookInfo === null || ruleBookInfo === undefined || typeof ruleBookInfo !== 'object') {
+        return '';
+      }
+      const value = (ruleBookInfo as Record<string, Object>)['downloadUrls'];
+      return typeof value === 'string' ? value : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   /** 第二步：详情。取详情页 → 跑 init → 逐字段取值。 */
   static async getBookInfo(source: BookSource, bookUrl: string): Promise<RemoteBookDetail> {
     const ir = source.bookInfoRule;
@@ -150,7 +195,8 @@ export class WebBookService {
       lastChapter: r.getString(ir.lastChapter),
       wordCount: r.getString(ir.wordCount),
       updateTime: r.getString(ir.updateTime),
-      tocUrl: r.getString(ir.tocUrl, true)
+      tocUrl: r.getString(ir.tocUrl, true),
+      downloadUrls: WebBookService.downloadUrlsOf(source, r, base)
     };
     if (detail.coverUrl) detail.coverUrl = BookUrlResolver.resolve(detail.coverUrl, base);
     // 上游口径：tocUrl 为空时用 bookUrl 本身当目录地址。
