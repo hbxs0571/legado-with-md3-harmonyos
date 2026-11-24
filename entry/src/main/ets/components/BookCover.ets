@@ -497,6 +497,14 @@ export struct BookCover {
       .opacity(this.lockOverlayAlpha)
       // 完全透明时不参与命中测试，避免解锁后的卡片被这层吃掉点击。
       .hitTestBehavior(this.lockOverlayAlpha > 0 ? HitTestMode.Default : HitTestMode.None)
+      // 完全透明时整层不渲染、不进无障碍语义树：上游 `BookItem.kt:706-711` 用
+      // `Modifier.alpha()` 淡出，Compose 在 alpha 归零后会把节点从语义树里摘掉，
+      // 读屏不会念出未锁定书籍的「已加密」。本地只设 opacity 的话节点仍留在树里，
+      // dumpLayout 读得到 `Text 已加密`——视觉上没锁、语义上却锁着，两处不一致。
+      // 用 Visibility 而不是拆掉 opacity 动画：alpha 在 1→0 的动画期间始终 > 0，
+      // 淡出过程完整保留，只在归零那一帧才转为 None；淡入时第一帧 alpha 已 > 0，
+      // 节点立刻回到树上，opacity 从 0 渐显，进出两个方向的观感与上游一致。
+      .visibility(this.lockOverlayAlpha > 0 ? Visibility.Visible : Visibility.None)
     }
     .width(this.coverWidth())
     .height(this.coverHeight())

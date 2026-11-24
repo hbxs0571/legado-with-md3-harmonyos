@@ -147,6 +147,14 @@ export struct SearchPage {
 
   /** 当前搜索页号（上游 ViewModel 私有字段 `currentSearchPage`）。 */
   private currentSearchPage: number = 1;
+  /**
+   * 本页开始前的已合并结果数（上游 `SearchViewModel.kt:118 resultCountBeforeCurrentPage`）。
+   *
+   * 上游在 `startSearch` 里先记下 `searchResultBooks.size`（`:640`），Finished 时用它判
+   * `searchResultBooks.size > resultCountBeforeCurrentPage`（`:700`），即「本页比开始前
+   * 多出了结果」。第 2 页若全是第 1 页已有的重复书，这个判据为假 → 不再有下一页。
+   */
+  private resultCountBeforePage: number = 0;
   /** 加载代次：换关键词/换范围时自增，回来对不上就丢弃（上游 `searchJob?.cancel()`）。 */
   private generation: number = 0;
   /** 手动停止标记：`shouldCancel` 读它。 */
@@ -586,6 +594,8 @@ export struct SearchPage {
    */
   private async startSearch(keyword: string, page: number): Promise<void> {
     const generation = this.generation;
+    // 上游 `:640 resultCountBeforeCurrentPage = searchResultBooks.size`。
+    this.resultCountBeforePage = this.state.results.length;
     this.patch((next: SearchUiState) => {
       next.isSearching = true;
       next.isManualStop = false;
@@ -632,18 +642,27 @@ export struct SearchPage {
       console.error(`搜索结果落库失败：${error instanceof Error ? error.message : String(error)}`);
     }
     const results = this.wrapResults(outcome.books);
-    const hasNewPageResults = results.length > 0;
-    // 上游 `:669-715 handleSearchEvent(Finished)`：hasMore 由「有结果 + 支持下一页 + 未到上限」共同决定。
+    // 上游 `:694 val hasNewPageResults = searchResultBooks.size > resultCountBeforeCurrentPage`
+    // 表达的是「本页比搜索前多出了结果」，不是「本页有结果」。第 2 页若全是重复书，
+    // 上游判 false（不再有下一页），本地只判 length>0 会误判成还有下一页。
+    const hasNewPageResults = results.length > this.resultCountBeforePage;
+    // 上游 `:669-715 handleSearchEvent(Finished)`：hasMore 由「有新增结果 + 支持下一页 + 未到上限」共同决定。
     const exactShouldStop = this.state.exactMatch &&
       results.length < EXACT_SEARCH_SINGLE_PAGE_RESULT_THRESHOLD && page === 1;
-    const more = outcome.supportsNextPage && hasNewPageResults && !outcome.cancelled &&
+    const more = outcome.supportsNextPage && hasNewPageResults &&
       !outcome.resultLimitReached && !exactShouldStop;
     this.patch((next: SearchUiState) => {
       next.results = results;
       next.isSearching = false;
       next.processedSources = outcome.sourceFinished;
       next.totalSources = outcome.sourceTotal;
-      next.hasMore = more;
+      // 手动停止时不动 hasMore：上游 `stopSearch` 是 `searchJob?.cancel()`，协程被取消后
+      // Finished 事件根本不发，hasMore 保持取消前的值。本地 `SearchCoordinator.search`
+      // 用返回值 `cancelled` 表达取消、仍会走到这里，若不跳过就会把 hasMore 覆盖成 false，
+      // FAB 随之消失（它的显示条件依赖 hasMore），用户再也点不到「开始」继续加载。
+      if (!outcome.cancelled) {
+        next.hasMore = more;
+      }
       next.isManualStop = outcome.cancelled;
       if (results.length === 0 && !outcome.cancelled && !next.isAllScope) {
         next.emptyScopeAction = {
@@ -669,9 +688,15 @@ export struct SearchPage {
   private stopSearch(): void {
     this.stopFlag = true;
     this.patch((next: SearchUiState) => {
+      // 上游 `SearchViewModel.kt:717-727 stopSearch(manualStop = true)` 只改这两项：
+      // `isSearching = false` 与 `isManualStop = manualStop || it.isManualStop`。
+      // **不能动 hasMore**——它表达的是「还有下一页可取」，与「这次搜索是否被手动停掉」
+      // 是两件事。上游 FAB 的显示条件 `:392 showFab = isSearching || (committedQuery
+      // .isNotBlank() && hasMore)` 正是靠 hasMore 在停止后仍为真，才把按钮从 Stop 换成
+      // PlayArrow「开始」，让用户能继续加载下一页。这里若一并置 false，FAB 会直接消失，
+      // 用户再也点不到「开始」。
       next.isManualStop = true;
       next.isSearching = false;
-      next.hasMore = false;
     });
   }
 
