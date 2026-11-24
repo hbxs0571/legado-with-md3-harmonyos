@@ -9,9 +9,10 @@
 
 ### 0.1 三条读法
 
-1. **「上游等价物」一列有四种来源，我逐条标了。**
-   - **注释已注明·行级** —— 组件注释里写了上游 `文件:行号`，最可靠，可以照抄。
-   - **注释已注明·文件级** —— 注释里只写了上游文件名或函数名，没有行号。上游文件名可靠，行号得自己 `grep -n` 补。
+1. **「上游等价物」一列有几种来源，我逐条标了，从高到低：**
+   - **查证 2026-11-24** —— 逐条读上游源码核对过的 33 条：定义行、签名原文、props 结构、结论（等价 / 近似 / 不匹配 / 上游确实没有）。**这一档优先，可以照抄。**
+   - **注释已注明·行级** —— 组件注释里写了上游 `文件:行号`，最可靠。
+   - **注释已注明·文件级** —— 注释里只写了上游文件名或函数名，没有行号。行号得自己 `grep -n` 补。
    - **索引匹配** —— 在上游 1,122 个 `@Composable` 的全量索引里按名字匹配出来的（`tmp/_up_comp.txt`），**没有**在代码注释里得到确认。用之前读一眼上游那个函数。
    - **未查到 / 本地自造** —— 上游真的没有对应物，或者是本地为 ArkUI 补的适配件。
 2. **`关键 props` 只列常用的，不是全部。** 完整签名看定义行往下 20 行，`@Prop` 都有默认值。
@@ -48,9 +49,32 @@
 3. **页面行数整体涨了 10–70%。** `Index.ets` 13,522 → **15,140**，`BookshelfPage.ets` 3,072 → **5,150**（涨 68%），`ProfileSubPages.ets` 7,929 → **8,260**，`ReaderSettingsPage.ets` 4,606 → **4,649**，`BookInfoPage.ets` 1,764 → **3,045**。第十一节已全部重取。
 4. **`.fontSize(数字)` 不再是 0 处。** 上一版与排版批的记录都说「全仓 0 处，唯一残留是 ohosTest 的测试脚手架」。**实测 47 处**：`components/BookKnowledgeSheet.ets` 42、`components/theme/BackgroundImageManageSheet.ets` 3、`pages/BookSourceDebugPage.ets` 1、`components/theme/MainNavigationSettingsSheet.ets` 1。全仓 `.fontSize(` 共 1,731 处，这 47 处占 2.7%。
 
-### 0.3 诚实声明
+### 0.3 33 条上游映射的查证结果（2026-11-24 15:26）
 
-我没有逐个上机验证这些组件的渲染效果，也没有逐个读上游那个 Composable 的完整实现。等价物按「注释 + 名字索引」得出，标**索引匹配**的那些存在误判可能。**我没有为了凑满表格而给任何一个组件编造上游行号**——查不到就写「未查到」，那是可信的状态，不是缺陷。
+原先标成「注释已注明·文件级」「索引匹配」「未查到」「本地自造」的 33 条，已逐条到上游读源码查实。明细见 `tmp/component-upstream-verify.md`（596 行，逐条签名原文 + props 对照 + 检索命中数）。
+
+**结论分布：** 近似 24 / 不匹配 4 / 等价 4 / 上游确实没有 1。
+
+**修正 14 处**，其中 6 处是结论层面的更正：
+
+| # | 组件 | 原标注 | 查实 |
+| --- | --- | --- | --- |
+| 15 | `BookKnowledgeSheet` | `BookInfoScreen.kt:2325` | 2325 只是详情页「知识」预览区块；真正对应 `ui/book/knowledge/` 四个 Screen |
+| 22 | `TopBarButton` | `TopBarButton.kt:214` | `:214` 是 `private fun`；公开入口是 `:333 TopBarActionButton` |
+| 24 | `BookCard` | 索引匹配 `BookItem.kt:674` | 上游 `BookItem` 是完整书籍行、参数面不同；本地零调用属死代码 |
+| 28 | `UiSection` | `SectionTitle.kt:14` | 上游只有一行标题文字、无容器；本地是「标题+内容」容器 |
+| 30 | `SmallPlainIconButton` | 未查到 | 改判近似：`AppIconButton.kt:20` 覆盖语义 |
+| 32 | `DialogCheckRow` | 上游无通用复选行 | 不成立：`CheckboxItem.kt:21` 就是 |
+
+其余 8 处是行号或等价关系更正，逐条列在 `tmp/component-upstream-verify.md` 末节「推翻了哪些现标注」。
+
+**这次没做到：** props 只给了结构级对照（按调用关系的关键几组），不是上游参数与本地 props 的一对一逐项；完整检索命令附录只有 13 组汇总。要逐个 props 核到底，得另跑一遍（见 `tmp/component-catalog-verify-prompt.md`）。
+
+### 0.4 诚实声明
+
+33 条已读上游源码查实（定义行 + 签名原文 + 结构级 props 对照），但**没有**做 props 一对一逐项对照，也**没有**上机验证渲染效果。
+
+余下按「注释 + 名字索引」得出的条目，标**索引匹配**的仍存在误判可能。**没有为了凑满表格而编造任何上游行号**——查不到就写「未查到」，那是可信的状态，不是缺陷。
 
 ---
 
@@ -58,10 +82,10 @@
 
 | 组件 | 定义 | 上游等价物 | 关键 props | 首个调用点 |
 | --- | --- | --- | --- | --- |
-| `AppTopBar` | `components/TopBar.ets:63` | `GlassTopAppBar.kt:28`（注释已注明·文件级，`TopBar.ets:9` 另引 `:76`） | `title` / `titleRevealStep` / `subtitle` / `collapsed` / `collapseFraction` / `hasNavigation` / `navigationIcon`(Builder) / `actions`(Builder) | `pages/BookInfoEditPage.ets:748` |
-| `TopBarButton` | `components/TopBar.ets:313` | `TopBarButton @ui/widget/components/topbar/TopBarButton.kt:214`（索引匹配） | `icon` / `tint` / `disabled` / `showDivider` / `menuMode` / `accessibilityLabel` / `onSelect` | `pages/BookInfoEditPage.ets:726` |
-| `TopBarBackButton` | `components/TopBar.ets:434` | `TopBarNavigationButton @ui/widget/components/topbar/TopBarButton.kt:304`（索引匹配） | `onSelect` / `accessibilityLabel` | `pages/BookInfoEditPage.ets:720` |
-| `CollapsingSettingsHeader` | `components/CollapsingSettingsHeader.ets:16` | `GlassMediumFlexibleTopAppBar @ui/widget/components/topbar/GlassMediumFlexibleTopAppBar.kt:43`（注释已注明·文件级；索引匹配补到 `:43`） | `title` / `collapsed` / `collapseFraction` / `onBack` | `pages/AppAiSettingsPage.ets:29` |
+| `AppTopBar` | `components/TopBar.ets:63` | `GlassTopAppBar.kt:28` + `GlassMediumFlexibleTopAppBar.kt:43`（**查证 2026-11-24·近似**：本地一个 struct 覆盖上游固定/折叠两个 composable；原注「`:76` 是标题」实为 title 的 style 行）；原标注：`GlassTopAppBar.kt:28`（注释已注明·文件级，`TopBar.ets:9` 另引 `:76`） | `title` / `titleRevealStep` / `subtitle` / `collapsed` / `collapseFraction` / `hasNavigation` / `navigationIcon`(Builder) / `actions`(Builder) | `pages/BookInfoEditPage.ets:748` |
+| `TopBarButton` | `components/TopBar.ets:313` | **不匹配** → `TopBarButton.kt:333 TopBarActionButton`（**查证 2026-11-24**；原标 `:214` 是 `private fun TopBarButton`，对外公开入口在 `:333`）；原标注：`TopBarButton @ui/widget/components/topbar/TopBarButton.kt:214`（索引匹配） | `icon` / `tint` / `disabled` / `showDivider` / `menuMode` / `accessibilityLabel` / `onSelect` | `pages/BookInfoEditPage.ets:726` |
+| `TopBarBackButton` | `components/TopBar.ets:434` | `TopBarButton.kt:304 TopBarNavigationButton`（**查证 2026-11-24·等价**）；原标注：`TopBarNavigationButton @ui/widget/components/topbar/TopBarButton.kt:304`（索引匹配） | `onSelect` / `accessibilityLabel` | `pages/BookInfoEditPage.ets:720` |
+| `CollapsingSettingsHeader` | `components/CollapsingSettingsHeader.ets:16` | `GlassMediumFlexibleTopAppBar.kt:43`（**查证 2026-11-24·近似**）；原标注：`GlassMediumFlexibleTopAppBar @ui/widget/components/topbar/GlassMediumFlexibleTopAppBar.kt:43`（注释已注明·文件级；索引匹配补到 `:43`） | `title` / `collapsed` / `collapseFraction` / `onBack` | `pages/AppAiSettingsPage.ets:29` |
 
 `AppTopBar` 还导出 8 个度量常量（`components/TopBar.ets:12`–`:26`）：`TOP_BAR_COLLAPSED_HEIGHT` / `TOP_BAR_EXPANDED_HEIGHT` / `TOP_BAR_EXPANDED_HEIGHT_SUBTITLE` / `TOP_BAR_TITLE_EXPANDED_SIZE` / `TOP_BAR_TITLE_COLLAPSED_SIZE` / `TOP_BAR_SUBTITLE_SIZE` / `TOP_BAR_SIDE_PADDING` / `TOP_BAR_TITLE_START`。
 
@@ -74,14 +98,14 @@
 | 组件 | 定义 | 上游等价物 | 关键 props | 首个调用点 |
 | --- | --- | --- | --- | --- |
 | `BookCover` | `components/BookCover.ets:28` | `CoilBookCover.kt:275`（注释已注明·行级；另引 `BookItem.kt:703`/`:706` 与 `PrivateLockedContent.kt:54`） | `book` / `compact` / `mini` / `displayWidth` / `displayHeight` / `cornerRadius` / `showChapterBadge` / `badgeText` / `showBadgeDot` / `isUpdating` / `leftBottomText` / `shadowEnabled` / `fillWidth` / `isNight` / `sharedKey` | `pages/BatchChangeSourceSheet.ets:571` |
-| `BookGroupCard` | `components/BookGroupCard.ets:25` | `BookGroupCover @BookItem.kt:327`（注释已注明·文件级；`BookGroupCard.ets:15` 写明三形态对齐 `BookItem.kt` 三个 composable：`:452` 网格 / `:491` 列表 / `:557` 横排封面） | `groupName` / `books` / `coverCount` / `listStyle` / `coverSettings` / `isNight` / `listCoverWidth` / `showCount` / `coverShadow` / `locked` / `showDivider` / `onOpen` / `onLongPress` | `pages/BookshelfPage.ets:4668` |
-| `BookCard` | `components/BookCard.ets:6` | `BookItem.kt:674`（索引匹配；**但这是死代码**） | `book` / `onOpen` | 无（外部调用 0，同文件 1） |
+| `BookGroupCard` | `components/BookGroupCard.ets:25` | `BookItem.kt:327` 封面 / `:452` 网格 / `:491` 列表 / `:557` 横排（**查证 2026-11-24·近似**：上游四个 composable，本地用一个 `listStyle` 覆盖）；原标注：`BookGroupCover @BookItem.kt:327`（注释已注明·文件级；`BookGroupCard.ets:15` 写明三形态对齐 `BookItem.kt` 三个 composable：`:452` 网格 / `:491` 列表 / `:557` 横排封面） | `groupName` / `books` / `coverCount` / `listStyle` / `coverSettings` / `isNight` / `listCoverWidth` / `showCount` / `coverShadow` / `locked` / `showDivider` / `onOpen` / `onLongPress` | `pages/BookshelfPage.ets:4668` |
+| `BookCard` | `components/BookCard.ets:6` | **不匹配** → `BookItem.kt:674 fun BookItem` 是完整书籍行（**查证 2026-11-24**）；本地 `BookCard.ets` 全仓零调用是死代码，参数面与上游不同；原标注：`BookItem.kt:674`（索引匹配；**但这是死代码**） | `book` / `onOpen` | 无（外部调用 0，同文件 1） |
 | `PullRefreshIndicator` | `components/PullRefreshIndicator.ets:42` | `AppPullToRefresh.kt:34`（注释已注明·行级 `:104-110`） | 无 props，纯指示器 | `pages/BookshelfPage.ets:705` |
-| `ReadRecordHeatmap` | `components/ReadRecordHeatmap.ets:11` | `HeatmapCard @ui/book/readRecord/ReadRecordOverviewScreen.kt:285`（注释已注明·文件级，`ReadRecordHeatmap.ets:5` 引 `HeatmapCalendarComponents.kt`） | `dailyReadCounts` / `dailyReadTimes` / `selectedDate` / `mode` / `onDateSelected` | `pages/ProfileSubPages.ets:6836` |
+| `ReadRecordHeatmap` | `components/ReadRecordHeatmap.ets:11` | `ReadRecordOverviewScreen.kt:285` 整卡 + `HeatmapCalendarComponents.kt:204` 格子层（**查证 2026-11-24·近似**：本地只还原格子层，原注漏了整卡含标题/统计/图例）；原标注：`HeatmapCard @ui/book/readRecord/ReadRecordOverviewScreen.kt:285`（注释已注明·文件级，`ReadRecordHeatmap.ets:5` 引 `HeatmapCalendarComponents.kt`） | `dailyReadCounts` / `dailyReadTimes` / `selectedDate` / `mode` / `onDateSelected` | `pages/ProfileSubPages.ets:6836` |
 | `RelatedBooksBanner` | `components/RelatedBooksBanner.ets:33` | `RelatedBooksBanner @BookInfoScreen.kt:2125`（注释已注明·行级 `:2125-2171`；另引 `BannerModule.kt:57`/`:70`/`:73`） | `title` / `books` / `showMore` / `coverSettings` / `isNight` / `onSelectBook` / `onMore` | `pages/BookInfoPage.ets:321` |
 | `CoverBlurBackdrop` | `components/CoverBlurBackdrop.ets:17` | `CoverBlurBackdrop.kt:25`（注释已注明·行级；另引 `PlayerBackground.kt:34`） | `coverUri` / `seedColor` / `blurRadius`(48) / `coverScale`(1.2) | `pages/ReadAloudPlayerPage.ets:178` |
 | `ProgressiveBackdrop` | `components/ProgressiveBackdrop.ets:15` | `HazeStyle.kt:47`（注释已注明·行级 `:47-61`） | `blurRadius` / `bands` / `reversed` | `pages/BookInfoPage.ets:2472` |
-| `ConflictBookCard` | `components/booksource/BookshelfConflictSheet.ets:70` | `ConflictBookCard @ui/widget/components/conflict/BookshelfConflictSheet.kt:198`（索引匹配，同名） | `summary` / `onOpenBook` | `pages/BookInfoPage.ets:1006` |
+| `ConflictBookCard` | `components/booksource/BookshelfConflictSheet.ets:70` | `BookshelfConflictSheet.kt:198`（**查证 2026-11-24·等价**）；原标注：`ConflictBookCard @ui/widget/components/conflict/BookshelfConflictSheet.kt:198`（索引匹配，同名） | `summary` / `onOpenBook` | `pages/BookInfoPage.ets:1006` |
 
 **`components/BookCard.ets:6` 是死代码，上一版就写了、这版仍然成立**：55 行，`grep -rn "BookCard'" entry/src/main/ets` **0 命中**。书架的书卡是**内联**画在 `pages/BookshelfPage.ets` 里的。抽组件时不要参考它，也不要「顺手修好它」。
 
@@ -94,12 +118,12 @@
 | 组件 | 定义 | 上游等价物 | 关键 props | 首个调用点 |
 | --- | --- | --- | --- | --- |
 | `UiMenuPanel` | `components/UiMenu.ets:67` | `RoundDropdownMenu.kt:57`（注释已注明·行级；另引 `PillDivider.kt:23`/`:24`） | `items: UiMenuItem[]` / `panelWidth` / `onSelect(key)` | `pages/BookInfoEditPage.ets:415` |
-| `ReaderSheetShell` | `components/ReaderSheetShell.ets:18` | `AppModalBottomSheet.kt:48`（注释已注明·文件级，`ReaderSheetShell.ets:3` 引其「Material 默认分支」） | `scrimColor` / `panelColor` / `panelWidth` / `panelHeight` / `showHandle` / `contentPadding` / `blurRadius` / `onDismiss` / `content`(Builder) | `pages/ReadAloudConfigPanel.ets:118` |
-| `AppAlertDialog` | `components/AppAlertDialog.ets:20` | `AppAlertDialog @ui/widget/components/alert/AppAlertDialog.kt:33`（注释已注明·文件级 `AppAlertDialog.ets:2`，同名） | `title` / `text` / `confirmText` / `dismissText` / `confirmEnabled` / `onConfirm` / `onDismiss` / `content`(Builder) | `pages/BookInfoEditPage.ets:624` |
-| `DialogTextInput` | `components/DialogInputs.ets:13` | 本地自造（对话框内输入控件；上游对应 `AppTextField.kt:37` 的一族，非同名等价） | `initialText` / `placeholder` / `maxLines` / `isPassword` / `onValueChange` | `pages/BookshelfPage.ets:1670` |
-| `DialogCheckRow` | `components/DialogInputs.ets:68` | 本地自造（对话框内复选行；上游无同名组件，散在各自对话框里） | `label` / `initialChecked` / `onCheckedChange` | `pages/BookshelfPage.ets:1314` |
-| `UiColorSheet` | `components/settings/UiColorSheet.ets:19` | `ColorPickerSheet.kt:51`（注释已注明·文件级 `UiColorSheet.ets:4`；索引匹配补到 `:51`） | `title`(默认「选择颜色」) / `initialColor` / `resetColor` / `onCancel` / `onConfirm(color)` | `pages/AppCoverSettingsPage.ets:452` |
-| `SmallPlainIconButton` | `components/booksource/SelectionItemCard.ets:155` | **未查到**（上游 `RoundIconButton @MarkingSelectionMenu.kt:447` 名字不符，未确认） | `icon` / `iconSize` / `buttonSize` / `label` / `onSelect` | `pages/SearchPage.ets:1500` |
+| `ReaderSheetShell` | `components/ReaderSheetShell.ets:18` | `AppModalBottomSheet.kt:48`（**查证 2026-11-24·近似**：上游建在 M3 ModalBottomSheet 上，本地自绘 scrim + 固定宽高）；原标注：`AppModalBottomSheet.kt:48`（注释已注明·文件级，`ReaderSheetShell.ets:3` 引其「Material 默认分支」） | `scrimColor` / `panelColor` / `panelWidth` / `panelHeight` / `showHandle` / `contentPadding` / `blurRadius` / `onDismiss` / `content`(Builder) | `pages/ReadAloudConfigPanel.ets:118` |
+| `AppAlertDialog` | `components/AppAlertDialog.ets:20` | `AppAlertDialog.kt:33`（**查证 2026-11-24·近似**）；原标注：`AppAlertDialog @ui/widget/components/alert/AppAlertDialog.kt:33`（注释已注明·文件级 `AppAlertDialog.ets:2`，同名） | `title` / `text` / `confirmText` / `dismissText` / `confirmEnabled` / `onConfirm` / `onDismiss` / `content`(Builder) | `pages/BookInfoEditPage.ets:624` |
+| `DialogTextInput` | `components/DialogInputs.ets:13` | `AppTextField.kt:37`（**查证 2026-11-24·近似**：上游无对话框专用输入件，属 AppTextField 一族非同名等价）；原标注：本地自造（对话框内输入控件；上游对应 `AppTextField.kt:37` 的一族，非同名等价） | `initialText` / `placeholder` / `maxLines` / `isPassword` / `onValueChange` | `pages/BookshelfPage.ets:1670` |
+| `DialogCheckRow` | `components/DialogInputs.ets:68` | **不匹配** → `CheckboxItem.kt:21` 是通用复选行（**查证 2026-11-24**；原注「上游无通用复选行」不成立）；原标注：本地自造（对话框内复选行；上游无同名组件，散在各自对话框里） | `label` / `initialChecked` / `onCheckedChange` | `pages/BookshelfPage.ets:1314` |
+| `UiColorSheet` | `components/settings/UiColorSheet.ets:19` | `ColorPickerSheet.kt:51`（**查证 2026-11-24·近似**）；原标注：`ColorPickerSheet.kt:51`（注释已注明·文件级 `UiColorSheet.ets:4`；索引匹配补到 `:51`） | `title`(默认「选择颜色」) / `initialColor` / `resetColor` / `onCancel` / `onConfirm(color)` | `pages/AppCoverSettingsPage.ets:452` |
+| `SmallPlainIconButton` | `components/booksource/SelectionItemCard.ets:155` | `AppIconButton.kt:20`（**查证 2026-11-24·近似**：上游无独立 32dp 小图标按钮，语义由 AppIconButton 覆盖；另有 `private RoundIconButton @MarkingSelectionMenu.kt:447`）；原标注：**未查到**（上游 `RoundIconButton @MarkingSelectionMenu.kt:447` 名字不符，未确认） | `icon` / `iconSize` / `buttonSize` / `label` / `onSelect` | `pages/SearchPage.ets:1500` |
 
 **`UiMenuItem` 是 interface 不是组件**（`components/UiMenu.ets:9`），上游对应 `RoundDropdownMenuItem.kt:44`（索引匹配）。上一版把它算进 63 个唯一名里，那是计数错误。
 
@@ -115,15 +139,15 @@
 
 | 组件 | 定义 | 上游等价物 | 关键 props | 右侧是什么 | 首个调用点 |
 | --- | --- | --- | --- | --- | --- |
-| `UiAction` | `components/settings/UiAction.ets:17` | `ClickableSettingItem.kt:17`（注释已注明·文件级 `UiAction.ets:7`；行级引 `:44-50`） | `title` / `detail` / `option` / `swatchColor` / `swatchDisabled` / `chevronSize`(15) / `showDivider` / `detailMaxLines` / `onSelect` | 可选色块 + 可选值文本 + 尖括号 | `pages/AppAiSettingsPage.ets:34` |
-| `UiSwitch` | `components/settings/UiSwitch.ets:20` | `SwitchSettingItem @ui/widget/components/settingItem/SwitchSettingItem.kt:20`（注释已注明·文件级 `UiSwitch.ets:15` 写明右侧是「对齐上游 AdaptiveSwitch」；索引匹配补到 `:20`） | `title` / `detail` / `value` / `disabled` / `showDivider` / `onChange` | 开关（内部就是 `UiSwitchControl`） | `pages/AppCoverSettingsPage.ets:339` |
-| `UiSwitchControl` | `components/UiSwitchControl.ets:32` | `AdaptiveSwitch @ui/widget/components/IconSwitch.kt:22`（注释已注明·文件级；`UiSwitchControl.ets:4-16` 按 M3 `SwitchTokens` 自写几何） | `switchEnabled` / `showIcon` / `scaleValue` / `interactive` / `onChange` | 裸开关，**不带任何文字** | `pages/AppBackupSettingsPage.ets:912` |
-| `UiSlider` | `components/settings/UiSlider.ets:8` | `SliderSettingItem @ui/widget/components/settingItem/SliderSettingItem.kt:48`（索引匹配） | `title` / `detail` / `value` / `minValue` / `maxValue` / `stepValue` / `showDivider` / `onChange` | 滑杆（值文本可选） | `pages/AppDownloadCacheSettingsPage.ets:160` |
-| `UiDropdown` | `components/settings/UiDropdown.ets:19` | `DropdownListSettingItem @ListSettingItem.kt:19`（索引匹配；`UiDropdown.ets:29` 注释引 `SettingItem.kt:53`/`:73-79` 的卡形态） | `cardSurface` / `title` / `detail` / `option` / `options` / `showDivider` / `onSelect` / `onStateChange` | 当前值 + 弹出选项列表 | `pages/AppBackupSettingsPage.ets:525` |
-| `UiChoice` | `components/settings/UiChoice.ets:12` | `DropdownListSettingItem @ListSettingItem.kt:19` 的简化形态（注释已注明·文件级，`UiChoice.ets:7`；索引匹配） | `title` / `detail` / `options` / `selectedIndex` / `showDivider` / `onSelect` | 点一下在几项间**循环切换** | `pages/AppCoverSettingsPage.ets:374` |
-| `UiInput` | `components/settings/UiInput.ets:17` | `InputSettingItem @ui/widget/components/settingItem/InputSettingItem.kt:30`（注释已注明·文件级，`UiInput.ets:11`「行为照上游」） | `title` / `detail` / `value` / `defaultValue` / `showDivider` / `onConfirm` | 可编辑文本框 | `pages/AppDownloadCacheSettingsPage.ets:172` |
-| `UiColorModeRow` | `components/settings/UiColorModeRow.ets:12` | `TinyColorModeSettingItem @ui/widget/components/settingItem/TinySettingItems.kt:476`（注释已注明·文件级 `UiColorModeRow.ets:4`） | `title` / `dayColor` / `nightColor` / `dayLabel`(日间) / `nightLabel`(夜间) / `colors` / `showFollow` / `onDayChange` / `onNightChange` | 日/夜两个色点（就地展开预设色板） | `pages/ReaderSettingsPage.ets:748` |
-| `UiSection` | `components/settings/UiSection.ets:12` | `SectionTitle @ui/widget/components/SectionTitle.kt:14`（索引匹配；`UiSection.ets:15` 注释说明分组卡对应上游 `SplicedColumnGroup`） | `title` / `content`(Builder) | —（本组件就是「区块标题 + 一张卡」的容器） | `pages/AppAiSettingsPage.ets:33` |
+| `UiAction` | `components/settings/UiAction.ets:17` | `ClickableSettingItem.kt:17`（**查证 2026-11-24·近似**；原注另引 `:44-50` 实为 `ChevronRight` 默认值，不是函数定义）；原标注：`ClickableSettingItem.kt:17`（注释已注明·文件级 `UiAction.ets:7`；行级引 `:44-50`） | `title` / `detail` / `option` / `swatchColor` / `swatchDisabled` / `chevronSize`(15) / `showDivider` / `detailMaxLines` / `onSelect` | 可选色块 + 可选值文本 + 尖括号 | `pages/AppAiSettingsPage.ets:34` |
+| `UiSwitch` | `components/settings/UiSwitch.ets:20` | `SwitchSettingItem.kt:20` 整行（**查证 2026-11-24·近似**；右侧开关 `AdaptiveSwitch` 定义在 `IconSwitch.kt:22`、由 `:52` 调用——整行与开关是两个东西）；原标注：`SwitchSettingItem @ui/widget/components/settingItem/SwitchSettingItem.kt:20`（注释已注明·文件级 `UiSwitch.ets:15` 写明右侧是「对齐上游 AdaptiveSwitch」；索引匹配补到 `:20`） | `title` / `detail` / `value` / `disabled` / `showDivider` / `onChange` | 开关（内部就是 `UiSwitchControl`） | `pages/AppCoverSettingsPage.ets:339` |
+| `UiSwitchControl` | `components/UiSwitchControl.ets:32` | `IconSwitch.kt:22 AdaptiveSwitch`（**查证 2026-11-24·近似**）；原标注：`AdaptiveSwitch @ui/widget/components/IconSwitch.kt:22`（注释已注明·文件级；`UiSwitchControl.ets:4-16` 按 M3 `SwitchTokens` 自写几何） | `switchEnabled` / `showIcon` / `scaleValue` / `interactive` / `onChange` | 裸开关，**不带任何文字** | `pages/AppBackupSettingsPage.ets:912` |
+| `UiSlider` | `components/settings/UiSlider.ets:8` | `SliderSettingItem.kt:48`（**查证 2026-11-24·近似**）；原标注：`SliderSettingItem @ui/widget/components/settingItem/SliderSettingItem.kt:48`（索引匹配） | `title` / `detail` / `value` / `minValue` / `maxValue` / `stepValue` / `showDivider` / `onChange` | 滑杆（值文本可选） | `pages/AppDownloadCacheSettingsPage.ets:160` |
+| `UiDropdown` | `components/settings/UiDropdown.ets:19` | `ListSettingItem.kt:19`（**查证 2026-11-24·近似**）；原标注：`DropdownListSettingItem @ListSettingItem.kt:19`（索引匹配；`UiDropdown.ets:29` 注释引 `SettingItem.kt:53`/`:73-79` 的卡形态） | `cardSurface` / `title` / `detail` / `option` / `options` / `showDivider` / `onSelect` / `onStateChange` | 当前值 + 弹出选项列表 | `pages/AppBackupSettingsPage.ets:525` |
+| `UiChoice` | `components/settings/UiChoice.ets:12` | `ListSettingItem.kt:19 DropdownListSettingItem`（**查证 2026-11-24·近似**：上游是下拉弹窗、双数组、回传值，本地点选循环 options、回传下标，交互形态不同）；原标注：`DropdownListSettingItem @ListSettingItem.kt:19` 的简化形态（注释已注明·文件级，`UiChoice.ets:7`；索引匹配） | `title` / `detail` / `options` / `selectedIndex` / `showDivider` / `onSelect` | 点一下在几项间**循环切换** | `pages/AppCoverSettingsPage.ets:374` |
+| `UiInput` | `components/settings/UiInput.ets:17` | `InputSettingItem.kt:30`（**查证 2026-11-24·近似**）；原标注：`InputSettingItem @ui/widget/components/settingItem/InputSettingItem.kt:30`（注释已注明·文件级，`UiInput.ets:11`「行为照上游」） | `title` / `detail` / `value` / `defaultValue` / `showDivider` / `onConfirm` | 可编辑文本框 | `pages/AppDownloadCacheSettingsPage.ets:172` |
+| `UiColorModeRow` | `components/settings/UiColorModeRow.ets:12` | `TinySettingItems.kt:476`（**查证 2026-11-24·近似**）；原标注：`TinyColorModeSettingItem @ui/widget/components/settingItem/TinySettingItems.kt:476`（注释已注明·文件级 `UiColorModeRow.ets:4`） | `title` / `dayColor` / `nightColor` / `dayLabel`(日间) / `nightLabel`(夜间) / `colors` / `showFollow` / `onDayChange` / `onNightChange` | 日/夜两个色点（就地展开预设色板） | `pages/ReaderSettingsPage.ets:748` |
+| `UiSection` | `components/settings/UiSection.ets:12` | `SectionTitle.kt:14`（**查证 2026-11-24·近似**：上游只有一行标题文字 `SectionTitle(title: String)`，无容器；本地是「标题+内容」容器）；原标注：`SectionTitle @ui/widget/components/SectionTitle.kt:14`（索引匹配；`UiSection.ets:15` 注释说明分组卡对应上游 `SplicedColumnGroup`） | `title` / `content`(Builder) | —（本组件就是「区块标题 + 一张卡」的容器） | `pages/AppAiSettingsPage.ets:33` |
 
 **`UiSwitch` 是受控组件，父级必须回写 `value`，否则开关会弹回原状**（`UiSwitch.ets:10` 注释）。它刻意不存值副本——改造前 `CacheSettingsSwitch` / `PrivacySettingsSwitch` 用 `@Prop` + `@State` + `aboutToAppear` 同步，而 `aboutToAppear` 只跑一次，父级之后改值开关不跟着动，这个缺陷是这么修掉的。
 
@@ -180,9 +204,9 @@
 
 | 组件 | 定义 | 上游等价物 | 关键 props | 首个调用点 |
 | --- | --- | --- | --- | --- |
-| `ReaderQuickMarkPanel` | `components/ReaderQuickMarkPanel.ets:25` | `MarkingSelectionMenu @MarkingSelectionMenu.kt:89`（注释已注明·文件级 `ReaderQuickMarkPanel.ets:8` 引 `ReadBookRouteScreen.kt` 的 `inlineMode` 预览态；同族 `MarkingColorRow:388` / `MarkingEffectTile:474` / `MarkingRuleTile:550`） | `quickStyle` / `quickNote` / `existingMarking` / `onStyleChange` / `onNoteChange` / `onApply` / `onDelete` / `onClose` | `pages/ReaderPage.ets:8533` |
-| `BookKnowledgeSheet` | `components/BookKnowledgeSheet.ets:21` | `BookInfoKnowledge @BookInfoScreen.kt:2325`（注释已注明·文件级 `BookKnowledgeSheet.ets:11`「对齐上游 ui/book/knowledge 四个列表 Screen」；同族 `KnowledgeInfoCard:2374` / `BookKnowledgeEditCard @BookInfoEditScreen.kt:297` / `BookKnowledgeDetailScreen.kt:61`） | `bookUrl` / `initialTab` / `onClose` | `pages/BookInfoEditPage.ets:882` |
-| `BookSourceStageRuntimeHost` | `components/BookSourceStageRuntimeHost.ets:9` | **本地自造**（书源 ArkWeb 阶段运行时宿主，上游没有对应物——上游脚本跑在 JVM 里不需要 Web 控制器） | 无对外 props | `pages/Index.ets:14778` |
+| `ReaderQuickMarkPanel` | `components/ReaderQuickMarkPanel.ets:25` | `MarkingSelectionMenu.kt:89`（**查证 2026-11-24·近似**；同族 `:388` 色行 / `:474` 效果块 / `:550` 规则块）；原标注：`MarkingSelectionMenu @MarkingSelectionMenu.kt:89`（注释已注明·文件级 `ReaderQuickMarkPanel.ets:8` 引 `ReadBookRouteScreen.kt` 的 `inlineMode` 预览态；同族 `MarkingColorRow:388` / `MarkingEffectTile:474` / `MarkingRuleTile:550`） | `quickStyle` / `quickNote` / `existingMarking` / `onStyleChange` / `onNoteChange` / `onApply` / `onDelete` / `onClose` | `pages/ReaderPage.ets:8533` |
+| `BookKnowledgeSheet` | `components/BookKnowledgeSheet.ets:21` | **不匹配** → `ui/book/knowledge/` 四个 Screen：`BookKnowledgeListScreen.kt:44` / `BookCharacterListScreen.kt:71` / `BookEventListScreen.kt:44` / `BookKnowledgeDetailScreen.kt:61`（**查证 2026-11-24**；原标 `BookInfoScreen.kt:2325` 只是详情页「知识」预览区块）；原标注：`BookInfoKnowledge @BookInfoScreen.kt:2325`（注释已注明·文件级 `BookKnowledgeSheet.ets:11`「对齐上游 ui/book/knowledge 四个列表 Screen」；同族 `KnowledgeInfoCard:2374` / `BookKnowledgeEditCard @BookInfoEditScreen.kt:297` / `BookKnowledgeDetailScreen.kt:61`） | `bookUrl` / `initialTab` / `onClose` | `pages/BookInfoEditPage.ets:882` |
+| `BookSourceStageRuntimeHost` | `components/BookSourceStageRuntimeHost.ets:9` | **上游确实没有**（**查证 2026-11-24**：书源规则由 Rhino 在 JVM 内求值，`App.kt:346 initRhino` / `AnalyzeUrl.kt:406 eval`，解析链路不经 Web 控制器）；原标注：**本地自造**（书源 ArkWeb 阶段运行时宿主，上游没有对应物——上游脚本跑在 JVM 里不需要 Web 控制器） | 无对外 props | `pages/Index.ets:14778` |
 
 **`BookKnowledgeSheet` 的数据层是齐的**：`data/BookKnowledgeRepository.ets` 里的类 + 5 个接口（角色卡 / 事件 / 关系网 / 知识卡 / 大纲）+ 4 个 `New*` 写入接口。做详情页知识功能时先读这个文件，别另起表。它 616 行、四面板（人物 / 关系网 / 世界知识 / 事件），手工增删改全部落地；**「AI 识别人物」按钮故意没画**——上游那个按钮调 `AiToolRepository`，本地 AI 面 0 命中，画出来只能弹提示，属假控件（`BookKnowledgeSheet.ets:14-15` 注释）。
 
@@ -197,22 +221,22 @@
 | 组件 | 定义 | 上游等价物 | 关键 props | 首个调用点 |
 | --- | --- | --- | --- | --- |
 | `AppFab` | `components/booksource/AppFab.ets:15` | `AppFloatingActionButton.kt:60`（注释已注明·行级 `:60-68`；另引 `:100` / `Tooltip.kt:98`） | `icon: AppGlyphName`(默认 `'profileSave'`) / `fabAccessibilityText` / `onFabClick` / `onStateChange` | `pages/BookSourceDebugPage.ets:531` |
-| `BookshelfConflictSheet` | `components/booksource/BookshelfConflictSheet.ets:178` | `BookshelfConflictSheet @ui/widget/components/conflict/BookshelfConflictSheet.kt:88`（注释已注明·文件级 `booksource/BookshelfConflictSheet.ets:3`，同名） | `conflict` / `isResolving` / `onDismissRequest` / `onOpenExistingBook` / `onCoexist` / `onMigrate` / `onPick` / `onOpenBook` / `onDisappear` | `pages/ExploreShowPage.ets:1424` |
-| `ConflictRadio` | `components/booksource/BookshelfConflictSheet.ets:149` | `AppRadioButton @ui/widget/components/AppRadioButtom.kt:14`（索引匹配；上游文件名把 Button 拼成 Buttom，不是笔误抄错） | `selected` / `onPick` | 无外部调用（同文件内 2 处） |
+| `BookshelfConflictSheet` | `components/booksource/BookshelfConflictSheet.ets:178` | `BookshelfConflictSheet.kt:88`（**查证 2026-11-24·等价**）；原标注：`BookshelfConflictSheet @ui/widget/components/conflict/BookshelfConflictSheet.kt:88`（注释已注明·文件级 `booksource/BookshelfConflictSheet.ets:3`，同名） | `conflict` / `isResolving` / `onDismissRequest` / `onOpenExistingBook` / `onCoexist` / `onMigrate` / `onPick` / `onOpenBook` / `onDisappear` | `pages/ExploreShowPage.ets:1424` |
+| `ConflictRadio` | `components/booksource/BookshelfConflictSheet.ets:149` | `AppRadioButtom.kt:14`（**查证 2026-11-24·等价**；上游文件名自己把 Button 拼成 Buttom）；原标注：`AppRadioButton @ui/widget/components/AppRadioButtom.kt:14`（索引匹配；上游文件名把 Button 拼成 Buttom，不是笔误抄错） | `selected` / `onPick` | 无外部调用（同文件内 2 处） |
 | `ChangeCoverSheet` | `components/booksource/ChangeCoverSheet.ets:42` | `ChangeCoverSheet @ui/book/info/BookInfoSheets.kt:194`（注释已注明·行级 `:194-272`） | `bookName` / `author` / `isNight` / `onSelect` / `onMessage` | `pages/BookInfoEditPage.ets:732` |
 | `ContentQualitySheet` | `components/booksource/ContentQualitySheet.ets:26` | `SearchScreen.kt:834`（注释已注明·行级） | `chapterSpec` / `keywords` / `skipHeadChars` / `isRunning` / `stage` / `processedBooks` / `totalBooks` / `currentBookName` / `resultCount` / `excludedCount` / `onChapterSpecChange` / `onKeywordsChange` | `pages/SearchPage.ets:1717` |
 | `ExpandedSourceContent` | `components/booksource/ExpandedSourceContent.ets:21` | `SearchScreen.kt:1119`（注释已注明·行级） | `sourceName` / `books` / `isLoading` / `isEnd` / `errorMsg` / `coverSettings` / `isNight` / `onLoadMore` / `onBookClick` / `onBookLongClick` / `onSelect` / `onLongPress` / `onRetry` | `pages/SearchPage.ets:1792` |
-| `ExploreKindItem` | `components/booksource/ExploreKindItem.ets:62` | `ExploreKindItem @ui/widget/components/explore/ExploreKindItem.kt:52`（注释已注明·文件级 `:4`；另引 `ExploreKindMultiTypeItem.kt` / `ExploreKindSelectSheet.kt`） | `kind` / `sourceUrl` / `selected` / `submitOnClick` / `toggleOnClick` / `onOpenUrl` / `onItemClick` / `onRefreshKinds` / `onMessage` / `onSelect` / `onStateChange` / `onDisappear` | 无外部调用（同文件内 2 处，由 `ExploreKindSelectSheet:409` 用） |
-| `ExploreKindSelectSheet` | `components/booksource/ExploreKindItem.ets:409` | `ExploreKindSelectSheet @ui/widget/components/explore/ExploreKindSelectSheet.kt:42`（注释已注明·文件级 `:11`；索引匹配补到 `:42`） | `sourceUrl` / `multiple` / `initialSelectedTitles` / `onSelected` / `onDismissRequest` / `onOpenUrl` / `onItemClick` / `onRefreshKinds` / `onMessage` | `pages/ExploreShowPage.ets:1486` |
+| `ExploreKindItem` | `components/booksource/ExploreKindItem.ets:62` | `ExploreKindItem.kt:28`（**查证 2026-11-24·近似**；原标 `:52` 落在函数体内）；原标注：`ExploreKindItem @ui/widget/components/explore/ExploreKindItem.kt:52`（注释已注明·文件级 `:4`；另引 `ExploreKindMultiTypeItem.kt` / `ExploreKindSelectSheet.kt`） | `kind` / `sourceUrl` / `selected` / `submitOnClick` / `toggleOnClick` / `onOpenUrl` / `onItemClick` / `onRefreshKinds` / `onMessage` / `onSelect` / `onStateChange` / `onDisappear` | 无外部调用（同文件内 2 处，由 `ExploreKindSelectSheet:409` 用） |
+| `ExploreKindSelectSheet` | `components/booksource/ExploreKindItem.ets:409` | `ExploreKindSelectSheet.kt:42`（**查证 2026-11-24·近似**）；原标注：`ExploreKindSelectSheet @ui/widget/components/explore/ExploreKindSelectSheet.kt:42`（注释已注明·文件级 `:11`；索引匹配补到 `:42`） | `sourceUrl` / `multiple` / `initialSelectedTitles` / `onSelected` / `onDismissRequest` / `onOpenUrl` / `onItemClick` / `onRefreshKinds` / `onMessage` | `pages/ExploreShowPage.ets:1486` |
 | `LoadMoreFooter` | `components/booksource/LoadMoreFooter.ets:35` | `ExploreShowScreen.kt:500`（注释已注明·行级） | `isLoading` / `errorMsg` / `isEnd` / `autoLoad` / `showLoadMore` / `onRetry` / `onLoadMore` | `pages/ExploreShowPage.ets:1230` |
-| `ScopeSelectSheet` | `components/booksource/ScopeSelectSheet.ets:36` | `ScopeSelectSheet @ui/book/search/ScopeSelectSheet.kt:35`（注释已注明·文件级 `:4`，同名） | `initialIsAll` / `initialIsSourceScope` / `initialGroupNames` / `initialSourceUrls` / `groups` / `sources` / `onOpenSourceManage` / `onApplyScope` / `onDismissRequest` / `onQueryChange` | `pages/SearchPage.ets:1747` |
-| `SearchBar` | `components/booksource/SearchBar.ets:22` | `SearchBar @ui/widget/components/SearchBar.kt:42`（注释已注明·文件级 `:4`，同名） | `placeholder` / `showClear` / `clearLabel` / `autoFocus` / `onQueryChange` / `onSearch` / `onClear` | `pages/ProfileSubPages.ets:1604` |
+| `ScopeSelectSheet` | `components/booksource/ScopeSelectSheet.ets:36` | `ScopeSelectSheet.kt:35`（**查证 2026-11-24·近似**）；原标注：`ScopeSelectSheet @ui/book/search/ScopeSelectSheet.kt:35`（注释已注明·文件级 `:4`，同名） | `initialIsAll` / `initialIsSourceScope` / `initialGroupNames` / `initialSourceUrls` / `groups` / `sources` / `onOpenSourceManage` / `onApplyScope` / `onDismissRequest` / `onQueryChange` | `pages/SearchPage.ets:1747` |
+| `SearchBar` | `components/booksource/SearchBar.ets:22` | `SearchBar.kt:42`（**查证 2026-11-24·近似**）；原标注：`SearchBar @ui/widget/components/SearchBar.kt:42`（注释已注明·文件级 `:4`，同名） | `placeholder` / `showClear` / `clearLabel` / `autoFocus` / `onQueryChange` / `onSearch` / `onClear` | `pages/ProfileSubPages.ets:1604` |
 | `SearchBookTagChip` | `components/booksource/SearchBookItems.ets:112` | `SearchBookItem.kt:357`（注释已注明·行级） | `text` | `components/booksource/SearchBookPreviewSheet.ets:139` |
 | `SearchBookListItem` | `components/booksource/SearchBookItems.ets:143` | `SearchBookItem.kt:76`（注释已注明·行级） | `item` / `shelfState` / `showPadding` / `sourceCount` / `qualityMasked` / `adaptCoverAspectRatio` / `coverSettings` / `isNight` / `sharedKey` / `onSelect` / `onLongPress` | `pages/ExploreShowPage.ets:1076` |
 | `SearchBookGridItem` | `components/booksource/SearchBookItems.ets:349` | `SearchBookItem.kt:264`（注释已注明·行级） | `item` / `shelfState` / `qualityMasked` / `coverSettings` / `isNight` / `sharedKey` / `onSelect` / `onLongPress` | `pages/ExploreShowPage.ets:1131` |
 | `SearchBookPreviewSheet` | `components/booksource/SearchBookPreviewSheet.ets:39` | `SearchBook.kt:41`（注释已注明·行级） | `item` / `shelfState` / `coverSettings` / `isNight` / `sharedKey` / `onOpenDetail` / `onAddToShelf` | `pages/ExploreShowPage.ets:1394` |
 | `SearchSettingsSheet` | `components/booksource/SearchSettingsSheet.ets:40` | `SearchScreen.kt:686`（注释已注明·行级 `:686-767`） | `layoutMode` / `selectedSourceTypes` / `onLayoutModeChange` / `onOpenContentQuality` / `onToggleSourceType` / `onClearAllSourceTypes` / `onSelect` / `onToggleSelection` | `pages/SearchPage.ets:1775` |
-| `SelectionItemCard` | `components/booksource/SelectionItemCard.ets:25` | `SelectionItemCard @ui/widget/components/card/SelectionItemCard.kt:59`（注释已注明·文件级 `:4`，同名；另引 `SelectionItemCardContent:134`） | `title` / `subtitle` / `isSelected` / `inSelectionMode` / `cardCornerRadius` / `containerColor` / `selectedContainerColor` / `contentDescription` / `onToggleSelection` / `trailingAction` | `pages/SearchPage.ets:1427` |
+| `SelectionItemCard` | `components/booksource/SelectionItemCard.ets:25` | `SelectionItemCard.kt:59`（**查证 2026-11-24·近似**；Content 在同文件 `:134`）；原标注：`SelectionItemCard @ui/widget/components/card/SelectionItemCard.kt:59`（注释已注明·文件级 `:4`，同名；另引 `SelectionItemCardContent:134`） | `title` / `subtitle` / `isSelected` / `inSelectionMode` / `cardCornerRadius` / `containerColor` / `selectedContainerColor` / `contentDescription` / `onToggleSelection` / `trailingAction` | `pages/SearchPage.ets:1427` |
 | `SourceCheckSheet` | `components/booksource/SourceCheckSheet.ets:17` | `CheckSourceBottomSheet.kt:22`（注释已注明·行级 `:67-101`；另引 `BookSourceContract.kt:33-40` 的默认值） | **`@Link visible: boolean`** / `onConfirm(options: SourceCheckOptions)` / `onDisappear` | `pages/ProfileSubPages.ets:1897` |
 | `SourceCheckRunSheet` | `components/booksource/SourceCheckRunSheet.ets:21` | `BookSourceScreen.kt:780`（注释已注明·行级 `:780-819`） | **`@Link visible: boolean`** / `sourceCount` / `onOpenSettings` / `onConfirm(keyword)` / `onDisappear` | `pages/ProfileSubPages.ets:1906` |
 | `SourceLoginSheet` | `components/booksource/SourceLoginSheet.ets:163` | `SourceLoginSheetHost @ui/login/SourceLoginSheets.kt:60`（注释已注明·行级 `:59-106`；另引 `SourceLoginContract.kt:23-28` / `SourceLoginViewModel.kt:154`/`:238-244`） | **`@Link visible: boolean`** / `onClose` / `onOpenWeb(url)` / `onUnavailableAction(message)` / `onItemClick` / `onOptionPick` / `onWillDismiss` | `pages/Index.ets:15044` |
@@ -438,5 +462,15 @@ cd N:/HarmonyProjects/legado-with-md3-harmonyos && grep -rc '@Component' entry/s
 ### 14.4 三条口径声明
 
 1. **本文不判「该不该做」**。它只回答「本地有哪些组件、定义在哪、谁在用、对应上游哪个」。要不要补、先补哪个，是另一件事。
-2. **上游映射标了来源级别**（14.2 之外，正文表里每条都标）：`注释已注明·行级` > `注释已注明·文件级` > `索引匹配` > `未查到/本地自造`。**后两级没有读上游实现验证**，用之前先自己核一遍。
+2. **上游映射标了来源级别**（正文表里每条都标）：`查证 2026-11-24` > `注释已注明·行级` > `注释已注明·文件级` > `索引匹配` > `未查到/本地自造`。**后三级没有读上游实现验证**，用之前先自己核一遍。
 3. **「本地没有」不等于「平台做不到」**。第十二节全是「本地没写」，没有一条是平台限制。真要判平台无能力，必须指到 SDK 声明文件的具体行。
+
+## 十五、上游映射查证记录（33 条，2026-11-24）
+
+33 条的明细在 `tmp/component-upstream-verify.md`（596 行）：定义行、签名原文、props 对照、结论，以及末节「推翻了哪些现标注」14 条。
+
+- **覆盖范围：** 只覆盖原先标成「文件级 / 索引匹配 / 未查到 / 本地自造」的 33 条。原本就是「注释已注明·行级」的 30 条不在这次范围内，仍按注释照抄。
+- **行号可信度：** 行号是读文件数出来的，不是推算。事后抽查 12 个点（`GlassTopAppBar.kt:28` / `:76`、`ExploreKindItem.kt:28` / `:52`、`TopBarButton.kt:214` / `:333`、`BookItem.kt:327` / `:674`、`CheckboxItem.kt:21`、`AppIconButton.kt:20`、`IconSwitch.kt:22`、`SectionTitle.kt:14`）全部命中。
+- **props 对照是结构级的**，不是逐参数；要逐项对齐得另跑一遍，提示词在 `tmp/component-catalog-verify-prompt.md`。
+- **检索命令与命中数**见 `tmp/component-upstream-verify.md` 的「本次真实执行过的检索（命中行数）」一节。
+
