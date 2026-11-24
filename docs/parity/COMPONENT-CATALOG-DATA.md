@@ -2,12 +2,12 @@
 
 > 用途：写 `data/`、`reader/`、`bookSource/` 的代码之前，先在这里找一遍，别重造。
 > 基线：`<workspace>/legado-with-md3-harmonyos` 工作区。
-> **来源与保鲜期**：2026-11-23 从本机临时清单转入仓库（原文件在工作区 `tmp/`，不入库）；文件数与行数是当日 02:26 的快照，当日下午复算已变成 `data/` 136 文件 41,311 行、`bookSource/` 24 文件 4,493 行、合计 209 文件 59,173 行——下一节表里的 135 / 23 / 207 是快照值，不是当前值。行号同样会漂，用前 `grep -n` 复核。
+> **来源与保鲜期**：2026-11-23 从本机临时清单转入仓库（原文件在工作区 `tmp/`，不入库）。**2026-11-24 已按当天实测刷新体量**（见下一节）：`data/` 148 文件 46,219 行、`reader/` 40 / 11,956、`bookSource/` 32 / 6,351、`lib/` 15 / 3,056，四个子域合计 235 文件 67,582 行。行号仍会漂，用前 `grep -n` 复核。
 > 前端组件见另一份 [本地前端组件清单](COMPONENT-CATALOG-UI.md)。
 
 ## 〇、三条读法
 
-1. **先看域，再看类。** 后端 207 个文件 / 58,566 行分四个子域（下一节）。找东西先定位子域，再在子域里 `grep`。
+1. **先看域，再看类。** 后端 235 个文件 / 67,582 行分四个子域（下一节）。找东西先定位子域，再在子域里 `grep`。
 2. **类名不等于职责。** `BackupRepository` 3,789 行不只是备份、`EpubRepository` 1,283 行不只是 epub——大文件里往往是整个域的堆积。用之前 `grep -n 'struct \|class \|async \|^  [a-zA-Z]'` 看它到底有哪些方法。
 3. **「上游等价物」写 `未查到` 的，是我没做对照，不是上游没有。** 判它有没有要读上游那个域的源码。
 
@@ -17,10 +17,10 @@
 
 | 子域 | 文件 | 行数 | 里面是什么 | 什么时候会去 |
 | --- | --- | --- | --- | --- |
-| `data/` | 135 | 40,904 | 持久化与领域数据：书、分组、章节、各类设置、备份恢复、封面、阅读记录、知识卡、主题包、EPUB | 几乎任何「数据存哪 / 从哪读」的问题 |
+| `data/` | 148 | 46,219 | 持久化与领域数据：书、分组、章节、各类设置、备份恢复、封面、阅读记录、知识卡、主题包、EPUB | 几乎任何「数据存哪 / 从哪读」的问题 |
 | `reader/` | 40 | 11,916 | 阅读渲染引擎：分章、排版几何、Canvas 绘制、页面缓存。最大一份 `ReaderCanvasSurface.ets`(3,572) | 正文渲染、翻页、行距字距、章末留白 |
-| `bookSource/` | 23 | 4,293 | 在线书源引擎 P1–P11 + 脚本运行时桥接（JS 解释器在 `third_party/harmony-book-source-engine/quickjs/`） | 书源规则解析、搜索/详情/目录/正文、调试 |
-| `lib/` | 9 | 1,453 | 平台基础设施：日志、WebDAV、通用工具 | 日志、云备份、跨域小工具 |
+| `bookSource/` | 32 | 6,351 | 在线书源引擎 P1–P11 + 脚本运行时桥接（JS 解释器在 `third_party/harmony-book-source-engine/quickjs/`） | 书源规则解析、搜索/详情/目录/正文、调试 |
+| `lib/` | 15 | 3,056 | 平台基础设施：日志、WebDAV、通用工具 | 日志、云备份、跨域小工具 |
 
 `data/` 里超过 900 行的六份（改之前先有心理准备）：`BookRepository.ets` 3,897 · `BackupRepository.ets` 3,789 · `ReaderSettingsRepository.ets` 2,141 · `ReadRecordRepository.ets` 1,373 · `EpubRepository.ets` 1,283 · `ThemePackageRepository.ets` 1,221。
 
@@ -83,12 +83,12 @@
 | 知识卡 / 角色卡 / 关系网 | `data/BookKnowledgeRepository.ets:178`（5 个接口 + 4 个 `New*` 写入） | 实测 |
 | 正文处理规则 | `data/BookContentProcessEngine.ets:23` / `data/BookContentProcessRepository.ets:14` | 实测 |
 | EPUB 解析 / 写出 | `data/EpubRepository.ets`(1,283)；写出侧另有 `data/EpubWriter.ets` / `data/EpubExporter.ets` | 实测（写出侧见历史记录，未在本轮复核行号） |
-| 在线书源规则 / 搜索 / 正文 | `bookSource/`（23 文件）+ `data/BookSourceRepository.ets:31` + `data/BookSourceImporter.ets:52` | 实测 |
+| 在线书源规则 / 搜索 / 正文 | `bookSource/`（32 文件）+ `data/BookSourceRepository.ets:31` + `data/BookSourceImporter.ets:52` | 实测 |
 | 书源脚本执行 | `bookSource/` 的运行时桥接 + `third_party/harmony-book-source-engine/quickjs/`（`JSContext.ts:72 evaluateScript`，`libs/arm64-v8a/libquickjs.a` 1,644,138 B） | 实测（quickjs 已在仓库，不是要另引） |
 | 日志 | `lib/AppLog.ets:40`（环形缓冲，`AppLogEntry:18`） | 实测 |
 | 压缩包导入 | `data/ArchiveImporter.ets:28`（`ExtractedArchive:21`） | 实测 |
 
-**这张表是按「我知道在哪」写的，不是全量索引。** `data/` 135 个文件里我只核过 20 个类。表里没有的功能，先 `grep -rn '<关键词>' entry/src/main/ets/data entry/src/main/ets/lib`，再按类名读定义行。
+**这张表是按「我知道在哪」写的，不是全量索引。** `data/` 148 个文件里我只核过 20 个类。表里没有的功能，先 `grep -rn '<关键词>' entry/src/main/ets/data entry/src/main/ets/lib`，再按类名读定义行。
 
 ---
 
@@ -98,7 +98,7 @@
 2. **改方法签名必须全仓核调用方，否则 HEAD 编译不过。** 实测事故：`data/BackupRepository.ets` 把 `selectBackup(context, currentBooks)` 改成 `selectBackup(context)`、`prepareBackupArchive(context, zipPath, currentBooks)` 改成 `prepareBackupArchive(context, zipPath)`，同时删掉了 `BackupPreview` 接口与 `loadRestoredEntries`；而 HEAD 版 `pages/Index.ets` 仍按旧签名调用（`selectBackupFromPath(context, zipPath, localBooks)` 等 5 处）。**那个改动只能与调用方同批提交**，单独提交会让整仓编译不过。
 3. **「已修」必须有断言输出，三种任选。** A 静态公式对照（无设备，读代码算）；B prefs（`hdc shell 'cat /data/app/el1/bundle/public/io.legado.harmony/preferences/<文件名>'`）；C 数据库（`hdc file recv .../databases/legado.db` 后 `python -c` 用 sqlite3 查 ``select bookUrl, `order` from books order by `order` ``）。只写「改好了」不贴输出，不算修完。
 4. **偏好键存在不等于消费者存在。** `data/ReaderSettingsRepository.ets` 有 2,141 行、几百个键，其中一部分只做到「能备份、界面能拨、读回显示」——全仓没有任何分支因它而改变行为。判定一个键是否真接上，要数「写入点 N 处 / 读回给界面 N 处 / **业务消费** N 处」，**业务消费的定义是：某个分支/计算/API 调用因读此值而改变行为；只赋给 `@State` 再显示不算**。
-5. **`data/` 的 135 个文件里有一半名字看不出职责。** 例如 `BookInfoSettings.ets` 里装的是 `BookInfoSettingsRepository`，`CacheStatsRepository` 与 `CacheSettingsRepository` 是两个不同文件。找东西靠 `grep` 不靠猜文件名。
+5. **`data/` 的 148 个文件里有一半名字看不出职责。** 例如 `BookInfoSettings.ets` 里装的是 `BookInfoSettingsRepository`，`CacheStatsRepository` 与 `CacheSettingsRepository` 是两个不同文件。找东西靠 `grep` 不靠猜文件名。
 
 ---
 
@@ -110,7 +110,7 @@
 
 **未做的事**：
 
-- 我只核过 `data/` 135 个文件里的 20 个类，其余 115 个没读。表里没有的功能不是不存在。
-- `reader/` 40 个文件、`bookSource/` 23 个文件我一类一类没展开，只给了子域体量与最大文件。
+- 我只核过 `data/` 148 个文件里的 20 个类，其余 128 个没读。表里没有的功能不是不存在。
+- `reader/` 40 个文件、`bookSource/` 32 个文件我一类一类没展开，只给了子域体量与最大文件。
 - 上游对照几乎全是 `未查到`——这一轮没做后端逐类对照。
 - 没有上机验证任何数据行为（prefs / db 断言一条没跑）。
