@@ -145,6 +145,10 @@ export struct SearchPage {
   @State state: SearchUiState = emptySearchUiState();
   @State collapsedHeader: boolean = false;
 
+  /** `shelfBooksCache()` 的缓存键（上一次的 `books` 引用）与缓存值。 */
+  private shelfBooksSource: Book[] = [];
+  private shelfBooksValue: Book[] = [];
+
   /** 当前搜索页号（上游 ViewModel 私有字段 `currentSearchPage`）。 */
   private currentSearchPage: number = 1;
   /**
@@ -433,7 +437,7 @@ export struct SearchPage {
 
   /** 结果项的书架状态：先判在架（contentPath 相等），再判同名同作者。 */
   private shelfStateOf(item: SearchBookItem): BookShelfState {
-    const shelf = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
+    const shelf = this.shelfBooksCache();
     for (const book of shelf) {
       if ((book.contentPath ?? '') === item.bookUrl) { return BookShelfState.IN_SHELF; }
     }
@@ -443,6 +447,25 @@ export struct SearchPage {
       }
     }
     return BookShelfState.NOT_IN_SHELF;
+  }
+
+  /**
+   * 可持久化书架书列表的缓存。
+   *
+   * 原来 `shelfStateOf` 每次都现算 `books.filter(isPersistableBook)`，而 `wrapResults`
+   * 会为每条结果（上限 1000）调它一次；边搜边出时每完成一个源就整批重算一遍，
+   * 903 个源跑下来是「源数 × 结果数 × 书架本数」的三重循环，主线程被占满，
+   * 系统按 THREAD_BLOCK_6S 判应用无响应直接杀掉（上机实测复现）。
+   *
+   * `books` 是 `@Prop`，父页面换整份数组时引用才会变，用引用当缓存键即可；
+   * 父页面原地改元素时这里读不到，但书架的增删改都会走父页面重排数组。
+   */
+  private shelfBooksCache(): Book[] {
+    if (this.shelfBooksSource !== this.books) {
+      this.shelfBooksSource = this.books;
+      this.shelfBooksValue = this.books.filter((book: Book) => BookRepository.isPersistableBook(book));
+    }
+    return this.shelfBooksValue;
   }
 
   /** 把合并结果包成 `SearchResultItemUi`（上游 `:1040-1063` 的 mergeSearchResults）。 */
